@@ -2,6 +2,28 @@
 
 This document collects implementation rules and workflow conventions for code changes.
 
+## Gecko Programmes (read first)
+
+This repo is **Gecko Programmes** (`newlmsgecko`): a separate, rebranded replica of PearlLMS
+(`Integer-Training/LMSclassroom`), which is itself a hard fork of ClassroomIO (AGPL-3.0).
+
+- **Spec:** `docs/REPLICATION.md` — start with "CURRENT STATUS", then §0 decisions (D1–D13), §2
+  inherited issues (carried as-is, D11), the phase "Done when" checks and Appendices A–E. Where an
+  appendix disagrees with the code, the code wins — fix the appendix.
+- **Never touch Pearl:** not `C:\Users\PC\Projects\LMSclassroom`, its GitHub repo, its Supabase project
+  or its droplet. The `pearl` and `upstream` remotes are fetch-only (push URL `DISABLED`); port fixes
+  by cherry-pick.
+- **Public repo (AGPL-3.0):** never commit secrets. They live only in
+  `C:\Users\PC\Projects\_secrets\geckoprogrammes\` (outside git). Check staged files before every commit.
+- **Localhost first; commit locally; the owner pushes and deploys.** Deploy = `scripts/deploy.sh` on
+  the droplet (one deploy at a time).
+- **Do not rename internal identifiers** (Appendix E §5.5): `@cio/*`, the `classroomio` client
+  variable, cookie prefixes, i18n keys, localStorage keys, DB/env names, LICENSE and upstream notices.
+- **Test baseline (inherited from Pearl `883c4a62`):** `@cio/api` 563 passed / 15 failed of 578
+  (6 of 71 files; stale `vi.mock` factories, carried as-is), `@cio/email` 19/19,
+  `@cio/question-types` 33/33, dashboard build green (needs `apps/dashboard/.env` copied from
+  `.env.example` locally).
+
 ## Research Requirements
 
 When a task requires factual information (API specifications, context window sizes, library versions, pricing, rate limits, etc.), **look it up** using web search. Do not rely on educated guesses or assumptions from training data. If you're unsure whether something is a guess, look it up anyway.

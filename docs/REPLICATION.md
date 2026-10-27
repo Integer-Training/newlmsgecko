@@ -23,7 +23,7 @@ _Last updated 2026-10-27._
 | Phase | State | Notes |
 |---|---|---|
 | 0 Accounts & secrets | ✅ done | Secrets folder `C:\Users\PC\Projects\_secrets\geckoprogrammes\` (`gecko.env` + `README.md`). `BETTER_AUTH_SECRET`, `PRIVATE_SERVER_KEY`, `QUEUE_DASHBOARD_PASSWORD` generated. Supabase ref/region/endpoints pre-filled. |
-| 1 Gecko repo | ⏳ **not started** — next | `newlmsgecko` exists on GitHub, empty. |
+| 1 Gecko repo | ✅ done locally (owner to push) | Cloned from Pearl `883c4a62` (full history, 1,931 commits); remotes `origin`=newlmsgecko, `pearl`/`upstream` push DISABLED. gitleaks: 105 hits, all in upstream ClassroomIO commits already public (demo keys/seed data; 3 ClassroomIO-owned keys in an old `.env.example`) — none from the fork. Baseline (Node 20.19.3): api 563 pass / **15 fail** of 578 (6/71 files — stale `vi.mock` factories missing `hasLearnerPassedUnit`/`getAssessmentItems*`; inherited, carried as-is), email 19/19, question-types 33/33, dashboard build green. |
 | 2 Rebrand | ⏳ not started | domain/logo/sender still TBD → placeholders. |
 | 3 Bootstrap / deploy.sh / RLS SQL | ⏳ not started | |
 | 4 Supabase | 🟡 **project created by owner**; keys pending | `newlmsgecko`, ref `fymygmepoynwurpajcwf`, **eu-central-1 (Frankfurt)**, Postgres 17, Pro. **Owner still to:** paste DB password + 2 pooler URIs + S3 access keys into `gecko.env`; create buckets `documents` (private), `videos` (private), `media` (public); set global upload limit ≥ 800 MB. Agent then verifies read-only (Supabase MCP) without printing values. RLS SQL runs after first deploy. |
