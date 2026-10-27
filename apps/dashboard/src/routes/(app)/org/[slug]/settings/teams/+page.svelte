@@ -3,7 +3,7 @@
 </script>
 
 <svelte:head>
-  <title>Teams - Integer Training LMS</title>
+  <title>Teams - Gecko Programmes</title>
 </svelte:head>
 
 <TeamsPage />

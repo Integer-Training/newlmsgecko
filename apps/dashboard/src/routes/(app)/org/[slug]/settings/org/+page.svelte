@@ -22,7 +22,7 @@
 </script>
 
 <svelte:head>
-  <title>Organization Settings - Integer Training LMS</title>
+  <title>Organization Settings - Gecko Programmes</title>
 </svelte:head>
 
 <OrgPage bind:this={orgComponent} bind:hasUnsavedChanges />

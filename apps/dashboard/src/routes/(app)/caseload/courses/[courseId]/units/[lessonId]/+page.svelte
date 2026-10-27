@@ -98,7 +98,7 @@
 </script>
 
 <svelte:head>
-  <title>{unit?.title ?? 'Unit'} — Pearl LMS</title>
+  <title>{unit?.title ?? 'Unit'} — Gecko Programmes</title>
 </svelte:head>
 
 <div class="grid gap-6 lg:grid-cols-[260px_1fr]">

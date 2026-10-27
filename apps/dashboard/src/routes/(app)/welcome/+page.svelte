@@ -27,7 +27,7 @@
 </script>
 
 <svelte:head>
-  <title>Welcome — Pearl LMS</title>
+  <title>Welcome — Gecko Programmes</title>
 </svelte:head>
 
 <div class="flex min-h-screen items-center justify-center px-6">

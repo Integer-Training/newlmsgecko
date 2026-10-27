@@ -3,7 +3,7 @@
 </script>
 
 <svelte:head>
-  <title>Learner Progression — Pearl LMS</title>
+  <title>Learner Progression — Gecko Programmes</title>
 </svelte:head>
 
 <ProgressionPage />

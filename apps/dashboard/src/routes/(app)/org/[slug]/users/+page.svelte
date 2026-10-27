@@ -3,7 +3,7 @@
 </script>
 
 <svelte:head>
-  <title>Users — Pearl LMS</title>
+  <title>Users — Gecko Programmes</title>
 </svelte:head>
 
 <!-- Admin-only. The org/[slug] layout enforces requireAdmin server-side (Step 5); the API is

@@ -94,7 +94,7 @@
 </script>
 
 <svelte:head>
-  <title>{$t('cohorts.page_title') || 'Cohorts'} - Integer Training LMS</title>
+  <title>{$t('cohorts.page_title') || 'Cohorts'} - Gecko Programmes</title>
 </svelte:head>
 
 <Page.Root class="w-full">

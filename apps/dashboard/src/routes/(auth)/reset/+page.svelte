@@ -48,7 +48,7 @@
 </script>
 
 <svelte:head>
-  <title>Reset Password - Integer Training LMS</title>
+  <title>Reset Password - Gecko Programmes</title>
 </svelte:head>
 
 <AuthUI

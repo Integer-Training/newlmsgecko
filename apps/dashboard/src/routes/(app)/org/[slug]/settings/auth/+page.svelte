@@ -5,7 +5,7 @@
 </script>
 
 <svelte:head>
-  <title>{t.get('settings.auth.title')} - Integer Training LMS</title>
+  <title>{t.get('settings.auth.title')} - Gecko Programmes</title>
 </svelte:head>
 
 <Page.Header>

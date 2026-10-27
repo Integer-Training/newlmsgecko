@@ -9,7 +9,7 @@
 </script>
 
 <svelte:head>
-  <title>{t.get('audience.user_analytics.title')} - Integer Training LMS</title>
+  <title>{t.get('audience.user_analytics.title')} - Gecko Programmes</title>
 </svelte:head>
 
 <Page.Root class="w-full md:max-w-5xl lg:mx-auto">

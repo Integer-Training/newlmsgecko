@@ -4,7 +4,6 @@
   import { t } from '$lib/utils/functions/translations';
   import * as Page from '@cio/ui/base/page';
   import { Button } from '@cio/ui/base/button';
-  import ArrowUpRightIcon from '@lucide/svelte/icons/arrow-up-right';
 
   let { data } = $props();
 
@@ -16,7 +15,7 @@
 </script>
 
 <svelte:head>
-  <title>{t.get('automation.tabs.api')} - Integer Training LMS</title>
+  <title>{t.get('automation.tabs.api')} - Gecko Programmes</title>
 </svelte:head>
 
 <Page.Root class="mx-auto w-full max-w-4xl">
@@ -25,12 +24,6 @@
       <Page.Title>{$t('automation.tabs.api')}</Page.Title>
       <Page.Subtitle>{$t('automation.api.subtitle')}</Page.Subtitle>
     </Page.HeaderContent>
-    <Page.Action>
-      <Button variant="outline" onclick={() => window.open('https://classroomio.com/docs/api', '_blank')}>
-        <ArrowUpRightIcon size={16} />
-        {$t('automation.api.view_docs')}
-      </Button>
-    </Page.Action>
   </Page.Header>
 
   <Page.Body>

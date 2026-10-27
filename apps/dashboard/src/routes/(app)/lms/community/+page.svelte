@@ -6,7 +6,7 @@
 </script>
 
 <svelte:head>
-  <title>Community - Integer Training LMS</title>
+  <title>Community - Gecko Programmes</title>
 </svelte:head>
 
 <Page.Root class="w-full">

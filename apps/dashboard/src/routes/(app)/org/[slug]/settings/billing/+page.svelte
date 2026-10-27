@@ -5,7 +5,7 @@
 </script>
 
 <svelte:head>
-  <title>Billing - Integer Training LMS</title>
+  <title>Billing - Gecko Programmes</title>
 </svelte:head>
 
 <Page.Header>

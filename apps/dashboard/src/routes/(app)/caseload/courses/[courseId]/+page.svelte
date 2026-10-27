@@ -28,7 +28,7 @@
 </script>
 
 <svelte:head>
-  <title>{content?.title ?? 'Course'} — Pearl LMS</title>
+  <title>{content?.title ?? 'Course'} — Gecko Programmes</title>
 </svelte:head>
 
 <div class="mb-4">
@@ -52,12 +52,7 @@
 {#if !content}
   <div class="flex justify-center py-16"><Spinner /></div>
 {:else if units.length === 0}
-  <Empty
-    title="No units yet"
-    description="This course has no units to review."
-    icon={LibraryBigIcon}
-    variant="page"
-  />
+  <Empty title="No units yet" description="This course has no units to review." icon={LibraryBigIcon} variant="page" />
 {:else}
   <div class="flex flex-col gap-2">
     {#each units as unit (unit.lessonId)}

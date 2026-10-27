@@ -3,7 +3,7 @@
 </script>
 
 <svelte:head>
-  <title>AI Tutor Settings - Integer Training LMS</title>
+  <title>AI Tutor Settings - Gecko Programmes</title>
 </svelte:head>
 
 <OrgAiTutorSettingsPage />

@@ -40,14 +40,10 @@
 
     return fields;
   });
-
-  function handleSupport() {
-    window.open('mailto:help@classroomio.com?subject=Email Verification Issue&body=Error Type: ' + type, '_blank');
-  }
 </script>
 
 <svelte:head>
-  <title>Email Verification Error - Integer Training LMS</title>
+  <title>Email Verification Error - Gecko Programmes</title>
   <meta name="description" content="There was an issue verifying your email address." />
 </svelte:head>
 
@@ -76,9 +72,6 @@
     </div>
   {/if}
   <div class="lex w-full flex-col justify-center gap-4 md:flex-row">
-    <Button onclick={handleSupport} variant="ghost">
-      {$t('email_verification.actions.contact_support')}
-    </Button>
     <Button onclick={() => goto('/')}>
       {$t('email_verification.actions.back_to_dashboard')}
     </Button>

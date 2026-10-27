@@ -6,7 +6,7 @@
 
   let { data } = $props();
 
-  const orgName = $derived(data.org?.name ?? data.course?.org?.name ?? 'Integer Training LMS');
+  const orgName = $derived(data.org?.name ?? data.course?.org?.name ?? 'Gecko Programmes');
 
   const courseJsonLd = $derived.by(() => {
     if (!data.course) return null;

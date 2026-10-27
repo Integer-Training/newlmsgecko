@@ -187,7 +187,7 @@
 </script>
 
 <svelte:head>
-  <title>Home - Integer Training LMS</title>
+  <title>Home - Gecko Programmes</title>
 </svelte:head>
 
 {#if creatingState === 'creating'}

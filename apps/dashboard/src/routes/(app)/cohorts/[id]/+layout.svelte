@@ -32,7 +32,7 @@
 </script>
 
 <svelte:head>
-  <title>{cohortApi.cohort?.name || 'Cohort'} - Integer Training LMS</title>
+  <title>{cohortApi.cohort?.name || 'Cohort'} - Gecko Programmes</title>
 </svelte:head>
 
 <Sidebar.Provider data-sveltekit-preload-data="off">

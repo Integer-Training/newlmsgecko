@@ -124,7 +124,7 @@
 </script>
 
 <svelte:head>
-  <title>Welcome back to {$currentOrg.name || 'Integer Training LMS'}</title>
+  <title>Welcome back to {$currentOrg.name || 'Gecko Programmes'}</title>
 </svelte:head>
 
 {#snippet getPasswordAuthAlternative()}

@@ -166,7 +166,7 @@
 </script>
 
 <svelte:head>
-  <title>{courseApi.course?.title || 'Integer Training LMS Course'}</title>
+  <title>{courseApi.course?.title || 'Gecko Programmes Course'}</title>
 </svelte:head>
 
 {#if isCourseReady}

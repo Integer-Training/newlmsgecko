@@ -7,7 +7,7 @@
 </script>
 
 <svelte:head>
-  <title>Interactive Quizzes - Integer Training LMS</title>
+  <title>Interactive Quizzes - Gecko Programmes</title>
 </svelte:head>
 
 <section class="mx-auto w-full max-w-6xl">

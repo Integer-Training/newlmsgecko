@@ -231,7 +231,7 @@
 </script>
 
 <svelte:head>
-  <title>Join {data.course?.title ?? 'Course'} on Integer Training LMS</title>
+  <title>Join {data.course?.title ?? 'Course'} on Gecko Programmes</title>
   <meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 

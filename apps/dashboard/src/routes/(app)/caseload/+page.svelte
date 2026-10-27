@@ -3,7 +3,7 @@
 </script>
 
 <svelte:head>
-  <title>Caseload — Pearl LMS</title>
+  <title>Caseload — Gecko Programmes</title>
 </svelte:head>
 
 <CaseloadPage />

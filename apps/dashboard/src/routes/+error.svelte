@@ -2,7 +2,7 @@
   import { page } from '$app/state';
   import { Button } from '@cio/ui/base/button';
   import { Empty } from '@cio/ui/custom/empty';
-  import { ExternalLinkIcon, HomeIcon, HoverableItem } from '@cio/ui/custom/moving-icons';
+  import { HomeIcon, HoverableItem } from '@cio/ui/custom/moving-icons';
   import HeartCrack from '@lucide/svelte/icons/heart-crack';
 
   const isNotFound = $derived(page.status === 404);
@@ -11,7 +11,7 @@
   console.error('Error page:', page.url);
 
   function goHome() {
-    window.location.href = 'https://classroomio.com';
+    window.location.href = '/';
   }
 </script>
 
@@ -49,14 +49,6 @@
     showLogo={true}
   >
     <div class="flex gap-2">
-      <HoverableItem>
-        {#snippet children(isHovered)}
-          <Button href="https://classroomio.com/tools" variant="secondary">
-            <ExternalLinkIcon {isHovered} size={16} ariaHidden={true} />
-            Try Free Tools
-          </Button>
-        {/snippet}
-      </HoverableItem>
       <HoverableItem>
         {#snippet children(isHovered)}
           <Button onclick={goHome}>

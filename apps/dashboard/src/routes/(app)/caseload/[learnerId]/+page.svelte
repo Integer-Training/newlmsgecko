@@ -8,7 +8,7 @@
 </script>
 
 <svelte:head>
-  <title>Learner — Pearl LMS</title>
+  <title>Learner — Gecko Programmes</title>
 </svelte:head>
 
 {#key data.learnerId}

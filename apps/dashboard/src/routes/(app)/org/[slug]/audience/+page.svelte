@@ -22,7 +22,7 @@
 </script>
 
 <svelte:head>
-  <title>Audience - Integer Training LMS</title>
+  <title>Audience - Gecko Programmes</title>
 </svelte:head>
 
 <Page.Root class="mx-auto w-full max-w-6xl">

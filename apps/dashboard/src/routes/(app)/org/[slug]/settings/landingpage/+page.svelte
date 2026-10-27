@@ -6,7 +6,7 @@
 </script>
 
 <svelte:head>
-  <title>Landing Page Settings - Integer Training LMS</title>
+  <title>Landing Page Settings - Gecko Programmes</title>
 </svelte:head>
 
 <Page.Header isSticky>

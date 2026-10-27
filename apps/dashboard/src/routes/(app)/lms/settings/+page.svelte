@@ -22,7 +22,7 @@
 </script>
 
 <svelte:head>
-  <title>Settings - Integer Training LMS</title>
+  <title>Settings - Gecko Programmes</title>
 </svelte:head>
 
 <Page.Header>

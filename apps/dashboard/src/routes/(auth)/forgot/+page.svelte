@@ -14,7 +14,7 @@
 </script>
 
 <svelte:head>
-  <title>Forgot Password - Integer Training LMS</title>
+  <title>Forgot Password - Gecko Programmes</title>
 </svelte:head>
 
 <AuthUI handleSubmit={() => forgotApi.submit(fields)} showOnlyContent={true} showLogo={!forgotApi.success}>

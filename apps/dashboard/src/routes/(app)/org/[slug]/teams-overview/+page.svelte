@@ -46,7 +46,7 @@
 </script>
 
 <svelte:head>
-  <title>{$t('cohorts.goals.heading')} · Integer Training LMS</title>
+  <title>{$t('cohorts.goals.heading')} · Gecko Programmes</title>
 </svelte:head>
 
 <Page.Root class="w-full">

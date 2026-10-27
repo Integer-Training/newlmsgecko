@@ -3,7 +3,7 @@
 </script>
 
 <svelte:head>
-  <title>Custom domain - Integer Training LMS</title>
+  <title>Custom domain - Gecko Programmes</title>
 </svelte:head>
 
 <DomainsPage />

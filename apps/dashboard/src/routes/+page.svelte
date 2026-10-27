@@ -20,7 +20,7 @@
   const pageTitle = $derived(
     data.isOrgSite && data.org
       ? data.org.name
-      : 'Integer Training LMS - One Platform for Customer, Partner, and Employee Training'
+      : 'Gecko Programmes - One Platform for Customer, Partner, and Employee Training'
   );
 
   const authAction = $derived(
@@ -79,7 +79,6 @@
     <p class="my-2 text-red-500">{appInitApi.error}</p>
     <div class="flex gap-2">
       <Button variant="secondary" onclick={() => window.location.reload()}>Reload Page</Button>
-      <Button variant="default" href="https://classroomio.com/contact">Contact Us</Button>
     </div>
   </Empty>
 {:else}

@@ -22,7 +22,7 @@
 </script>
 
 <svelte:head>
-  <title>Customize LMS - Integer Training LMS</title>
+  <title>Customize LMS - Gecko Programmes</title>
 </svelte:head>
 
 <CustomizeLmsPage bind:this={customizeLmsComponent} bind:hasUnsavedChanges />

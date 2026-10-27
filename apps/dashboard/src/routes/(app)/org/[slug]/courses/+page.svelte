@@ -210,7 +210,7 @@
 </script>
 
 <svelte:head>
-  <title>Courses - Integer Training LMS</title>
+  <title>Courses - Gecko Programmes</title>
 </svelte:head>
 
 <Page.Root class="w-full">

@@ -15,13 +15,11 @@
   });
 
   const programmes = $derived(caseloadApi.pipeline?.programmes ?? []);
-  const filtered = $derived(
-    programmes.filter((p) => p.title.toLowerCase().includes(searchValue.trim().toLowerCase()))
-  );
+  const filtered = $derived(programmes.filter((p) => p.title.toLowerCase().includes(searchValue.trim().toLowerCase())));
 </script>
 
 <svelte:head>
-  <title>My courses — Pearl LMS</title>
+  <title>My courses — Gecko Programmes</title>
 </svelte:head>
 
 <div class="mb-4 flex flex-wrap items-center justify-between gap-3">

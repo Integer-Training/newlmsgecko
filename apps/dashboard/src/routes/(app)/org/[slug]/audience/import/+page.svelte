@@ -13,7 +13,7 @@
 </script>
 
 <svelte:head>
-  <title>{$t('audience.import.title')} - Integer Training LMS</title>
+  <title>{$t('audience.import.title')} - Gecko Programmes</title>
 </svelte:head>
 
 <Page.Root class="mx-auto w-full max-w-3xl">

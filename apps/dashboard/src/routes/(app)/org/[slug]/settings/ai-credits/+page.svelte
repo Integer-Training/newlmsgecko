@@ -5,7 +5,7 @@
 </script>
 
 <svelte:head>
-  <title>AI Credits - Integer Training LMS</title>
+  <title>AI Credits - Gecko Programmes</title>
 </svelte:head>
 
 <Page.Header>

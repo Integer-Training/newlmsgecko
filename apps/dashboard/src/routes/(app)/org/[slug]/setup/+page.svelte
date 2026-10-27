@@ -119,7 +119,7 @@
 </script>
 
 <svelte:head>
-  <title>Setup - Integer Training LMS</title>
+  <title>Setup - Gecko Programmes</title>
 </svelte:head>
 
 <Page.Root class="w-full md:max-w-4xl lg:mx-auto">

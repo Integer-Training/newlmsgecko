@@ -6,7 +6,7 @@
 </script>
 
 <svelte:head>
-  <title>{$t('account.workspaces.page_title')} - Integer Training LMS</title>
+  <title>{$t('account.workspaces.page_title')} - Gecko Programmes</title>
 </svelte:head>
 
 <Page.Header>

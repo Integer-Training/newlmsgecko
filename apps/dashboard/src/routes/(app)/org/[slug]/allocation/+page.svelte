@@ -3,7 +3,7 @@
 </script>
 
 <svelte:head>
-  <title>Tutor allocation — Pearl LMS</title>
+  <title>Tutor allocation — Gecko Programmes</title>
 </svelte:head>
 
 <!-- The org/[slug] layout enforces requireAdmin server-side, so Admins reach this page. The API is

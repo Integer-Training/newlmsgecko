@@ -5,7 +5,7 @@
 </script>
 
 <svelte:head>
-  <title>Certificates - Integer Training LMS</title>
+  <title>Certificates - Gecko Programmes</title>
 </svelte:head>
 
 <Page.Root class="w-full">
