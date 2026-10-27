@@ -28,7 +28,7 @@ Per the Step-1 confirmed budget (free tier): a **DigitalOcean Uptime check** on 
 **Setup (owner, DO console → Monitoring → Uptime):**
 1. Create an Uptime check → target `https://learn.epearlacademy.com/login` (HTTPS, expect 200), 1-min interval.
 2. Add a check → `https://learn.epearlacademy.com/proxy/health`, expect body contains `"status":"ok"`.
-3. Alert policy → notify `amandeep.behal@me.com` (+ `mokshith@integertraining.com`) on "check is down" and on
+3. Alert policy → notify the owner + ops mailboxes (kept in the secrets folder, not in this public repo) on "check is down" and on
    "certificate expiring < 14 days".
 4. **Fire-test once:** DO console → send test notification, OR on the droplet
    `docker compose -f docker-compose.deploy.yaml stop dashboard` for ~2 min → confirm the alert email arrives →
@@ -87,7 +87,7 @@ Deployed code is built from a commit on `origin/main` (DEPLOY.md invariant — n
 to the previous known-good commit:
 
 ```bash
-ssh root@<DROPLET_IP>              # ssh -i ~/.ssh/pearllms_deploy root@165.232.97.8
+ssh root@<DROPLET_IP>              # ssh -i ~/.ssh/<deploy_key> root@<DROPLET_IP>
 cd /opt/pearllms
 git log --oneline -5               # find the previous known-good commit hash
 git checkout <previous-good-hash>  # or: git reset --hard <hash>
