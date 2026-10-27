@@ -39,7 +39,7 @@
     courseSlug = null,
     orgSlug = null,
     poweredByLabel = 'Powered by',
-    poweredByBrand = 'ClassroomIO',
+    poweredByBrand = 'Gecko Programmes',
     class: className
   }: Props = $props();
 </script>

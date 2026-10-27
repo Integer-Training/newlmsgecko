@@ -1,6 +1,6 @@
 # Validation Schemas
 
-Shared validation schemas for ClassroomIO workspace using Zod with **convention-based translations**.
+Shared validation schemas for Gecko Programmes workspace using Zod with **convention-based translations**.
 
 ## Structure
 

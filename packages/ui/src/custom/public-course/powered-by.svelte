@@ -23,7 +23,7 @@
     courseSlug = null,
     orgSlug = null,
     label = 'Powered by',
-    brand = 'ClassroomIO',
+    brand = 'Gecko Programmes',
     compact = false,
     align = 'center',
     utmSource = 'public-course',
@@ -31,7 +31,7 @@
   }: Props = $props();
 
   const href = $derived.by(() => {
-    const url = new URL('https://classroomio.com');
+    const url = new URL('/', 'https://placeholder.invalid');
 
     url.searchParams.set('utm_source', utmSource);
     url.searchParams.set('utm_medium', 'powered-by');
@@ -39,7 +39,7 @@
     if (orgSlug) url.searchParams.set('utm_campaign', orgSlug);
     if (courseSlug) url.searchParams.set('utm_content', courseSlug);
 
-    return url.toString();
+    return `${url.pathname}${url.search}`;
   });
 
   const rowAlignClass = $derived(align === 'start' ? 'ui:justify-start' : 'ui:justify-center');
@@ -65,7 +65,7 @@
       className
     )}
   >
-    <img src="/logo-192.png" class="ui:size-6" alt="ClassroomIO" />
+    <img src="/logo-192.png" class="ui:size-6" alt="Gecko Programmes" />
     {label}
     <a
       {href}

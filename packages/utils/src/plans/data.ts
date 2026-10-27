@@ -16,7 +16,7 @@ export default {
       'Advanced Course Builder (no video upload)',
       '500K AI credits / month',
       'MCP access with 20 automation credits / month',
-      'ClassroomIO branding'
+      'Gecko Programmes branding'
     ],
     CTA: {
       LABEL: 'Signup Now',

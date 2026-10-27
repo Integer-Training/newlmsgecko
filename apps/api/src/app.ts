@@ -160,7 +160,7 @@ export const app = new Hono()
   .get('/health', (c) => c.json({ status: 'ok', service: 'api', timestamp: new Date().toISOString() }))
   .get('/', (c) =>
     c.json({
-      message: `"Welcome to Classroomio.com API - docs are at ${API_SERVER_URL}/docs"`
+      message: `"Welcome to the Gecko Programmes API - docs are at ${API_SERVER_URL}/docs"`
     })
   )
   .use('/api/auth/sign-up/*', signupGuard)

@@ -5,7 +5,7 @@ import { getDefaultTemplate } from '../templates';
 
 export const onPasswordResetEmail = defineEmail({
   id: 'onPasswordReset',
-  subject: 'Password Reset Successful - Integer Training LMS',
+  subject: 'Password Reset Successful - Gecko Programmes',
   schema: z.object({
     name: z.string().min(1)
   }),

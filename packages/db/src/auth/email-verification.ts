@@ -45,12 +45,12 @@ async function sendOrgAwareVerifyEmail(options: {
     userId: options.userId
   });
 
-  const orgName = org?.name?.trim() || 'ClassroomIO';
+  const orgName = org?.name?.trim() || 'Gecko Programmes';
   const branding = buildEmailBranding(org ? { name: org.name, avatarUrl: org.avatarUrl, theme: org.theme } : undefined);
 
   await sendEmail('verifyEmail', {
     to: options.to,
-    from: org?.name ? buildEmailFromName(`${org.name} (via ClassroomIO.com)`) : undefined,
+    from: org?.name ? buildEmailFromName(`${org.name} (via Gecko Programmes)`) : undefined,
     subject: org?.name ? `Confirm your email for ${org.name}` : undefined,
     fields: {
       link: stripTriggerParam(options.verificationUrl),

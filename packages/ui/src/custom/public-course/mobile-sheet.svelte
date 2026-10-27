@@ -31,7 +31,7 @@
     courseSlug = null,
     orgSlug = null,
     poweredByLabel = 'Powered by',
-    poweredByBrand = 'ClassroomIO'
+    poweredByBrand = 'Gecko Programmes'
   }: Props = $props();
 
   function handleOpenChange(next: boolean) {

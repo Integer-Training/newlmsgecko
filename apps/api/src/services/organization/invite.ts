@@ -268,8 +268,8 @@ export async function inviteTeamMembers(orgId: string, emails: string[], roleId:
             inviteLink,
             branding: buildEmailBranding(organization)
           },
-          from: buildEmailFromName(`${organization.name} (via Integer Training LMS)`),
-          subject: sanitizeEmailSubject(`You have been invited to join ${organization.name} on Integer Training LMS`),
+          from: buildEmailFromName(`${organization.name} (via Gecko Programmes)`),
+          subject: sanitizeEmailSubject(`You have been invited to join ${organization.name} on Gecko Programmes`),
           idempotencyKey: `org-invite-teacher:${invite.id}`
         });
 

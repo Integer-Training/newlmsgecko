@@ -8,11 +8,7 @@
 
   let { svid }: Props = $props();
 
-  const embedUrl = $derived(
-    svid
-      ? `https://muse.ai/embed/${svid}?logo=https://app.classroomio.com/logo-512.png&subtitles=auto&cover_play_position=center`
-      : ''
-  );
+  const embedUrl = $derived(svid ? `https://muse.ai/embed/${svid}?subtitles=auto&cover_play_position=center` : '');
 </script>
 
 {#if embedUrl}

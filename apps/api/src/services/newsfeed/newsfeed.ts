@@ -415,7 +415,7 @@ async function sendNewsfeedPostEmail(feedId: string, authorId: string) {
       return;
     }
 
-    const orgName = feedData.organization?.name || 'Integer Training LMS';
+    const orgName = feedData.organization?.name || 'Gecko Programmes';
     const orgSiteName = feedData.organization?.siteName || 'app';
     const branding = buildEmailBranding({
       name: feedData.organization?.name,
@@ -440,8 +440,8 @@ async function sendNewsfeedPostEmail(feedId: string, authorId: string) {
         orgName,
         branding
       },
-      from: buildEmailFromName(`${orgName} - Integer Training LMS`),
-      replyTo: feedData.author?.email || 'noreply@classroomio.com',
+      from: buildEmailFromName(`${orgName} - Gecko Programmes`),
+      replyTo: feedData.author?.email || undefined,
       idempotencyKey: `newsfeed:post:${feedId}`,
       preference: { organizationId: feedData.organization.id }
     });
@@ -466,7 +466,7 @@ async function sendNewsfeedCommentEmail(feedId: string, commentContent: string) 
       return;
     }
 
-    const orgName = feedData.organization?.name || 'Integer Training LMS';
+    const orgName = feedData.organization?.name || 'Gecko Programmes';
     const orgSiteName = feedData.organization?.siteName || 'app';
     const branding = buildEmailBranding({
       name: feedData.organization?.name,
@@ -484,8 +484,7 @@ async function sendNewsfeedCommentEmail(feedId: string, commentContent: string) 
         orgName,
         branding
       },
-      from: buildEmailFromName(`${orgName} - Integer Training LMS`),
-      replyTo: 'noreply@classroomio.com',
+      from: buildEmailFromName(`${orgName} - Gecko Programmes`),
       preference: { organizationId: feedData.organization.id }
     });
   } catch (error) {

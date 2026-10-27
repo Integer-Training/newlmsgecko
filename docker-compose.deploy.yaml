@@ -1,4 +1,4 @@
-# PearlLMS production deploy (Shape A: DigitalOcean droplet + docker compose + Caddy).
+# Gecko Programmes production deploy (Shape A: DigitalOcean droplet + docker compose + Caddy).
 #
 # Runs dashboard + api + jobs + Redis on one droplet, fronted by Caddy for automatic
 # HTTPS (Let's Encrypt). Postgres and object storage are EXTERNAL (Supabase) — there is
@@ -105,7 +105,7 @@ services:
       PRIVATE_SERVER_URL: http://api:3081
       PRIVATE_SERVER_KEY: ${PRIVATE_SERVER_KEY:?}
       # AGPL "Source code" link target (runtime).
-      PUBLIC_SOURCE_REPO_URL: ${PUBLIC_SOURCE_REPO_URL:-https://github.com/Integer-Training/LMSclassroom}
+      PUBLIC_SOURCE_REPO_URL: ${PUBLIC_SOURCE_REPO_URL:-https://github.com/Integer-Training/newlmsgecko}
       # CSP: self-hosted starts from 'self' only. Allow the Supabase Storage host so browser
       # presigned uploads/downloads (connect-src) and public media images (img/media-src) work.
       CSP_CONNECT_SRC_DOMAINS: ${CSP_CONNECT_SRC_DOMAINS:-}

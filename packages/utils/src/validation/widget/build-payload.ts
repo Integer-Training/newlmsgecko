@@ -58,7 +58,7 @@ export function buildWidgetPayload(input: BuildWidgetPayloadInput): TWidgetPaylo
     planGatedFields,
     planName,
     sanitizedCustomCss,
-    poweredByLabel = 'Powered by Classroomio'
+    poweredByLabel = 'Powered by Gecko Programmes'
   } = input;
 
   const normalizedConfig = normalizeWidgetConfig(widget.config as Record<string, unknown>, planName);

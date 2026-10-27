@@ -52,7 +52,7 @@ export async function notifyCourseExerciseService(courseId: string, exerciseId: 
     quizUrl = `${baseUrl}/courses/${courseId}/exercises/${exerciseId}`;
   }
 
-  const orgName = orgData.orgName || 'Integer Training LMS';
+  const orgName = orgData.orgName || 'Gecko Programmes';
 
   const jobId = await enqueueNotifyCourseExercise({
     courseId,
@@ -60,7 +60,7 @@ export async function notifyCourseExerciseService(courseId: string, exerciseId: 
     courseName: course.title,
     orgName,
     organizationId: orgData.orgId,
-    fromName: buildEmailFromName(`${orgName} (via Integer Training LMS)`),
+    fromName: buildEmailFromName(`${orgName} (via Gecko Programmes)`),
     quizUrl,
     branding: buildEmailBranding({
       name: orgData.orgName,
