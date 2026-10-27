@@ -86,6 +86,7 @@
     "generate-types": "tsx scripts/generate-types.ts && pnpm format",
     "seed": "tsx src/scripts/seed.ts",
     "seed:fixtures": "tsx src/scripts/seed-fixtures.ts",
+    "bootstrap:owner": "tsx src/scripts/bootstrap-owner.ts",
     "format": "prettier . --write",
     "db:supabase-to-betterauth": "tsx src/scripts/supabase-to-betterauth.ts",
     "db:dump-backup": "tsx src/scripts/pg-dump-backup.ts",

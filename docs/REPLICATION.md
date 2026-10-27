@@ -24,8 +24,8 @@ _Last updated 2026-10-27._
 |---|---|---|
 | 0 Accounts & secrets | ✅ done | Secrets folder `C:\Users\PC\Projects\_secrets\geckoprogrammes\` (`gecko.env` + `README.md`). `BETTER_AUTH_SECRET`, `PRIVATE_SERVER_KEY`, `QUEUE_DASHBOARD_PASSWORD` generated. Supabase ref/region/endpoints pre-filled. |
 | 1 Gecko repo | ✅ done locally (owner to push) | Cloned from Pearl `883c4a62` (full history, 1,931 commits); remotes `origin`=newlmsgecko, `pearl`/`upstream` push DISABLED. gitleaks: 105 hits, all in upstream ClassroomIO commits already public (demo keys/seed data; 3 ClassroomIO-owned keys in an old `.env.example`) — none from the fork. Baseline (Node 20.19.3): api 563 pass / **15 fail** of 578 (6/71 files — stale `vi.mock` factories missing `hasLearnerPassedUnit`/`getAssessmentItems*`; inherited, carried as-is), email 19/19, question-types 33/33, dashboard build green. |
-| 2 Rebrand | ⏳ not started | domain/logo/sender still TBD → placeholders. |
-| 3 Bootstrap / deploy.sh / RLS SQL | ⏳ not started | |
+| 2 Rebrand | ✅ done locally (placeholders) | "Integer Training LMS" ×336 (code + 10 locales), Pearl titles, ClassroomIO links (hidden screens: removed; visible: neutral), email masthead/footer/From, AGPL repo URL, placeholder logo set. Remaining items needing domain/logo/sender: `docs/GECKO-TODO.md`. Mailpit preview: see Phase 2 notes. |
+| 3 Bootstrap / deploy.sh / RLS SQL | ✅ done locally | `pnpm --filter @cio/db bootstrap:owner` (test: `apps/api/src/__tests__/bootstrap-owner.test.ts`, 24 pass — lives under @cio/api so no new devDep/lockfile change); `scripts/deploy.sh` (sequential builds + flock: one deploy at a time); `packages/db/sql/rls-lockdown.sql` (verbatim Pearl function — differs from the Phase 4 snippet). API 587 pass / 15 fail (= baseline + 24), dashboard build green. |
 | 4 Supabase | 🟡 **project created by owner**; keys pending | `newlmsgecko`, ref `fymygmepoynwurpajcwf`, **eu-central-1 (Frankfurt)**, Postgres 17, Pro. **Owner still to:** paste DB password + 2 pooler URIs + S3 access keys into `gecko.env`; create buckets `documents` (private), `videos` (private), `media` (public); set global upload limit ≥ 800 MB. Agent then verifies read-only (Supabase MCP) without printing values. RLS SQL runs after first deploy. |
 | 5 Droplet / DNS / TLS | 🟡 **droplet done + verified**; DNS pending domain | See Phase 5 (as-built). |
 | 6 Email (Amazon SES) | ⏳ blocked on domain | |
@@ -367,6 +367,11 @@ tests still green, and an email preview (Mailpit locally) shows the Gecko masthe
    ```
    (Compare with Pearl's actual function: `select pg_get_functiondef('public.ensure_rls_on_new_tables'::regproc);`
    on project `cvtmymxxjgjshrzsjxnj` — read-only — and copy it verbatim if it differs.)
+   **Correction (checked read-only on Pearl prod 2026-10-27):** the SQL above is NOT what Pearl runs.
+   Pearl's trigger `ensure_rls_on_new_tables` calls **`public.rls_auto_enable()`** (`SECURITY DEFINER`,
+   `search_path=pg_catalog`, object types `table` + `partitioned table`) on tags `CREATE TABLE`,
+   `CREATE TABLE AS`, `SELECT INTO`; Pearl has 119 tables / 119 RLS / 0 policies. **Run
+   `packages/db/sql/rls-lockdown.sql`** (the verbatim copy) instead of the snippet above.
    The app connects as `postgres` (owner, bypasses RLS) so nothing in the app changes.
 
 **Done when** (SQL editor on the Gecko project):
@@ -3183,7 +3188,7 @@ Other external calls the API can make (all env-gated): Unsplash (`UNSPLASH_API_K
 ### 7. Tests
 
 - Run API suite: `pnpm --filter @cio/api test` (= `vitest run`; config `apps/api/vitest.config.ts` aliases `@cio/db/*` and `@cio/core/*` to their `dist/` so **build the shared packages first: `pnpm build`**). DB is mocked (`vi.mock`), so no database/Redis/Supabase is needed. 71 `*.test.ts` files under `apps/api/src` (e.g. `__tests__/authz/` guard matrices, `marking`, `messaging`, `registration*`, `no-phone-home`, `error-hygiene`).
-- Documented baseline (`docs/PHASE10.md`, `docs/BASELINE.md`): **api 523 pass / 0 fail, all 67 files load**; `@cio/email` 19 pass (`pnpm --filter @cio/email test`); `@cio/question-types` 33 pass; `@cio/course-app` 1. Known accepted gap: `@cio/dashboard` jest suite cannot start (F2, owner-signed; dashboard verified by `svelte-check` + `vite build` + per-role manual matrices). No CI workflow runs tests (CI builds only). Not re-run during this analysis (read-only brief).
+- **Re-measured 2026-10-27 on a clean clone of `883c4a62` (Node 20.19.3): api 563 pass / 15 fail of 578, 6 of 71 files fail (stale `vi.mock` factories missing `hasLearnerPassedUnit`, `getAssessmentItemsByLesson`, `getAssessmentItemsForLesson`) — the figures below are out of date.** Documented baseline (`docs/PHASE10.md`, `docs/BASELINE.md`): **api 523 pass / 0 fail, all 67 files load**; `@cio/email` 19 pass (`pnpm --filter @cio/email test`); `@cio/question-types` 33 pass; `@cio/course-app` 1. Known accepted gap: `@cio/dashboard` jest suite cannot start (F2, owner-signed; dashboard verified by `svelte-check` + `vite build` + per-role manual matrices). No CI workflow runs tests (CI builds only). Not re-run during this analysis (read-only brief).
 - Fresh-environment verification suggestions: `pnpm install` (Node ^20.19.3, pnpm 10.19), `pnpm build`, API tests, then a live smoke per `docs/DEPLOY.md` section 5: login per role, one upload (presign PUT/GET on private bucket), one marking, security headers, `/health`.
 
 ### 8. Replication checklist (condensed)
