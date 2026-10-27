@@ -3,7 +3,6 @@
   import { automationApi } from '$features/automation/api/automation.svelte';
   import { t } from '$lib/utils/functions/translations';
   import * as Page from '@cio/ui/base/page';
-  import { Button } from '@cio/ui/base/button';
 
   let { data } = $props();
 
