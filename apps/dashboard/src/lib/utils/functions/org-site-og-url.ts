@@ -88,9 +88,5 @@ export function resolveOrgSiteOgWarmUrl(options: {
     return buildOrgSiteOgApiUrl(siteName, publicServerUrl);
   }
 
-  if (!options.isSelfHosted) {
-    return buildOrgSiteOgApiUrl(siteName, 'https://api.classroomio.com');
-  }
-
   return null;
 }

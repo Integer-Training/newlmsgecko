@@ -81,10 +81,6 @@
     }
   }
 
-  function onLearnMore() {
-    window.open('https://classroomio.com/blog/early-adopter', '_blank');
-  }
-
   function handleUpgradeSuccess(upgradeSuccessful: boolean) {
     if (upgradeSuccessful) {
       onUpgrade();
@@ -120,9 +116,6 @@
         <div class="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
           <Button class="w-full sm:w-auto" variant="outline" onclick={onClose}>
             {$t('pricing.modal.close')}
-          </Button>
-          <Button class="w-full sm:w-auto" variant="default" onclick={onLearnMore}>
-            {$t('pricing.modal.learn')}
           </Button>
         </div>
       </div>

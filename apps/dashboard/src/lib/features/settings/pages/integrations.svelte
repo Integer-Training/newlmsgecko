@@ -4,7 +4,7 @@
   // import { snackbar } from '$lib/components/Snackbar/store';
   import { Input } from '@cio/ui/base/input';
   import { Button } from '@cio/ui/base/button';
-  import { ArrowTopRight, CircleCheckIcon } from '$features/ui/icons';
+  import { CircleCheckIcon } from '$features/ui/icons';
   import * as Field from '@cio/ui/base/field';
 
   let chatId: number | null = $state(null);
@@ -56,10 +56,6 @@
       <Field.Group>
         <Field.Description>{$t('settings.integrations.sub_heading')}</Field.Description>
         <Field.Description>{$t('settings.integrations.step_authenticate')}</Field.Description>
-        <Button variant="outline" onclick={() => window.open('https://t.me/classroomio_bot', '_blank')}>
-          <span class="mr-2">{$t('settings.integrations.open_bot_button')}</span>
-          <ArrowTopRight />
-        </Button>
         <Field.Description>{$t('settings.integrations.step_chatId')}</Field.Description>
         <Field.Field>
           <Input bind:value={chatId} placeholder="360111" class="w-full lg:w-60" type="number" required />

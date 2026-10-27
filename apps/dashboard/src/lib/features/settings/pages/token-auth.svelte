@@ -45,7 +45,7 @@
 async function main() {
   // Secret generated above
   const secret = process.env.TOKEN_AUTH_SECRET;
-  const baseUrl = 'https://api.classroomio.dev';
+  const baseUrl = 'https://<your-api-host>';
 
   const token = await new SignJWT({
     sub: 'test-user-123',

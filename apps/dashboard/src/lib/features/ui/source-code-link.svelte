@@ -3,7 +3,7 @@
 
   // AGPL-3.0 compliance: the running app must offer its source to users. URL is
   // config-driven (runtime) so a deployment can point at its own fork mirror.
-  const DEFAULT_SOURCE_REPO_URL = 'https://github.com/Integer-Training/LMSclassroom';
+  const DEFAULT_SOURCE_REPO_URL = 'https://github.com/Integer-Training/newlmsgecko';
 
   let { class: className = '' }: { class?: string } = $props();
 

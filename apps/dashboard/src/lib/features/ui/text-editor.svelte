@@ -44,7 +44,7 @@
     editableStorageKey = 'edra-editable',
     class: className = '',
     editorClass = '',
-    placeholder = 'Welcome to Integer Training LMS',
+    placeholder = 'Welcome to Gecko Programmes',
     onChange,
     onReady,
     onEditorDestroy

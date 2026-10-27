@@ -1233,7 +1233,7 @@
           "audit_actor": "Aktor",
           "audit_ip": "IP",
           "scan_qr": "Skanuj QR",
-          "classroomio_brand": "Integer Training LMS",
+          "classroomio_brand": "Gecko Programmes",
           "snackbar_invite_link_copied": "Link zaproszenia został skopiowany",
           "snackbar_invite_link_regenerated": "Wygenerowano nowy link z zaproszeniem",
           "snackbar_failed_generate_link": "Nie udało się wygenerować linku z zaproszeniem",
@@ -2479,7 +2479,7 @@
     },
     "creator": {
       "heading": "Jaki kurs chcesz stworzyć?",
-      "placeholder": "Poproś Integer Training LMS o utworzenie kursu dla Ciebie...",
+      "placeholder": "Poproś Gecko Programmes o utworzenie kursu dla Ciebie...",
       "type": {
         "self_paced": "Samodzielne tempo",
         "live_class": "Zajęcia na żywo"
@@ -2833,12 +2833,12 @@
     "goto": "Idź do",
     "courses": "Kursy",
     "home": "Dom",
-    "classroomio_home": "Strona główna Integer Training LMS",
+    "classroomio_home": "Strona główna Gecko Programmes",
     "dashboard": "Panel",
     "discussion": "Dyskusja",
     "people": "Ludzie",
     "goto_lms": "Przejdź do LMS-a",
-    "goto_home": "Przejdź do strony głównej Integer Training LMS",
+    "goto_home": "Przejdź do strony głównej Gecko Programmes",
     "login": "Zaloguj się",
     "signup": "Zarejestruj się",
     "redirecting": "Przekierowanie",
@@ -2942,7 +2942,7 @@
     "upgrade_left": "Pozostało {count}"
   },
   "media_manager": {
-    "page_title": "Menedżer mediów - Integer Training LMS",
+    "page_title": "Menedżer mediów - Gecko Programmes",
     "heading": "Menedżer multimediów",
     "empty": "Nie znaleziono żadnych zasobów",
     "usage": {
@@ -3094,7 +3094,7 @@
       "provider": "Używamy Polar do zarządzania Twoimi rozliczeniami",
       "open_billing": "Otwórz rozliczenia",
       "error": "Wystąpił błąd podczas otwierania rozliczeń",
-      "page_subtitle": "Twój plan, portal rozliczeniowy i sposób płatności za Integer Training LMS.",
+      "page_subtitle": "Twój plan, portal rozliczeniowy i sposób płatności za Gecko Programmes.",
       "ai_credits": "AI credits",
       "ai_tokens_used": "AI credits wykorzystane w tym miesiącu",
       "ai_bonus_credits": "dostępne bonusowe AI credits"
@@ -3102,7 +3102,7 @@
     "integrations": {
       "heading": "Telegram",
       "sub_heading": "Połącz swoje konto z telegramem, aby otrzymywać powiadomienia o wszelkich zmianach w aplikacji.",
-      "step_authenticate": "Krok 1: Uwierzytelnij swoje konto za pomocą bota Integer Training LMS.",
+      "step_authenticate": "Krok 1: Uwierzytelnij swoje konto za pomocą bota Gecko Programmes.",
       "open_bot_button": "Otwórz Bota",
       "step_chatId": "Krok 2: Wpisz identyfikator czatu otrzymany od bota.",
       "connect_button": "Połącz",
@@ -3422,7 +3422,7 @@
       "gallery": {
         "heading": "Popularne motywy",
         "description": "Zawiera podstawowe funkcje, które można łatwo dostosować — bez konieczności kodowania.",
-        "by_classroomio": "przez Integer Training LMS",
+        "by_classroomio": "przez Gecko Programmes",
         "add": "Dodaj",
         "upgrade": "Uaktualnij",
         "apply_theme": "Zastosuj motyw",
@@ -3500,7 +3500,7 @@
         "accepted": "Zaakceptowano:",
         "validation_error": "Rozmiar pliku przekracza maksymalny limit:"
       },
-      "page_subtitle": "Twoje imię, e-mail i sposób, w jaki jesteś widoczny w Integer Training LMS."
+      "page_subtitle": "Twoje imię, e-mail i sposób, w jaki jesteś widoczny w Gecko Programmes."
     },
     "tabs": {
       "profile_tab": "Profil",
@@ -3761,7 +3761,7 @@
           "description": "Zapisy, zgłoszenia, lekcje, ogłoszenia i ukończenia w Twoich kursach."
         }
       },
-      "personal_page_subtitle": "Wybierz, które powiadomienia e-mail otrzymujesz od Integer Training LMS."
+      "personal_page_subtitle": "Wybierz, które powiadomienia e-mail otrzymujesz od Gecko Programmes."
     }
   },
   "profileMenu": {
@@ -3937,7 +3937,7 @@
     "snackbar_error": "błąd podczas wysyłania kodu"
   },
   "public_courses": {
-    "page_title": "Kursy — Integer Training LMS",
+    "page_title": "Kursy — Gecko Programmes",
     "heading": "Kursy",
     "subtitle": "Przeglądaj wszystkie opublikowane kursy",
     "clear_filters": "Wyczyść filtry",
@@ -3962,7 +3962,7 @@
     }
   },
   "tags_admin": {
-    "page_title": "Tagi - Integer Training LMS",
+    "page_title": "Tagi - Gecko Programmes",
     "heading": "Tagi",
     "create": "Utwórz",
     "tag_modal": {
@@ -4014,7 +4014,7 @@
   },
   "invite": {
     "organization": {
-      "page_title": "Dołącz do organizacji {orgName} w Integer Training LMS",
+      "page_title": "Dołącz do organizacji {orgName} w Gecko Programmes",
       "invitation_student": "Zostałeś zaproszony do {orgName} jako uczeń.",
       "invitation_teacher": "Zostałeś zaproszony do {orgName} jako nauczyciel.",
       "invitation_admin": "Zostałeś zaproszony do {orgName} jako administrator.",
@@ -4033,7 +4033,7 @@
       }
     },
     "link": {
-      "page_title": "Dołącz do organizacji {orgName} w Integer Training LMS",
+      "page_title": "Dołącz do organizacji {orgName} w Gecko Programmes",
       "invitation_student": "Zaproszono Cię do dołączenia do organizacji {orgName} jako student.",
       "invitation_teacher": "Zaproszono Cię do dołączenia do organizacji {orgName} jako nauczyciel.",
       "invitation_admin": "Zostałeś zaproszony do dołączenia do organizacji {orgName} jako administrator.",
@@ -4053,21 +4053,21 @@
       "setup": {
         "title": "Konfiguracja klienta",
         "description": "Użyj jednego klucza o zasięgu organizacji na integrację. Jeśli klucz zostanie obrócony lub unieważniony, klient przestaje działać do czasu skonfigurowania nowego klucza tajnego.",
-        "claude_code_description": "Rejestruje `@classroomio/mcp` w Claude Code przy użyciu wygenerowanego klucza o zasięgu organizacji.",
-        "codex_description": "Dodaje serwer Integer Training LMS MCP do Codexu z tym samym kluczem o zasięgu organizacji.",
+        "claude_code_description": "Rejestruje `<mcp-server-package>` w Claude Code przy użyciu wygenerowanego klucza o zasięgu organizacji.",
+        "codex_description": "Dodaje serwer Gecko Programmes MCP do Codexu z tym samym kluczem o zasięgu organizacji.",
         "cursor_description": "Wklej to do `~/.cursor/mcp.json` lub konfiguracji MCP w obszarze roboczym.",
         "opencode_description": "Dodaj to do `opencode.json` w katalogu głównym projektu lub do `~/.config/opencode/opencode.json`."
       },
       "keys": {
         "title": "Klucze MCP",
-        "description": "Te klucze uwierzytelniają bieżącą organizację, gdy klient MCP wywołuje Integer Training LMS poprzez `@classroomio/mcp`.",
+        "description": "Te klucze uwierzytelniają bieżącą organizację, gdy klient MCP wywołuje Gecko Programmes poprzez `<mcp-server-package>`.",
         "generate": "Wygeneruj klucz MCP",
         "secret_once": "Sekret ten zostaje pokazany raz. Skopiuj go teraz do swojego klienta MCP.",
         "modal": {
           "title": "Utwórz klucz MCP",
           "description": "Wybierz nazwę tego klucza MCP przed jego wygenerowaniem.",
           "name_label": "Nazwa klucza",
-          "name_placeholder": "Integer Training LMS OpenCode",
+          "name_placeholder": "Gecko Programmes OpenCode",
           "cancel": "Anuluj",
           "save": "Utwórz klucz"
         }
@@ -4083,17 +4083,17 @@
         "rate_limits_description": "Żądania odczytu/zapisu/publikowania dozwolone na minutę.",
         "used_label": "Używane:"
       },
-      "page_subtitle": "Połącz narzędzia AI z Integer Training LMS za pomocą kluczy o zasięgu organizacji, które możesz w dowolnym momencie obrócić."
+      "page_subtitle": "Połącz narzędzia AI z Gecko Programmes za pomocą kluczy o zasięgu organizacji, które możesz w dowolnym momencie obrócić."
     },
     "api": {
-      "subtitle": "Zarządzaj kluczami API, aby integrować się z publicznym API Integer Training LMS.",
+      "subtitle": "Zarządzaj kluczami API, aby integrować się z publicznym API Gecko Programmes.",
       "keys": {
         "title": "Klucze API",
-        "description": "Te klucze uwierzytelniają bieżącą organizację podczas wywoływania publicznego API Integer Training LMS.",
+        "description": "Te klucze uwierzytelniają bieżącą organizację podczas wywoływania publicznego API Gecko Programmes.",
         "generate": "Wygeneruj klucz API",
         "secret_once": "Ten sekret jest wyświetlany tylko raz. Skopiuj go i przechowuj bezpiecznie.",
         "empty_title": "Brak kluczy API",
-        "empty_description": "Utwórz pierwszy klucz API o zasięgu organizacji, aby korzystać z publicznego API Integer Training LMS.",
+        "empty_description": "Utwórz pierwszy klucz API o zasięgu organizacji, aby korzystać z publicznego API Gecko Programmes.",
         "modal": {
           "title": "Utwórz klucz API",
           "description": "Wybierz nazwę tego klucza API przed jego wygenerowaniem.",
@@ -4147,7 +4147,7 @@
       "disabled_description": "Tylko administratorzy organizacji mogą tworzyć, obracać i unieważniać klucze automatyzacji. Nauczyciele mogą zapoznać się z instrukcjami konfiguracji tutaj."
     },
     "zapier": {
-      "page_subtitle": "Automatyzuj Integer Training LMS z tysiącami aplikacji przez Zapier. Wkrótce."
+      "page_subtitle": "Automatyzuj Gecko Programmes z tysiącami aplikacji przez Zapier. Wkrótce."
     }
   },
   "ai_assistant": {
@@ -4383,7 +4383,7 @@
       "border_radius": "Promień granicy",
       "font_family": "Rodzina czcionek",
       "font_scale": "Skala wielkości czcionki",
-      "show_powered_by": "Pokaż markę Classroomio",
+      "show_powered_by": "Pokaż markę Gecko Programmes",
       "custom_css": "Niestandardowy CSS",
       "custom_css_locked": "Uaktualnij, aby włączyć niestandardowy CSS.",
       "embed_code": "Wstaw kod",

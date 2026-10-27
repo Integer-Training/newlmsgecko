@@ -213,7 +213,7 @@
 </script>
 
 <svelte:head>
-  <title>Learner Progression — Pearl LMS</title>
+  <title>Learner Progression — Gecko Programmes</title>
 </svelte:head>
 
 <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -254,7 +254,11 @@
     <span class="text-muted-foreground text-xs">Course</span>
     <Select.Root type="single" bind:value={courseFilter}>
       <Select.Trigger class="min-w-[180px]">
-        <p class="truncate">{courseFilter === 'all' ? 'All Courses' : (courses.find((c) => c.courseId === courseFilter)?.title ?? 'Course')}</p>
+        <p class="truncate">
+          {courseFilter === 'all'
+            ? 'All Courses'
+            : (courses.find((c) => c.courseId === courseFilter)?.title ?? 'Course')}
+        </p>
       </Select.Trigger>
       <Select.Content>
         <Select.Item value="all">All Courses</Select.Item>
@@ -286,7 +290,14 @@
   <div class="flex items-center gap-3">
     <div class="flex items-center gap-2">
       <span class="text-muted-foreground text-sm">Show</span>
-      <Select.Root type="single" value={String(pageSize)} onValueChange={(v) => { pageSize = Number(v); currentPage = 1; }}>
+      <Select.Root
+        type="single"
+        value={String(pageSize)}
+        onValueChange={(v) => {
+          pageSize = Number(v);
+          currentPage = 1;
+        }}
+      >
         <Select.Trigger class="w-[80px]">
           <p>{pageSize}</p>
         </Select.Trigger>
@@ -386,8 +397,12 @@
                           <div class="flex flex-wrap items-center justify-between gap-3 border-b p-3">
                             <div class="font-medium">{course.title}</div>
                             <div class="flex flex-wrap items-center gap-4 text-sm">
-                              <span class="text-muted-foreground">WB: {course.workbooks.passed}/{course.workbooks.total} Passed</span>
-                              <span class="text-muted-foreground">CS: {course.caseStudies.passed}/{course.caseStudies.total} Passed</span>
+                              <span class="text-muted-foreground"
+                                >WB: {course.workbooks.passed}/{course.workbooks.total} Passed</span
+                              >
+                              <span class="text-muted-foreground"
+                                >CS: {course.caseStudies.passed}/{course.caseStudies.total} Passed</span
+                              >
                               <span class="text-muted-foreground">Time: {formatSeconds(course.totalTimeSeconds)}</span>
                               <span class="flex items-center gap-2">
                                 <Progress value={course.percent} class="w-24" />
@@ -479,7 +494,12 @@
       Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filteredRows.length)} of {filteredRows.length}
     </span>
     {#if totalPages > 1}
-      <Pagination.Root count={filteredRows.length} perPage={pageSize} page={currentPage} onPageChange={(p) => (currentPage = p)}>
+      <Pagination.Root
+        count={filteredRows.length}
+        perPage={pageSize}
+        page={currentPage}
+        onPageChange={(p) => (currentPage = p)}
+      >
         {#snippet children({ pages, currentPage: activePage })}
           <Pagination.Content>
             <Pagination.Item>

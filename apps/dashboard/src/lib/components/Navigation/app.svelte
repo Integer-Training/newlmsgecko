@@ -38,7 +38,7 @@
         id="logo"
         class="line-clamp-1 text-lg"
       >
-        {isCoursePage ? title : 'Integer Training LMS'}
+        {isCoursePage ? title : 'Gecko Programmes'}
       </a>
     </div>
 

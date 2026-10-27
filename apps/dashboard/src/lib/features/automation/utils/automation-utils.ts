@@ -4,7 +4,7 @@ import { PUBLIC_API_BASE_URL } from '@cio/utils/openapi/public-api';
 const PUBLIC_API_SETUP_SECRET_PLACEHOLDER = '<paste-your-api-key>';
 
 function getServerPath() {
-  return 'npx -y @classroomio/mcp';
+  return 'npx -y <mcp-server-package>';
 }
 
 export function getPublicApiSetupSecret(secret: string | null) {
@@ -99,11 +99,11 @@ export function getAutomationSetupSecret(secret: string | null) {
 export function getClaudeCodeSnippet(secret: string | null) {
   const apiKey = getAutomationSetupSecret(secret);
 
-  return `claude mcp add-json classroomio '{
+  return `claude mcp add-json gecko '{
   "command": "npx",
-  "args": ["-y", "@classroomio/mcp"],
+  "args": ["-y", "<mcp-server-package>"],
   "env": {
-    "CLASSROOMIO_API_URL": "https://api.classroomio.com",
+    "CLASSROOMIO_API_URL": "<your-api-url>",
     "CLASSROOMIO_API_KEY": "${apiKey}"
   }
 }'`;
@@ -112,10 +112,10 @@ export function getClaudeCodeSnippet(secret: string | null) {
 export function getCodexSnippet(secret: string | null) {
   const apiKey = getAutomationSetupSecret(secret);
 
-  return `codex mcp add classroomio \\
-  --env CLASSROOMIO_API_URL=https://api.classroomio.com \\
+  return `codex mcp add gecko \\
+  --env CLASSROOMIO_API_URL=<your-api-url> \\
   --env CLASSROOMIO_API_KEY=${apiKey} \\
-  -- npx -y @classroomio/mcp`;
+  -- npx -y <mcp-server-package>`;
 }
 
 export function getOpenCodeSnippet(secret: string | null) {
@@ -124,12 +124,12 @@ export function getOpenCodeSnippet(secret: string | null) {
   return `{
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "classroomio": {
+    "gecko": {
       "type": "local",
-      "command": ["npx", "-y", "@classroomio/mcp"],
+      "command": ["npx", "-y", "<mcp-server-package>"],
       "enabled": true,
       "environment": {
-        "CLASSROOMIO_API_URL": "https://api.classroomio.com",
+        "CLASSROOMIO_API_URL": "<your-api-url>",
         "CLASSROOMIO_API_KEY": "${apiKey}"
       }
     }
@@ -142,11 +142,11 @@ export function getCursorSnippet(secret: string | null) {
 
   return `{
   "mcpServers": {
-    "classroomio": {
+    "gecko": {
       "command": "npx",
-      "args": ["-y", "@classroomio/mcp"],
+      "args": ["-y", "<mcp-server-package>"],
       "env": {
-        "CLASSROOMIO_API_URL": "https://api.classroomio.com",
+        "CLASSROOMIO_API_URL": "<your-api-url>",
         "CLASSROOMIO_API_KEY": "${apiKey}"
       }
     }
@@ -157,11 +157,11 @@ export function getCursorSnippet(secret: string | null) {
 export function getDefaultAutomationKeyLabel(type: AutomationKeyType) {
   switch (type) {
     case 'mcp':
-      return 'Integer Training LMS MCP';
+      return 'Gecko Programmes MCP';
     case 'api':
-      return 'Integer Training LMS API';
+      return 'Gecko Programmes API';
     case 'zapier':
-      return 'Integer Training LMS Zapier';
+      return 'Gecko Programmes Zapier';
   }
 }
 

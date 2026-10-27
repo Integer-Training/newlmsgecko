@@ -7,7 +7,7 @@ import { resolveOrgSiteOgImageUrl } from '$lib/utils/functions/org-site-og-url';
 
 const isSelfHosted = PUBLIC_IS_SELFHOSTED === 'true';
 
-const DEFAULT_TITLE = 'Integer Training LMS';
+const DEFAULT_TITLE = 'Gecko Programmes';
 const DEFAULT_DESCRIPTION =
   'The Integer Training learning platform — access your courses, workbooks and progress in one place.';
 const ORG_OG_WIDTH = 1200;
@@ -104,7 +104,7 @@ export async function getBaseMetaTags(url: URL, orgSiteInfo: OrgSiteInfo): Promi
     orgMeta?.siteName ||
     publicEnv.PUBLIC_APP_TITLE?.trim() ||
     (isSelfHosted && orgSiteInfo.org?.name ? orgSiteInfo.org.name : null) ||
-    'Integer Training LMS';
+    'Gecko Programmes';
 
   const ogImageUrl = await resolveOgImageUrl(url, orgSiteInfo);
   const usesDynamicOrgOg =

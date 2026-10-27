@@ -13,6 +13,6 @@
     layout="full-page"
     showLogo={true}
   >
-    <Button href="https://classroomio.com">Go Home</Button>
+    <Button href="/">Go Home</Button>
   </Empty>
 </div>

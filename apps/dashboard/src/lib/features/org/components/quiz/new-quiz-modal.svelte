@@ -92,7 +92,7 @@
 </script>
 
 <svelte:head>
-  <title>{$t('components.quiz.title')} - Integer Training LMS</title>
+  <title>{$t('components.quiz.title')} - Gecko Programmes</title>
 </svelte:head>
 
 <Dialog.Root

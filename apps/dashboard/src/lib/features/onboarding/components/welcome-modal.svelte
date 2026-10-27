@@ -39,9 +39,7 @@
     </Dialog.Header>
     <p class="text-md text-black dark:text-white">
       {$t('welcome_modal.we_at')}
-      <a href="https://app.classroomio.com/" class="ui:text-primary no-underline hover:no-underline"
-        >Integer Training LMS</a
-      >
+      <a href="/" class="ui:text-primary no-underline hover:no-underline">Gecko Programmes</a>
       {$t('welcome_modal.small_team')}
       <span class="ui:text-primary">{$t('welcome_modal.thank_you')};</span>
       {$t('welcome_modal.deeply_appreciate')}

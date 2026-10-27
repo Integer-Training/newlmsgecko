@@ -237,7 +237,7 @@
 </script>
 
 <svelte:head>
-  <title>Learner Progressions — Pearl LMS</title>
+  <title>Learner Progressions — Gecko Programmes</title>
 </svelte:head>
 
 <Page.Root class="w-full">

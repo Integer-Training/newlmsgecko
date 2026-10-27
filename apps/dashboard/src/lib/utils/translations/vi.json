@@ -1233,7 +1233,7 @@
           "audit_actor": "Người thực hiện",
           "audit_ip": "IP",
           "scan_qr": "Quét mã QR",
-          "classroomio_brand": "Integer Training LMS",
+          "classroomio_brand": "Gecko Programmes",
           "snackbar_invite_link_copied": "Đã sao chép liên kết mời",
           "snackbar_invite_link_regenerated": "Một liên kết mời mới đã được tạo",
           "snackbar_failed_generate_link": "Không tạo được liên kết mời",
@@ -2479,7 +2479,7 @@
     },
     "creator": {
       "heading": "Bạn muốn tạo khóa học nào?",
-      "placeholder": "Hãy yêu cầu Integer Training LMS tạo một khóa học cho bạn...",
+      "placeholder": "Hãy yêu cầu Gecko Programmes tạo một khóa học cho bạn...",
       "type": {
         "self_paced": "tự nhịp độ",
         "live_class": "Lớp học trực tiếp"
@@ -2833,7 +2833,7 @@
     "goto": "đi đến",
     "courses": "Khóa học",
     "home": "Trang chủ",
-    "classroomio_home": "Trang chủ Integer Training LMS",
+    "classroomio_home": "Trang chủ Gecko Programmes",
     "dashboard": "Bảng điều khiển",
     "discussion": "Thảo luận",
     "people": "mọi người",
@@ -2942,7 +2942,7 @@
     "upgrade_left": "còn {count}"
   },
   "media_manager": {
-    "page_title": "Trình quản lý phương tiện - Integer Training LMS",
+    "page_title": "Trình quản lý phương tiện - Gecko Programmes",
     "heading": "Trình quản lý phương tiện",
     "empty": "Không tìm thấy nội dung nào",
     "usage": {
@@ -3094,7 +3094,7 @@
       "provider": "Chúng tôi sử dụng Polar để giúp quản lý việc thanh toán của bạn",
       "open_billing": "Thanh toán mở",
       "error": "Đã xảy ra lỗi khi mở thanh toán",
-      "page_subtitle": "Gói của bạn, cổng thanh toán và cách bạn thanh toán cho Integer Training LMS.",
+      "page_subtitle": "Gói của bạn, cổng thanh toán và cách bạn thanh toán cho Gecko Programmes.",
       "ai_credits": "AI credits",
       "ai_tokens_used": "AI credits đã dùng trong tháng này",
       "ai_bonus_credits": "AI credits thưởng có sẵn"
@@ -3102,7 +3102,7 @@
     "integrations": {
       "heading": "Telegram",
       "sub_heading": "Kết nối tài khoản của bạn với điện tín để nhận thông báo về bất kỳ thay đổi nào trong ứng dụng.",
-      "step_authenticate": "Bước 1: Xác thực tài khoản của bạn thông qua bot Integer Training LMS.",
+      "step_authenticate": "Bước 1: Xác thực tài khoản của bạn thông qua bot Gecko Programmes.",
       "open_bot_button": "Mở Bot",
       "step_chatId": "Bước 2: Nhập ID trò chuyện được bot cung cấp cho bạn.",
       "connect_button": "Kết nối",
@@ -3422,7 +3422,7 @@
       "gallery": {
         "heading": "Chủ đề phổ biến",
         "description": "Được tạo bằng các tính năng cốt lõi, bạn có thể dễ dàng tùy chỉnh — không cần mã hóa.",
-        "by_classroomio": "bởi Integer Training LMS",
+        "by_classroomio": "bởi Gecko Programmes",
         "add": "Thêm",
         "upgrade": "Nâng cấp",
         "apply_theme": "Áp dụng chủ đề",
@@ -3500,7 +3500,7 @@
         "accepted": "Đã chấp nhận:",
         "validation_error": "Kích thước tệp vượt quá giới hạn tối đa:"
       },
-      "page_subtitle": "Tên, email và cách bạn xuất hiện ở mọi nơi bạn làm việc trong Integer Training LMS."
+      "page_subtitle": "Tên, email và cách bạn xuất hiện ở mọi nơi bạn làm việc trong Gecko Programmes."
     },
     "tabs": {
       "profile_tab": "Hồ sơ",
@@ -3761,7 +3761,7 @@
           "description": "Ghi danh, bài nộp, bài học, thông báo và hoàn thành trong các khóa học của bạn."
         }
       },
-      "personal_page_subtitle": "Chọn thông báo email bạn nhận từ Integer Training LMS."
+      "personal_page_subtitle": "Chọn thông báo email bạn nhận từ Gecko Programmes."
     }
   },
   "profileMenu": {
@@ -3937,7 +3937,7 @@
     "snackbar_error": "lỗi khi gửi mã"
   },
   "public_courses": {
-    "page_title": "Khóa học - Integer Training LMS",
+    "page_title": "Khóa học - Gecko Programmes",
     "heading": "Khóa học",
     "subtitle": "Duyệt tất cả các khóa học được xuất bản",
     "clear_filters": "Xóa bộ lọc",
@@ -3962,7 +3962,7 @@
     }
   },
   "tags_admin": {
-    "page_title": "Thẻ - Integer Training LMS",
+    "page_title": "Thẻ - Gecko Programmes",
     "heading": "Thẻ",
     "create": "Tạo",
     "tag_modal": {
@@ -4014,7 +4014,7 @@
   },
   "invite": {
     "organization": {
-      "page_title": "Tham gia cùng {orgName} trên Integer Training LMS",
+      "page_title": "Tham gia cùng {orgName} trên Gecko Programmes",
       "invitation_student": "Bạn được mời vào {orgName} với vai trò học viên.",
       "invitation_teacher": "Bạn được mời vào {orgName} với vai trò giáo viên.",
       "invitation_admin": "Bạn được mời vào {orgName} với vai trò quản trị viên.",
@@ -4033,7 +4033,7 @@
       }
     },
     "link": {
-      "page_title": "Tham gia cùng {orgName} trên Integer Training LMS",
+      "page_title": "Tham gia cùng {orgName} trên Gecko Programmes",
       "invitation_student": "Bạn đã được mời tham gia {orgName} với tư cách là sinh viên.",
       "invitation_teacher": "Bạn đã được mời tham gia {orgName} với tư cách là giáo viên.",
       "invitation_admin": "Bạn đã được mời tham gia {orgName} với tư cách quản trị viên.",
@@ -4053,21 +4053,21 @@
       "setup": {
         "title": "Thiết lập máy khách",
         "description": "Sử dụng một khóa trong phạm vi tổ chức cho mỗi lần tích hợp. Nếu một khóa bị xoay hoặc bị thu hồi, máy khách sẽ ngừng hoạt động cho đến khi bí mật mới được định cấu hình.",
-        "claude_code_description": "Đăng ký `@classroomio/mcp` với Mã Claude bằng cách sử dụng khóa trong phạm vi tổ chức được tạo.",
-        "codex_description": "Thêm máy chủ Integer Training LMS MCP vào Codex bằng cùng một khóa trong phạm vi tổ chức.",
+        "claude_code_description": "Đăng ký `<mcp-server-package>` với Mã Claude bằng cách sử dụng khóa trong phạm vi tổ chức được tạo.",
+        "codex_description": "Thêm máy chủ Gecko Programmes MCP vào Codex bằng cùng một khóa trong phạm vi tổ chức.",
         "cursor_description": "Dán cái này vào `~/.cursor/mcp.json` hoặc cấu hình MCP không gian làm việc của bạn.",
         "opencode_description": "Thêm nội dung này vào `opencode.json` ở thư mục gốc dự án hoặc `~/.config/opencode/opencode.json`."
       },
       "keys": {
         "title": "Khóa MCP",
-        "description": "Các khóa này xác thực tổ chức hiện tại khi máy khách MCP gọi Integer Training LMS thông qua `@classroomio/mcp`.",
+        "description": "Các khóa này xác thực tổ chức hiện tại khi máy khách MCP gọi Gecko Programmes thông qua `<mcp-server-package>`.",
         "generate": "Tạo khóa MCP",
         "secret_once": "Bí mật này được hiển thị một lần. Sao chép nó vào ứng dụng khách MCP của bạn ngay bây giờ.",
         "modal": {
           "title": "Tạo khóa MCP",
           "description": "Chọn tên cho khóa MCP này trước khi tạo.",
           "name_label": "Tên khóa",
-          "name_placeholder": "Integer Training LMS OpenCode",
+          "name_placeholder": "Gecko Programmes OpenCode",
           "cancel": "Hủy",
           "save": "Tạo khóa"
         }
@@ -4083,17 +4083,17 @@
         "rate_limits_description": "Yêu cầu đọc/ghi/xuất bản được phép mỗi phút.",
         "used_label": "Đã sử dụng:"
       },
-      "page_subtitle": "Kết nối công cụ AI với Integer Training LMS bằng khóa trong phạm vi tổ chức mà bạn có thể xoay bất cứ lúc nào."
+      "page_subtitle": "Kết nối công cụ AI với Gecko Programmes bằng khóa trong phạm vi tổ chức mà bạn có thể xoay bất cứ lúc nào."
     },
     "api": {
-      "subtitle": "Quản lý khóa API để tích hợp với API công khai Integer Training LMS.",
+      "subtitle": "Quản lý khóa API để tích hợp với API công khai Gecko Programmes.",
       "keys": {
         "title": "Khóa API",
-        "description": "Các khóa này xác thực tổ chức hiện tại khi gọi API công khai Integer Training LMS.",
+        "description": "Các khóa này xác thực tổ chức hiện tại khi gọi API công khai Gecko Programmes.",
         "generate": "Tạo khóa API",
         "secret_once": "Bí mật này chỉ hiển thị một lần. Hãy sao chép và lưu trữ an toàn.",
         "empty_title": "Chưa có khóa API",
-        "empty_description": "Tạo khóa API trong phạm vi tổ chức đầu tiên để sử dụng API công khai Integer Training LMS.",
+        "empty_description": "Tạo khóa API trong phạm vi tổ chức đầu tiên để sử dụng API công khai Gecko Programmes.",
         "modal": {
           "title": "Tạo khóa API",
           "description": "Chọn tên cho khóa API này trước khi tạo.",
@@ -4147,7 +4147,7 @@
       "disabled_description": "Chỉ quản trị viên tổ chức mới có thể tạo, xoay hoặc thu hồi khóa tự động hóa. Thầy cô có thể xem lại hướng dẫn thiết lập tại đây."
     },
     "zapier": {
-      "page_subtitle": "Tự động hóa Integer Training LMS với hàng nghìn ứng dụng qua Zapier. Sắp ra mắt."
+      "page_subtitle": "Tự động hóa Gecko Programmes với hàng nghìn ứng dụng qua Zapier. Sắp ra mắt."
     }
   },
   "ai_assistant": {
@@ -4383,7 +4383,7 @@
       "border_radius": "Bán kính viền",
       "font_family": "Họ phông chữ",
       "font_scale": "Tỷ lệ cỡ chữ",
-      "show_powered_by": "Hiển thị nhãn hiệu Classroomio",
+      "show_powered_by": "Hiển thị nhãn hiệu Gecko Programmes",
       "custom_css": "CSS tùy chỉnh",
       "custom_css_locked": "Nâng cấp để kích hoạt CSS tùy chỉnh.",
       "embed_code": "Nhúng mã",

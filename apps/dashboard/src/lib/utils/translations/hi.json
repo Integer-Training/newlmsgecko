@@ -1233,7 +1233,7 @@
           "audit_actor": "अभिनेता",
           "audit_ip": "आईपी",
           "scan_qr": "QR स्कैन करें",
-          "classroomio_brand": "Integer Training LMS",
+          "classroomio_brand": "Gecko Programmes",
           "snackbar_invite_link_copied": "आमंत्रण लिंक कॉपी किया गया",
           "snackbar_invite_link_regenerated": "एक नया आमंत्रण लिंक तैयार किया गया है",
           "snackbar_failed_generate_link": "आमंत्रण लिंक जनरेट करने में विफल",
@@ -2479,7 +2479,7 @@
     },
     "creator": {
       "heading": "आप कौन सा कोर्स बनाना चाहते हैं?",
-      "placeholder": "Integer Training LMS से आपके लिए एक पाठ्यक्रम बनाने के लिए कहें...",
+      "placeholder": "Gecko Programmes से आपके लिए एक पाठ्यक्रम बनाने के लिए कहें...",
       "type": {
         "self_paced": "स्वयं गति",
         "live_class": "लाइव क्लास"
@@ -2833,12 +2833,12 @@
     "goto": "पर जाएँ",
     "courses": "पाठ्यक्रम",
     "home": "घर",
-    "classroomio_home": "क्लासरूमआईओ होम",
+    "classroomio_home": "Gecko Programmes होम",
     "dashboard": "डैशबोर्ड",
     "discussion": "चर्चा",
     "people": "लोग",
     "goto_lms": "एलएमएस पर जाएं",
-    "goto_home": "क्लासरूमआईओ होम पर जाएं",
+    "goto_home": "Gecko Programmes होम पर जाएं",
     "login": "लॉग इन करें",
     "signup": "साइन अप करें",
     "redirecting": "पुनर्निर्देशन",
@@ -2942,7 +2942,7 @@
     "upgrade_left": "{गिनती} बाएँ"
   },
   "media_manager": {
-    "page_title": "मीडिया मैनेजर - क्लासरूमआईओ",
+    "page_title": "मीडिया मैनेजर - Gecko Programmes",
     "heading": "मीडिया मैनेजर",
     "empty": "कोई संपत्ति नहीं मिली",
     "usage": {
@@ -3094,7 +3094,7 @@
       "provider": "हम आपकी बिलिंग प्रबंधित करने में सहायता के लिए पोलर का उपयोग करते हैं",
       "open_billing": "बिलिंग खोलें",
       "error": "बिलिंग खोलते समय एक त्रुटि उत्पन्न हुई",
-      "page_subtitle": "आपकी योजना, बिलिंग पोर्टल और Integer Training LMS के लिए भुगतान का तरीका।",
+      "page_subtitle": "आपकी योजना, बिलिंग पोर्टल और Gecko Programmes के लिए भुगतान का तरीका।",
       "ai_credits": "AI credits",
       "ai_tokens_used": "इस महीने उपयोग किए गए AI credits",
       "ai_bonus_credits": "bonus AI credits उपलब्ध"
@@ -3102,7 +3102,7 @@
     "integrations": {
       "heading": "टेलीग्राम",
       "sub_heading": "एप्लिकेशन में किसी भी बदलाव की सूचना पाने के लिए अपने खाते को टेलीग्राम से कनेक्ट करें।",
-      "step_authenticate": "चरण 1: Integer Training LMS बॉट के माध्यम से अपने खाते को प्रमाणित करें।",
+      "step_authenticate": "चरण 1: Gecko Programmes बॉट के माध्यम से अपने खाते को प्रमाणित करें।",
       "open_bot_button": "बॉट खोलें",
       "step_chatId": "चरण 2: बॉट द्वारा आपको दी गई चैट आईडी दर्ज करें।",
       "connect_button": "कनेक्ट करें",
@@ -3422,7 +3422,7 @@
       "gallery": {
         "heading": "लोकप्रिय विषय",
         "description": "मुख्य विशेषताओं के साथ बनाया गया जिसे आप आसानी से अनुकूलित कर सकते हैं - किसी कोडिंग की आवश्यकता नहीं है।",
-        "by_classroomio": "क्लासरूमआईओ द्वारा",
+        "by_classroomio": "Gecko Programmes द्वारा",
         "add": "जोड़ें",
         "upgrade": "अपग्रेड करें",
         "apply_theme": "थीम लागू करें",
@@ -3500,7 +3500,7 @@
         "accepted": "स्वीकृत:",
         "validation_error": "फ़ाइल का आकार अधिकतम सीमा से अधिक है:"
       },
-      "page_subtitle": "आपका नाम, ईमेल और Integer Training LMS में कहीं भी काम करते समय आप कैसे दिखते हैं।"
+      "page_subtitle": "आपका नाम, ईमेल और Gecko Programmes में कहीं भी काम करते समय आप कैसे दिखते हैं।"
     },
     "tabs": {
       "profile_tab": "प्रोफाइल",
@@ -3761,7 +3761,7 @@
           "description": "आपके पाठ्यक्रमों में नामांकन, सबमिशन, पाठ, घोषणाएँ और पूर्णता।"
         }
       },
-      "personal_page_subtitle": "चुनें कि आप Integer Training LMS से कौन सी ईमेल सूचनाएँ प्राप्त करते हैं।"
+      "personal_page_subtitle": "चुनें कि आप Gecko Programmes से कौन सी ईमेल सूचनाएँ प्राप्त करते हैं।"
     }
   },
   "profileMenu": {
@@ -3937,7 +3937,7 @@
     "snackbar_error": "कोड भेजते समय त्रुटि"
   },
   "public_courses": {
-    "page_title": "पाठ्यक्रम - क्लासरूमआईओ",
+    "page_title": "पाठ्यक्रम - Gecko Programmes",
     "heading": "पाठ्यक्रम",
     "subtitle": "सभी प्रकाशित पाठ्यक्रम ब्राउज़ करें",
     "clear_filters": "फ़िल्टर साफ़ करें",
@@ -3962,7 +3962,7 @@
     }
   },
   "tags_admin": {
-    "page_title": "टैग - क्लासरूमआईओ",
+    "page_title": "टैग - Gecko Programmes",
     "heading": "टैग",
     "create": "बनाएँ",
     "tag_modal": {
@@ -4014,7 +4014,7 @@
   },
   "invite": {
     "organization": {
-      "page_title": "Integer Training LMS पर {orgName} से जुड़ें",
+      "page_title": "Gecko Programmes पर {orgName} से जुड़ें",
       "invitation_student": "आपको {orgName} में छात्र के रूप में आमंत्रित किया गया है।",
       "invitation_teacher": "आपको {orgName} में शिक्षक के रूप में आमंत्रित किया गया है।",
       "invitation_admin": "आपको {orgName} में व्यवस्थापक के रूप में आमंत्रित किया गया है।",
@@ -4033,7 +4033,7 @@
       }
     },
     "link": {
-      "page_title": "Integer Training LMS पर {orgName} से जुड़ें",
+      "page_title": "Gecko Programmes पर {orgName} से जुड़ें",
       "invitation_student": "आपको एक छात्र के रूप में {orgName} में शामिल होने के लिए आमंत्रित किया गया है।",
       "invitation_teacher": "आपको एक शिक्षक के रूप में {orgName} में शामिल होने के लिए आमंत्रित किया गया है।",
       "invitation_admin": "आपको एक व्यवस्थापक के रूप में {orgName} से जुड़ने के लिए आमंत्रित किया गया है।",
@@ -4053,21 +4053,21 @@
       "setup": {
         "title": "क्लाइंट सेटअप",
         "description": "प्रति एकीकरण एक ऑर्ग-स्कोप्ड कुंजी का उपयोग करें। यदि कोई कुंजी घुमाई जाती है या निरस्त की जाती है, तो क्लाइंट नया रहस्य कॉन्फ़िगर होने तक काम करना बंद कर देता है।",
-        "claude_code_description": "उत्पन्न ऑर्ग-स्कोप्ड कुंजी का उपयोग करके क्लाउड कोड के साथ `@classroomio/mcp` को पंजीकृत करता है।",
-        "codex_description": "समान ऑर्ग-स्कोप्ड कुंजी के साथ क्लासरूमआईओ एमसीपी सर्वर को कोडेक्स में जोड़ता है।",
+        "claude_code_description": "उत्पन्न ऑर्ग-स्कोप्ड कुंजी का उपयोग करके क्लाउड कोड के साथ `<mcp-server-package>` को पंजीकृत करता है।",
+        "codex_description": "समान ऑर्ग-स्कोप्ड कुंजी के साथ Gecko Programmes एमसीपी सर्वर को कोडेक्स में जोड़ता है।",
         "cursor_description": "इसे `~/.cursor/mcp.json` या अपने कार्यक्षेत्र MCP कॉन्फ़िगरेशन में पेस्ट करें।",
         "opencode_description": "इसे अपने प्रोजेक्ट रूट के `opencode.json` या `~/.config/opencode/opencode.json` में जोड़ें।"
       },
       "keys": {
         "title": "एमसीपी कुंजी",
-        "description": "जब कोई MCP क्लाइंट `@classroomio/mcp` के माध्यम से Integer Training LMS को कॉल करता है तो ये कुंजियाँ वर्तमान संगठन को प्रमाणित करती हैं।",
+        "description": "जब कोई MCP क्लाइंट `<mcp-server-package>` के माध्यम से Gecko Programmes को कॉल करता है तो ये कुंजियाँ वर्तमान संगठन को प्रमाणित करती हैं।",
         "generate": "MCP कुंजी जनरेट करें",
         "secret_once": "यह रहस्य एक बार दिखाया गया है। अब इसे अपने MCP क्लाइंट में कॉपी करें।",
         "modal": {
           "title": "MCP कुंजी बनाएं",
           "description": "इस MCP कुंजी को बनाने से पहले इसका नाम चुनें।",
           "name_label": "कुंजी का नाम",
-          "name_placeholder": "Integer Training LMS OpenCode",
+          "name_placeholder": "Gecko Programmes OpenCode",
           "cancel": "रद्द करें",
           "save": "कुंजी बनाएं"
         }
@@ -4083,17 +4083,17 @@
         "rate_limits_description": "प्रति मिनट पढ़ने/लिखने/प्रकाशित करने के अनुरोधों की अनुमति है।",
         "used_label": "प्रयुक्त:"
       },
-      "page_subtitle": "किसी भी समय घुमाने योग्य संगठन-स्तरीय कुंजियों के साथ AI टूल्स को Integer Training LMS से कनेक्ट करें।"
+      "page_subtitle": "किसी भी समय घुमाने योग्य संगठन-स्तरीय कुंजियों के साथ AI टूल्स को Gecko Programmes से कनेक्ट करें।"
     },
     "api": {
-      "subtitle": "Integer Training LMS सार्वजनिक API के साथ एकीकृत करने के लिए API कुंजियाँ प्रबंधित करें।",
+      "subtitle": "Gecko Programmes सार्वजनिक API के साथ एकीकृत करने के लिए API कुंजियाँ प्रबंधित करें।",
       "keys": {
         "title": "API कुंजियाँ",
-        "description": "ये कुंजियाँ Integer Training LMS सार्वजनिक API को कॉल करते समय वर्तमान संगठन को प्रमाणित करती हैं।",
+        "description": "ये कुंजियाँ Gecko Programmes सार्वजनिक API को कॉल करते समय वर्तमान संगठन को प्रमाणित करती हैं।",
         "generate": "API कुंजी बनाएं",
         "secret_once": "यह गुप्त कुंजी केवल एक बार दिखाई जाती है। इसे कॉपी करें और सुरक्षित रूप से संग्रहीत करें।",
         "empty_title": "अभी तक कोई API कुंजी नहीं",
-        "empty_description": "Integer Training LMS सार्वजनिक API का उपयोग करने के लिए पहली संगठन-स्तरीय API कुंजी बनाएं।",
+        "empty_description": "Gecko Programmes सार्वजनिक API का उपयोग करने के लिए पहली संगठन-स्तरीय API कुंजी बनाएं।",
         "modal": {
           "title": "API कुंजी बनाएं",
           "description": "इस API कुंजी को बनाने से पहले इसका नाम चुनें।",
@@ -4147,7 +4147,7 @@
       "disabled_description": "केवल संगठन व्यवस्थापक ही स्वचालन कुंजियाँ बना सकते हैं, घुमा सकते हैं या निरस्त कर सकते हैं। शिक्षक यहां सेटअप निर्देशों की समीक्षा कर सकते हैं।"
     },
     "zapier": {
-      "page_subtitle": "Zapier के माध्यम से हज़ारों ऐप्स के साथ Integer Training LMS को स्वचालित करें। जल्द आ रहा है।"
+      "page_subtitle": "Zapier के माध्यम से हज़ारों ऐप्स के साथ Gecko Programmes को स्वचालित करें। जल्द आ रहा है।"
     }
   },
   "ai_assistant": {
@@ -4383,7 +4383,7 @@
       "border_radius": "सीमा त्रिज्या",
       "font_family": "फ़ॉन्ट परिवार",
       "font_scale": "फ़ॉन्ट आकार पैमाना",
-      "show_powered_by": "क्लासरूमियो ब्रांडिंग दिखाएं",
+      "show_powered_by": "Gecko Programmes ब्रांडिंग दिखाएं",
       "custom_css": "कस्टम सीएसएस",
       "custom_css_locked": "कस्टम सीएसएस सक्षम करने के लिए अपग्रेड करें।",
       "embed_code": "कोड एंबेड करें",
@@ -4625,7 +4625,7 @@
     },
     "powered_by": {
       "label": "द्वारा संचालित",
-      "brand": "क्लासरूमआईओ"
+      "brand": "Gecko Programmes"
     },
     "footer_nav": {
       "previous": "पिछला",

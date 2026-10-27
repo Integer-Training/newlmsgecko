@@ -37,7 +37,7 @@
     <div class="w-full rounded-md bg-white px-5 py-7 dark:bg-neutral-800">
       <div class="mb-3">
         <p>1. Visit</p>
-        <h3>play.classroomio.com</h3>
+        <h3>your Gecko Programmes quiz play page</h3>
       </div>
       <div class="">
         <p>2. Enter Pin</p>

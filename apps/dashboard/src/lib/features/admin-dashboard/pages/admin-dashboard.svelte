@@ -42,7 +42,7 @@
 </script>
 
 <svelte:head>
-  <title>Admin Dashboard — Pearl LMS</title>
+  <title>Admin Dashboard — Gecko Programmes</title>
 </svelte:head>
 
 <Page.Root class="w-full">

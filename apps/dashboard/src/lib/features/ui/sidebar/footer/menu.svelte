@@ -4,8 +4,6 @@
   import { basePath, globalStore } from '$lib/utils/store/app';
   import * as DropdownMenu from '@cio/ui/base/dropdown-menu';
   import BellPlusIcon from '@lucide/svelte/icons/bell-plus';
-  import BookOpenIcon from '@lucide/svelte/icons/book-open';
-  import BadgeHelpIcon from '@lucide/svelte/icons/badge-help';
   import LogOutIcon from '@lucide/svelte/icons/log-out';
   import MessageSquarePlusIcon from '@lucide/svelte/icons/message-square-plus';
   import * as Sidebar from '@cio/ui/base/sidebar';
@@ -23,9 +21,6 @@
   // TEMPORARILY HIDDEN (owner request 2026-09-07) while the source-code affordance is reworked.
   // Re-enable this import + the <SourceCodeLink /> block below to restore the AGPL-3.0 notice.
   // import SourceCodeLink from '$features/ui/source-code-link.svelte';
-
-  const SUPPORT_EMAIL = 'help@classroomio.com';
-  const DOCS_URL = 'https://classroomio.com/docs';
 
   const sidebar = useSidebar();
 
@@ -128,20 +123,6 @@
                     <MessageSquarePlusIcon size={16} />
                     <p class="text-sm">{$t('profileMenu.feedback')}</p>
                   </span>
-                </DropdownMenu.Item>
-
-                <DropdownMenu.Item class="m-0">
-                  <a href={DOCS_URL} target="_blank" rel="noopener noreferrer" class="flex w-full items-center gap-2">
-                    <BookOpenIcon size={16} />
-                    <p class="text-sm">{$t('profileMenu.documentation')}</p>
-                  </a>
-                </DropdownMenu.Item>
-
-                <DropdownMenu.Item class="m-0">
-                  <a href="mailto:{SUPPORT_EMAIL}" class="flex w-full items-center gap-2">
-                    <BadgeHelpIcon size={16} />
-                    <p class="text-sm">{$t('profileMenu.need_help')}</p>
-                  </a>
                 </DropdownMenu.Item>
               </div>
             {/if}

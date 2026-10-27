@@ -53,8 +53,8 @@
     <Dialog.Header>
       <Dialog.Title>How is {tutorName} doing?</Dialog.Title>
       <Dialog.Description>
-        Your feedback helps us support you better. It is private — only the Pearl admin team sees it, never your tutor.
-        This is optional; close it and we'll ask again another time.
+        Your feedback helps us support you better. It is private — only the Gecko Programmes admin team sees it, never
+        your tutor. This is optional; close it and we'll ask again another time.
       </Dialog.Description>
     </Dialog.Header>
 

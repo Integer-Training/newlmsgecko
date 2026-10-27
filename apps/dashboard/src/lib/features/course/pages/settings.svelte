@@ -547,14 +547,6 @@
     <Field.Legend>{$t('course.navItem.settings.type')}</Field.Legend>
     <Field.Description>
       {$t('course.navItem.settings.course_type_desc')}
-      <a
-        href="https://classroomio.com/docs/guides/course-types"
-        target="_blank"
-        rel="noopener noreferrer"
-        class="ui:text-primary underline"
-      >
-        {$t('course.navItem.settings.course_type_learn_more')}
-      </a>
     </Field.Description>
     <Field.Field>
       <Select.Root
