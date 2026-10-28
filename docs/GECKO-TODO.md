@@ -50,3 +50,8 @@ self-hosted copies exist.
 - Part D: logo*.svg/png, favicon.ico, opengraph PNGs are neutral 'GP'/'Gecko Programmes' placeholders (#1D4EE2). Replace with real logo when decided; regenerate at the same sizes (logo-512.png = 1024x1024 RGBA; favicon.ico 16/32/48).
 - apps/dashboard/static/certificate-template.png — shows a "Classroomio" wordmark bottom-left (certificate-template.svg embeds PNGs, unverified). Certificates are hidden (CERTIFICATES_ENABLED=false); replace art before enabling.
 - Not deployed but brand-bearing: packages/db/src/scripts/notify-students-over-limit.ts:53 (upgrade link), apps/api/scripts/upload-openapi-spec.{js,ts} (API server URLs) — one-off scripts, edit if ever run.
+
+## Ported Pearl fixes
+
+- ✅ Pearl `ad92abcf5` "fix(access): tutors see only their allocated learners on every surface" ported on branch `fix/tutor-allocation-only` (commit `6d95ad30`, 2026-10-28) — logic identical to Pearl, Gecko branding kept; awaiting owner push/merge + deploy.
+- After deploy: re-check D9 (`docs/GECKO-ACCEPTANCE.md`) — a course-team tutor should no longer see non-allocated learners on `/caseload/courses/[id]/submissions`.

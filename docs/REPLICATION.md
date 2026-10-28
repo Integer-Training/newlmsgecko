@@ -37,6 +37,8 @@ _Last updated 2026-10-27 (end of build session 1: Phases 1–4 done, droplet pre
 
 **Still needed from the owner:** (1) first login at https://gecko.epearlacademy.com/login + forced password change; (2) logo set (replaces the "GP" placeholders); (3) optional: real email (SES/M365) — off at launch; (4) Phase 8 screen checks. Repo `newlmsgecko` is **public** (AGPL) since 2026-10-27.
 
+**Pearl fixes ported:** Pearl `ad92abcf5` "fix(access): tutors see only their allocated learners on every surface" ported on branch `fix/tutor-allocation-only` (commit `6d95ad30`, 2026-10-28) — logic identical to Pearl, Gecko branding kept; awaiting owner push/merge + deploy. Supersedes the Phase 8 D9 "accept as-is" decision. Earlier Pearl fix `0d1eed995` (allocation-only `isAllocatedTutor`) was already in the clone base `883c4a62`. Rule now: a Tutor sees ONLY learners allocated to them (tutor_allocation) on every screen, API, download and email; course-team membership gives materials/units only; learners see staff + themselves; admins unchanged + "Unallocated learners" warning on the admin overview. Details: `docs/ACCESS.md` §8.
+
 **Next agent steps:** Phase 8 screen verification against the live site (after the owner's first login); update `docs/GECKO-TODO.md` items that now have a domain (`gecko.epearlacademy.com`); Phase 10 go-live checklist. Deploys: owner runs `nohup /root/deploy.sh > /root/deploy.log 2>&1 &` on the droplet (~45 min).
 
 ### Kickoff prompt for a new Claude CLI session (paste as the first message)
