@@ -185,7 +185,7 @@
 {:else if grid.summary.participants === 0}
   <Empty
     title="No learners"
-    description="No learners assigned to you on this course."
+    description="No learners are allocated to you on this course."
     icon={UsersRoundIcon}
     variant="page"
   />
