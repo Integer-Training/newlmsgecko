@@ -185,4 +185,4 @@ Run as admin2/tutor1/tutor2/learner1/learner3/learner4, each logged in once in i
 
 All Phase 8 test data was removed with owner approval (7a): the 8 `@gecko-test.invalid` accounts, GECKO TEST course, GECKO TEST COHORT and all dependent rows (one DB transaction, rehearsed with rollback first), plus the 17 test files in storage. Remaining: owner account, organisation + plan, seed tables, `media/og/geckoprogrammes.png`. Activity logs from the test day were kept. The rows above describe the state during testing.
 
-**Owner sign-off:** ☐ _(name / date)_
+**Owner sign-off:** ☑ Signed off by the owner (moki-s), 2026-10-29 — D1–D8 accepted as inherited (D11); D9 fixed by the Pearl `ad92abcf5` port and re-verified on live 2026-10-29.
