@@ -53,5 +53,5 @@ self-hosted copies exist.
 
 ## Ported Pearl fixes
 
-- ✅ Pearl `ad92abcf5` "fix(access): tutors see only their allocated learners on every surface" ported on branch `fix/tutor-allocation-only` (commit `6d95ad30`, 2026-10-28) — logic identical to Pearl, Gecko branding kept; awaiting owner push/merge + deploy.
-- After deploy: re-check D9 (`docs/GECKO-ACCEPTANCE.md`) — a course-team tutor should no longer see non-allocated learners on `/caseload/courses/[id]/submissions`.
+- ✅ Pearl `ad92abcf5` "fix(access): tutors see only their allocated learners on every surface" ported on branch `fix/tutor-allocation-only` (commit `6d95ad30`, 2026-10-28) — logic identical to Pearl, Gecko branding kept; merged to main `1f7b0ed0` and deployed 2026-10-28.
+- ✅ D9 re-checked on live 2026-10-29: a course-team tutor no longer sees non-allocated learners (roster, caseload, progression, course view; direct learner pages 403). Test data removed.
