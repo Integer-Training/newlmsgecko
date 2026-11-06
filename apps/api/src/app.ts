@@ -49,6 +49,7 @@ import { organizationTokenAuthRouter } from '@api/routes/organization/token-auth
 import { prettyJSON } from 'hono/pretty-json';
 import { cohortRouter } from '@api/routes/cohort';
 import { caseloadRouter } from '@api/routes/caseload/caseload';
+import { apprenticeshipRouter } from '@api/routes/apprenticeship';
 import { registrationRouter } from '@api/routes/registration/registration';
 import { publicCourseRouter, orgSiteOgRouter } from '@api/routes/org-site';
 import { publicWidgetsRouter } from '@api/routes/widgets';
@@ -310,6 +311,7 @@ export const app = new Hono()
   .route('/public-api/v1', v1Router)
   .route('/cohort', cohortRouter)
   .route('/caseload', caseloadRouter)
+  .route('/apprenticeship', apprenticeshipRouter)
   .route('/lms', lmsRouter)
   .route('/register', registrationRouter)
   .route('/unsplash', unsplashRouter)

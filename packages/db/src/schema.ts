@@ -4489,3 +4489,348 @@ export const idVerification = pgTable(
     unique('id_verification_learner_id_key').on(table.learnerId)
   ]
 );
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+// Gecko Apprenticeships (docs/APPRENTICESHIP.md). An apprenticeship PROGRAMME (its own catalogue, parallel to diploma courses —
+// never a course row) holds qualifications → units → criteria. A learner's evidence is mapped to criteria (learner proposes, tutor confirms); only ACCEPTED evidence
+// counts. appr_enrolment / appr_enrolment_unit carry a progress CACHE recomputed in the same transaction as every
+// write (rules: @cio/utils/functions/apprenticeship-progress), so lists never recompute on read. Statuses are
+// varchar validated against @cio/utils/constants/apprenticeship (no Postgres enums). Learners are ordinary org learners
+// (profile + tutor_allocation reused); nothing here is read by the diploma flow and no diploma table is touched.
+// ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+// An apprenticeship programme (e.g. "Adult Care Worker L2"). status: ACTIVE | ARCHIVED (archived = hidden from
+// pickers, data kept). reference = standard / qualification code shown in lists.
+export const apprProgramme = pgTable(
+  'appr_programme',
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    organizationId: uuid('organization_id').notNull(),
+    title: varchar().notNull(),
+    description: text(),
+    reference: varchar(),
+    level: varchar(),
+    status: varchar().default('ACTIVE').notNull(),
+    createdBy: uuid('created_by'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId],
+      foreignColumns: [organization.id],
+      name: 'appr_programme_organization_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.createdBy],
+      foreignColumns: [profile.id],
+      name: 'appr_programme_created_by_fkey'
+    }).onDelete('set null'),
+    index('idx_appr_programme_org').on(table.organizationId)
+  ]
+);
+
+export const apprQualification = pgTable(
+  'appr_qualification',
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    organizationId: uuid('organization_id').notNull(),
+    programmeId: uuid('programme_id').notNull(),
+    title: varchar().notNull(),
+    reference: varchar(),
+    awardingBody: varchar('awarding_body'),
+    level: varchar(),
+    sort: integer().default(0).notNull(),
+    // Id in the system it was imported from (e.g. Skills Portfolio) so re-imports update instead of duplicating.
+    externalRef: varchar('external_ref'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId],
+      foreignColumns: [organization.id],
+      name: 'appr_qualification_organization_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.programmeId],
+      foreignColumns: [apprProgramme.id],
+      name: 'appr_qualification_programme_id_fkey'
+    }).onDelete('cascade'),
+    index('idx_appr_qualification_programme').on(table.programmeId)
+  ]
+);
+
+export const apprUnit = pgTable(
+  'appr_unit',
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    qualificationId: uuid('qualification_id').notNull(),
+    code: varchar(),
+    title: varchar().notNull(),
+    sort: integer().default(0).notNull(),
+    // Guided learning hours — stored for later (GLH progress is not built yet).
+    glh: integer(),
+    externalRef: varchar('external_ref'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.qualificationId],
+      foreignColumns: [apprQualification.id],
+      name: 'appr_unit_qualification_id_fkey'
+    }).onDelete('cascade'),
+    index('idx_appr_unit_qualification').on(table.qualificationId)
+  ]
+);
+
+export const apprCriterion = pgTable(
+  'appr_criterion',
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    unitId: uuid('unit_id').notNull(),
+    code: varchar().notNull(),
+    text: text().notNull(),
+    // Heading the criterion is grouped under in the unit, e.g. "Performance Criteria".
+    groupLabel: varchar('group_label'),
+    requiredCount: integer('required_count').default(1).notNull(),
+    sort: integer().default(0).notNull(),
+    externalRef: varchar('external_ref'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.unitId],
+      foreignColumns: [apprUnit.id],
+      name: 'appr_criterion_unit_id_fkey'
+    }).onDelete('cascade'),
+    index('idx_appr_criterion_unit').on(table.unitId)
+  ]
+);
+
+// One learner on one apprenticeship programme. learner_id is profile.id. The cache columns are written ONLY by the
+// recompute service and hold only values that change when someone acts (actual %, OTJ minutes, counts). Expected %
+// and RAG status depend on today's date, so they are computed on read from the rules module — never stored stale.
+export const apprEnrolment = pgTable(
+  'appr_enrolment',
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    organizationId: uuid('organization_id').notNull(),
+    programmeId: uuid('programme_id').notNull(),
+    learnerId: uuid('learner_id').notNull(),
+    startDate: date('start_date', { mode: 'string' }),
+    plannedEndDate: date('planned_end_date', { mode: 'string' }),
+    achievedAt: timestamp('achieved_at', { withTimezone: true, mode: 'string' }),
+    contractedHoursWeek: doublePrecision('contracted_hours_week'),
+    otjTargetMinutesOverride: integer('otj_target_minutes_override'),
+    // ── cache (recompute service only) ──
+    actualPct: integer('actual_pct'),
+    otjMinutes: integer('otj_minutes').default(0).notNull(),
+    submittedCount: integer('submitted_count').default(0).notNull(),
+    acceptedCount: integer('accepted_count').default(0).notNull(),
+    referredCount: integer('referred_count').default(0).notNull(),
+    recomputedAt: timestamp('recomputed_at', { withTimezone: true, mode: 'string' }),
+    createdBy: uuid('created_by'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId],
+      foreignColumns: [organization.id],
+      name: 'appr_enrolment_organization_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.programmeId],
+      foreignColumns: [apprProgramme.id],
+      name: 'appr_enrolment_programme_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.learnerId],
+      foreignColumns: [profile.id],
+      name: 'appr_enrolment_learner_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.createdBy],
+      foreignColumns: [profile.id],
+      name: 'appr_enrolment_created_by_fkey'
+    }).onDelete('set null'),
+    unique('appr_enrolment_programme_learner_unique').on(table.programmeId, table.learnerId),
+    index('idx_appr_enrolment_org').on(table.organizationId),
+    index('idx_appr_enrolment_learner').on(table.learnerId)
+  ]
+);
+
+// Per-learner unit dates (set by tutor/admin) + per-unit actual % cache (expected/status computed on read).
+export const apprEnrolmentUnit = pgTable(
+  'appr_enrolment_unit',
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    enrolmentId: uuid('enrolment_id').notNull(),
+    unitId: uuid('unit_id').notNull(),
+    startDate: date('start_date', { mode: 'string' }),
+    targetDate: date('target_date', { mode: 'string' }),
+    completedAt: timestamp('completed_at', { withTimezone: true, mode: 'string' }),
+    actualPct: integer('actual_pct')
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.enrolmentId],
+      foreignColumns: [apprEnrolment.id],
+      name: 'appr_enrolment_unit_enrolment_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.unitId],
+      foreignColumns: [apprUnit.id],
+      name: 'appr_enrolment_unit_unit_id_fkey'
+    }).onDelete('cascade'),
+    unique('appr_enrolment_unit_unique').on(table.enrolmentId, table.unitId)
+  ]
+);
+
+// A piece of evidence. Files live in the private documents bucket under
+// apprenticeship/{programmeId}/{learnerId}/{evidenceId}/…; status is an ApprEvidenceStatus value.
+export const apprEvidence = pgTable(
+  'appr_evidence',
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    organizationId: uuid('organization_id').notNull(),
+    programmeId: uuid('programme_id').notNull(),
+    learnerId: uuid('learner_id').notNull(),
+    title: varchar({ length: 50 }).notNull(),
+    details: text().notNull(),
+    typeKey: varchar('type_key').notNull(),
+    minutes: integer().default(0).notNull(),
+    includeOtj: boolean('include_otj').default(false).notNull(),
+    status: varchar().default('SUBMITTED').notNull(),
+    files: jsonb()
+      .default([])
+      .$type<{ key: string; name: string; size?: number; type?: string; uploadedBy?: string; uploadedAt?: string }[]>()
+      .notNull(),
+    createdBy: uuid('created_by'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+    reviewedBy: uuid('reviewed_by'),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true, mode: 'string' })
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId],
+      foreignColumns: [organization.id],
+      name: 'appr_evidence_organization_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.programmeId],
+      foreignColumns: [apprProgramme.id],
+      name: 'appr_evidence_programme_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.learnerId],
+      foreignColumns: [profile.id],
+      name: 'appr_evidence_learner_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.createdBy],
+      foreignColumns: [profile.id],
+      name: 'appr_evidence_created_by_fkey'
+    }).onDelete('set null'),
+    foreignKey({
+      columns: [table.reviewedBy],
+      foreignColumns: [profile.id],
+      name: 'appr_evidence_reviewed_by_fkey'
+    }).onDelete('set null'),
+    index('idx_appr_evidence_learner_programme_status').on(table.learnerId, table.programmeId, table.status),
+    index('idx_appr_evidence_org_status_created').on(table.organizationId, table.status, table.createdAt)
+  ]
+);
+
+// Evidence ↔ criterion mapping. source = who ticked it (LEARNER proposal or STAFF); a review replaces the set.
+export const apprEvidenceCriterion = pgTable(
+  'appr_evidence_criterion',
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    evidenceId: uuid('evidence_id').notNull(),
+    criterionId: uuid('criterion_id').notNull(),
+    source: varchar().default('LEARNER').notNull()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.evidenceId],
+      foreignColumns: [apprEvidence.id],
+      name: 'appr_evidence_criterion_evidence_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.criterionId],
+      foreignColumns: [apprCriterion.id],
+      name: 'appr_evidence_criterion_criterion_id_fkey'
+    }).onDelete('cascade'),
+    unique('appr_evidence_criterion_unique').on(table.evidenceId, table.criterionId),
+    index('idx_appr_evidence_criterion_criterion').on(table.criterionId)
+  ]
+);
+
+// The visible trail on a piece of evidence: AUDIT notes are written by the system on every change (who, what,
+// status at the time); GENERAL notes are comments. Never edited or deleted.
+export const apprEvidenceNote = pgTable(
+  'appr_evidence_note',
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    evidenceId: uuid('evidence_id').notNull(),
+    authorId: uuid('author_id'),
+    kind: varchar().default('GENERAL').notNull(),
+    body: text().notNull(),
+    statusAtTime: varchar('status_at_time'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.evidenceId],
+      foreignColumns: [apprEvidence.id],
+      name: 'appr_evidence_note_evidence_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.authorId],
+      foreignColumns: [profile.id],
+      name: 'appr_evidence_note_author_id_fkey'
+    }).onDelete('set null'),
+    index('idx_appr_evidence_note_evidence').on(table.evidenceId)
+  ]
+);
+
+// Per-org evidence types (seeded from APPR_DEFAULT_EVIDENCE_TYPES). Hidden types stay valid on old evidence.
+export const apprEvidenceType = pgTable(
+  'appr_evidence_type',
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    organizationId: uuid('organization_id').notNull(),
+    key: varchar().notNull(),
+    label: varchar().notNull(),
+    active: boolean().default(true).notNull(),
+    sort: integer().default(0).notNull()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId],
+      foreignColumns: [organization.id],
+      name: 'appr_evidence_type_organization_id_fkey'
+    }).onDelete('cascade'),
+    unique('appr_evidence_type_org_key_unique').on(table.organizationId, table.key)
+  ]
+);
+
+// Per-org apprenticeship rules (defaults: APPR_DEFAULT_SETTINGS). One row per org, created on first save.
+export const apprSettings = pgTable(
+  'appr_settings',
+  {
+    organizationId: uuid('organization_id').primaryKey().notNull(),
+    concernGapPct: integer('concern_gap_pct').default(15).notNull(),
+    otjFactor: doublePrecision('otj_factor').default(0.2).notNull(),
+    otjWeeklyCapHours: doublePrecision('otj_weekly_cap_hours').default(30).notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId],
+      foreignColumns: [organization.id],
+      name: 'appr_settings_organization_id_fkey'
+    }).onDelete('cascade')
+  ]
+);
