@@ -45,3 +45,15 @@ export async function getEnrolmentForActor(actor: Actor, enrolmentId: string) {
   }
   return enrolment;
 }
+
+/** Staff for apprenticeship purposes: ADMIN or TUTOR (a tutor's reach is still limited by canAccessLearner). */
+export function isStaff(actor: Actor): boolean {
+  return actor.authenticated && (actor.role === 'ADMIN' || actor.role === 'TUTOR');
+}
+
+/** Learners (and anyone else) may read their own portfolio but never change staff-owned data. */
+export function assertStaff(actor: Actor): AuthedActor {
+  const a = requireAuthed(actor);
+  if (!isStaff(a)) throw new AppError('You do not have access to this action', ErrorCodes.FORBIDDEN, 403);
+  return a;
+}

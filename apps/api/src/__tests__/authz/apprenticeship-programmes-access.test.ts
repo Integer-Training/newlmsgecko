@@ -42,6 +42,9 @@ vi.mock('@cio/db/queries/apprenticeship', () => ({
 vi.mock('@cio/db/audit', () => ({ recordAudit: vi.fn(async () => undefined) }));
 vi.mock('@cio/db/drizzle', () => ({ runInTransaction: (fn: (tx: unknown) => unknown) => fn({}) }));
 vi.mock('@api/services/apprenticeship/progress', () => ({ recomputeEnrolment: vi.fn(async () => null) }));
+// The enrolment service (mounted on the same router) provisions accounts + allocations; neither is exercised here.
+vi.mock('@api/services/organization/users', () => ({ createOrgUser: vi.fn() }));
+vi.mock('@api/services/organization/allocation', () => ({ createTutorAllocation: vi.fn() }));
 
 import * as q from '@cio/db/queries/apprenticeship';
 import { apprenticeshipRouter } from '@api/routes/apprenticeship';

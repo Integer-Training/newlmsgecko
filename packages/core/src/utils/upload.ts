@@ -113,3 +113,24 @@ export function generateCourseworkFeedbackFileKey(
 ): string {
   return `${courseworkFeedbackKeyPrefix(courseId, learnerId, lessonId, assessmentKey, version)}${generateFileKey(fileName)}`;
 }
+
+/**
+ * Object-key prefix for one piece of apprenticeship evidence (Gecko Apprenticeships):
+ * `apprenticeship/{programmeId}/{learnerId}/{evidenceId}/…`. The server rebuilds this exact prefix from the enrolment
+ * it resolved (never from client input) both when presigning and when registering files on the evidence row, so a
+ * key can only ever be attached to the learner/programme/evidence it was issued for. Organizational only — downloads
+ * are re-guarded through the enrolment access rule, never by the path.
+ */
+export function apprenticeshipEvidenceKeyPrefix(programmeId: string, learnerId: string, evidenceId: string): string {
+  return `apprenticeship/${programmeId}/${learnerId}/${evidenceId}/`;
+}
+
+/** Key for one evidence file (see apprenticeshipEvidenceKeyPrefix). */
+export function generateApprenticeshipEvidenceFileKey(
+  programmeId: string,
+  learnerId: string,
+  evidenceId: string,
+  fileName: string
+): string {
+  return `${apprenticeshipEvidenceKeyPrefix(programmeId, learnerId, evidenceId)}${generateFileKey(fileName)}`;
+}
