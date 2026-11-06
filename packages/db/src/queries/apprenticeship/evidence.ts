@@ -1,6 +1,7 @@
 import * as schema from '@db/schema';
 
 import { and, asc, db, desc, eq, inArray, sql, type DbOrTxClient, type SQL } from '@db/drizzle';
+import { profileDisplayName } from './names';
 
 // Gecko Apprenticeships — evidence reads/writes. No access control here: services resolve the actor and the enrolment
 // first. Writes take the transaction client so the status/mapping change and the progress recompute land together.
@@ -8,7 +9,7 @@ import { and, asc, db, desc, eq, inArray, sql, type DbOrTxClient, type SQL } fro
 export type ApprEvidenceRow = typeof schema.apprEvidence.$inferSelect;
 export type ApprEvidenceFile = ApprEvidenceRow['files'][number];
 
-const criteriaCountOf = sql<number>`(select count(*) from appr_evidence_criterion ec where ec.evidence_id = ${schema.apprEvidence.id})::int`;
+const criteriaCountOf = sql<number>`(select count(*) from appr_evidence_criterion ec where ec.evidence_id = ${sql.raw('"appr_evidence"."id"')})::int`;
 const fileCountOf = sql<number>`jsonb_array_length(${schema.apprEvidence.files})::int`;
 
 export async function getApprEvidence(evidenceId: string, client: DbOrTxClient = db) {
@@ -39,7 +40,7 @@ export async function listEvidenceForLearner(
       includeOtj: ev.includeOtj,
       createdAt: ev.createdAt,
       createdBy: ev.createdBy,
-      createdByName: schema.profile.fullname,
+      createdByName: profileDisplayName,
       criteriaCount: criteriaCountOf,
       fileCount: fileCountOf
     })
@@ -157,7 +158,7 @@ export async function listEvidenceNotes(evidenceId: string, client: DbOrTxClient
     .select({
       id: n.id,
       authorId: n.authorId,
-      authorName: schema.profile.fullname,
+      authorName: profileDisplayName,
       kind: n.kind,
       body: n.body,
       statusAtTime: n.statusAtTime,
@@ -171,7 +172,7 @@ export async function listEvidenceNotes(evidenceId: string, client: DbOrTxClient
 
 export async function getProfileName(profileId: string, client: DbOrTxClient = db): Promise<string | null> {
   const [row] = await client
-    .select({ name: schema.profile.fullname })
+    .select({ name: profileDisplayName })
     .from(schema.profile)
     .where(eq(schema.profile.id, profileId))
     .limit(1);
@@ -225,7 +226,7 @@ export async function listToMark(
   if (scope.programmeId) conditions.push(eq(ev.programmeId, scope.programmeId));
   if (scope.restrictToTutorId) {
     conditions.push(
-      sql`exists (select 1 from tutor_allocation ta where ta.learner_id = ${ev.learnerId} and ta.tutor_id = ${scope.restrictToTutorId})`
+      sql`exists (select 1 from tutor_allocation ta where ta.learner_id = ${sql.raw('"appr_evidence"."learner_id"')} and ta.tutor_id = ${scope.restrictToTutorId})`
     );
   }
   return client
@@ -234,7 +235,7 @@ export async function listToMark(
       title: ev.title,
       createdAt: ev.createdAt,
       learnerId: ev.learnerId,
-      learnerName: schema.profile.fullname,
+      learnerName: profileDisplayName,
       programmeId: ev.programmeId,
       programmeTitle: schema.apprProgramme.title,
       criteriaCount: criteriaCountOf,

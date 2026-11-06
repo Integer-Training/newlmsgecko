@@ -39,9 +39,9 @@
     const body: EnrolmentUpdateBody = {};
     if (start !== (e.startDate ?? '')) body.startDate = start;
     if (end !== (e.plannedEndDate ?? '')) body.plannedEndDate = end;
-    const hw = hoursWeek.trim() === '' ? null : Number(hoursWeek);
+    const hw = String(hoursWeek ?? '').trim() === '' ? null : Number(hoursWeek);
     if (hw !== e.contractedHoursWeek) body.contractedHoursWeek = hw;
-    const otj = otjHours.trim() === '' ? null : Math.round(Number(otjHours) * 60);
+    const otj = String(otjHours ?? '').trim() === '' ? null : Math.round(Number(otjHours) * 60);
     if (otj !== e.otjTargetMinutesOverride) body.otjTargetMinutesOverride = otj;
     if (Object.keys(body).length === 0) {
       open = false;

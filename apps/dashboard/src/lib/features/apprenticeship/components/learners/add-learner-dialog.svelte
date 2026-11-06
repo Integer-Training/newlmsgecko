@@ -67,8 +67,8 @@
       tutorId,
       startDate,
       plannedEndDate,
-      contractedHoursWeek: hoursWeek.trim() ? Number(hoursWeek) : null,
-      otjTargetMinutesOverride: otjHours.trim() ? Math.round(Number(otjHours) * 60) : null
+      contractedHoursWeek: String(hoursWeek ?? '').trim() ? Number(hoursWeek) : null,
+      otjTargetMinutesOverride: String(otjHours ?? '').trim() ? Math.round(Number(otjHours) * 60) : null
     };
     const res = await enrolmentsApi.create(body);
     saving = false;

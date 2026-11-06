@@ -28,10 +28,10 @@ export async function listApprProgrammesWithCounts(organizationId: string, statu
       status: p.status,
       createdAt: p.createdAt,
       updatedAt: p.updatedAt,
-      qualificationCount: sql<number>`(select count(*) from appr_qualification q where q.programme_id = ${p.id})::int`,
-      unitCount: sql<number>`(select count(*) from appr_unit u join appr_qualification q on q.id = u.qualification_id where q.programme_id = ${p.id})::int`,
-      criterionCount: sql<number>`(select count(*) from appr_criterion c join appr_unit u on u.id = c.unit_id join appr_qualification q on q.id = u.qualification_id where q.programme_id = ${p.id})::int`,
-      learnerCount: sql<number>`(select count(*) from appr_enrolment e where e.programme_id = ${p.id})::int`
+      qualificationCount: sql<number>`(select count(*) from appr_qualification q where q.programme_id = ${sql.raw('"appr_programme"."id"')})::int`,
+      unitCount: sql<number>`(select count(*) from appr_unit u join appr_qualification q on q.id = u.qualification_id where q.programme_id = ${sql.raw('"appr_programme"."id"')})::int`,
+      criterionCount: sql<number>`(select count(*) from appr_criterion c join appr_unit u on u.id = c.unit_id join appr_qualification q on q.id = u.qualification_id where q.programme_id = ${sql.raw('"appr_programme"."id"')})::int`,
+      learnerCount: sql<number>`(select count(*) from appr_enrolment e where e.programme_id = ${sql.raw('"appr_programme"."id"')})::int`
     })
     .from(p)
     .where(

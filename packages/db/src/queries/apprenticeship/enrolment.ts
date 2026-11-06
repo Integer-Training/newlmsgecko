@@ -1,6 +1,7 @@
 import * as schema from '@db/schema';
 
 import { and, asc, db, eq, ilike, inArray, or, sql, type DbOrTxClient, type SQL } from '@db/drizzle';
+import { profileDisplayName } from './names';
 
 // Gecko Apprenticeships — enrolment reads/writes. No access control here: services resolve the actor first and pass
 // the scope (organization / allocated tutor / self) in. Ids only; nothing here touches diploma tables.
@@ -13,9 +14,9 @@ export interface ApprTutorRef {
 // Allocated tutors of the enrolment's learner as a JSON array — a correlated subquery, so a list stays ONE statement.
 const tutorsOf = sql<
   ApprTutorRef[]
->`coalesce((select json_agg(json_build_object('id', tp.id, 'name', tp.fullname) order by tp.fullname)
-  from tutor_allocation ta join profile tp on tp.id = ta.tutor_id
-  where ta.learner_id = ${schema.apprEnrolment.learnerId} and ta.organization_id = ${schema.apprEnrolment.organizationId}), '[]'::json)`;
+>`coalesce((select json_agg(json_build_object('id', tp.id, 'name', coalesce(nullif(tu.name, ''), tp.fullname)) order by coalesce(nullif(tu.name, ''), tp.fullname))
+  from tutor_allocation ta join profile tp on tp.id = ta.tutor_id left join "user" tu on tu.id = tp.id
+  where ta.learner_id = ${sql.raw('"appr_enrolment"."learner_id"')} and ta.organization_id = ${sql.raw('"appr_enrolment"."organization_id"')}), '[]'::json)`;
 
 export interface EnrolmentListScope {
   organizationId: string;
@@ -36,18 +37,18 @@ export async function listEnrolmentRows(scope: EnrolmentListScope, client: DbOrT
   if (scope.programmeId) conditions.push(eq(e.programmeId, scope.programmeId));
   if (scope.tutorId) {
     conditions.push(
-      sql`exists (select 1 from tutor_allocation ta where ta.learner_id = ${e.learnerId} and ta.tutor_id = ${scope.tutorId})`
+      sql`exists (select 1 from tutor_allocation ta where ta.learner_id = ${sql.raw('"appr_enrolment"."learner_id"')} and ta.tutor_id = ${scope.tutorId})`
     );
   }
   if (scope.restrictToTutorId) {
     conditions.push(
-      sql`exists (select 1 from tutor_allocation ta where ta.learner_id = ${e.learnerId} and ta.tutor_id = ${scope.restrictToTutorId})`
+      sql`exists (select 1 from tutor_allocation ta where ta.learner_id = ${sql.raw('"appr_enrolment"."learner_id"')} and ta.tutor_id = ${scope.restrictToTutorId})`
     );
   }
   if (scope.restrictToLearnerId) conditions.push(eq(e.learnerId, scope.restrictToLearnerId));
   if (scope.search) {
     const term = `%${scope.search.replace(/[\\%_]/g, '\\$&')}%`;
-    conditions.push(or(ilike(schema.profile.fullname, term), ilike(schema.profile.email, term)));
+    conditions.push(or(ilike(profileDisplayName, term), ilike(schema.profile.email, term)));
   }
   return client
     .select({
@@ -55,7 +56,7 @@ export async function listEnrolmentRows(scope: EnrolmentListScope, client: DbOrT
       programmeId: e.programmeId,
       programmeTitle: schema.apprProgramme.title,
       learnerId: e.learnerId,
-      learnerName: schema.profile.fullname,
+      learnerName: profileDisplayName,
       learnerEmail: schema.profile.email,
       startDate: e.startDate,
       plannedEndDate: e.plannedEndDate,
@@ -73,7 +74,7 @@ export async function listEnrolmentRows(scope: EnrolmentListScope, client: DbOrT
     .innerJoin(schema.profile, eq(schema.profile.id, e.learnerId))
     .innerJoin(schema.apprProgramme, eq(schema.apprProgramme.id, e.programmeId))
     .where(and(...conditions))
-    .orderBy(asc(schema.profile.fullname));
+    .orderBy(asc(profileDisplayName));
 }
 
 /** Enrolment + learner + programme + allocated tutors, for the portfolio header. One statement. */
@@ -82,7 +83,7 @@ export async function getEnrolmentOverview(enrolmentId: string, client: DbOrTxCl
   const [row] = await client
     .select({
       enrolment: e,
-      learnerName: schema.profile.fullname,
+      learnerName: profileDisplayName,
       learnerEmail: schema.profile.email,
       programmeTitle: schema.apprProgramme.title,
       programmeReference: schema.apprProgramme.reference,
@@ -99,7 +100,7 @@ export async function getEnrolmentOverview(enrolmentId: string, client: DbOrTxCl
 
 export async function getLearnerProfileRef(learnerId: string, client: DbOrTxClient = db) {
   const [row] = await client
-    .select({ id: schema.profile.id, name: schema.profile.fullname, email: schema.profile.email })
+    .select({ id: schema.profile.id, name: profileDisplayName, email: schema.profile.email })
     .from(schema.profile)
     .where(eq(schema.profile.id, learnerId))
     .limit(1);
