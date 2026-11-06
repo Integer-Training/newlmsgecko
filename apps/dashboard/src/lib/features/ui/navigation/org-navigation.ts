@@ -16,6 +16,7 @@ import {
 
 import type { AccountOrg } from '$features/app/types';
 import BotIcon from '@lucide/svelte/icons/bot';
+import GraduationCapIcon from '@lucide/svelte/icons/graduation-cap';
 import MegaphoneIcon from '@lucide/svelte/icons/megaphone';
 import type { Component } from 'svelte';
 import { isActive } from '$lib/utils/functions/app';
@@ -159,6 +160,38 @@ export const baseNavConfig: NavItemConfig[] = [
     path: '/courses',
     icon: CourseIcon,
     matchPattern: '^/org/[^/]+/courses(/.*)?$' // Matches nested routes
+  },
+  // Gecko Apprenticeships — its own programme catalogue (not a course). Admin-only; learner pages + programme setup.
+  {
+    group: 'content',
+    titleKey: 'Apprenticeships',
+    path: '/apprenticeships',
+    icon: GraduationCapIcon,
+    requiresAdmin: true,
+    useHashUrl: true,
+    matchPattern: '^/org/[^/]+/apprenticeships(/.*)?$',
+    items: [
+      {
+        titleKey: 'Learners',
+        path: '/apprenticeships',
+        matchPattern: '^/org/[^/]+/apprenticeships/?$'
+      },
+      {
+        titleKey: 'To mark',
+        path: '/apprenticeships/to-mark',
+        matchPattern: '^/org/[^/]+/apprenticeships/to-mark(/.*)?$'
+      },
+      {
+        titleKey: 'Programmes',
+        path: '/apprenticeships/programmes',
+        matchPattern: '^/org/[^/]+/apprenticeships/programmes(/.*)?$'
+      },
+      {
+        titleKey: 'Settings',
+        path: '/apprenticeships/settings',
+        matchPattern: '^/org/[^/]+/apprenticeships/settings(/.*)?$'
+      }
+    ]
   },
   ...(COHORTS_ENABLED
     ? [

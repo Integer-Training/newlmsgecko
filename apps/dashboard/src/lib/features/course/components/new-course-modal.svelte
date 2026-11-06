@@ -13,8 +13,14 @@
   import { t } from '$lib/utils/functions/translations';
   import type { TCourseType } from '@cio/db/types';
   import { courseApi } from '../api';
+  import { currentOrg } from '$lib/utils/store/org';
+  import { programmesApi } from '$features/apprenticeship/api/programmes.svelte';
+
+  // Not a course type: choosing it creates an apprenticeship programme instead of a course.
+  const APPRENTICESHIP = 'APPRENTICESHIP';
 
   let step = $state(0);
+  let creatingProgramme = $state(false);
 
   const options = [
     {
@@ -44,6 +50,13 @@
       subtitle: $t('new_course_modal.public_subtitle'),
       type: 'PUBLIC' as TCourseType,
       isDisabled: false
+    },
+    {
+      id: 'apprenticeship',
+      title: 'Apprenticeship',
+      subtitle: 'Qualification → units → criteria, evidence and off-the-job hours',
+      type: APPRENTICESHIP,
+      isDisabled: false
     }
   ];
   const courseTypeOptionsForGroup = options.map((o) => ({
@@ -53,7 +66,7 @@
     value: o.type
   }));
 
-  let type = $state(options[0].type);
+  let type = $state<string>(options[0].type);
 
   function onClose(redirectTo) {
     goto(redirectTo);
@@ -69,10 +82,21 @@
   }
 
   async function createCourse() {
+    if (type === APPRENTICESHIP) {
+      creatingProgramme = true;
+      const created = await programmesApi.create({
+        title: $createCourseModal.title.trim(),
+        description: $createCourseModal.description?.trim() || null
+      });
+      creatingProgramme = false;
+      if (created) onClose(`/org/${$currentOrg.siteName}/apprenticeships/programmes/${created.id}`);
+      return;
+    }
+
     await courseApi.create({
       title: $createCourseModal.title,
       description: $createCourseModal.description,
-      type: type
+      type: type as TCourseType
     });
   }
 
@@ -135,7 +159,11 @@
           <Button variant="outline" onclick={() => (step = 0)}>
             {$t('courses.new_course_modal.back')}
           </Button>
-          <Button type="submit" disabled={courseApi.isLoading} loading={courseApi.isLoading}>
+          <Button
+            type="submit"
+            disabled={courseApi.isLoading || creatingProgramme}
+            loading={courseApi.isLoading || creatingProgramme}
+          >
             {$t('courses.new_course_modal.button')}
           </Button>
         </Dialog.Footer>

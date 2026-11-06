@@ -271,7 +271,9 @@ export async function assertCourseMaterialDownloadAccess(
   // coursework-prefixed key here so a staff caller cannot bypass the coursework ACL by signing it via the
   // materials endpoint (staff skip the material-currency check below). A Manager — excluded from ALL
   // coursework by design — and a de-allocated tutor are both stopped here even if they know a key.
-  if (keys.some((k) => k.startsWith('coursework/'))) {
+  // Same for apprenticeship evidence (apprenticeship/…): served only by the apprenticeship evidence download, which
+  // applies the apprenticeship access rule (admin / allocated tutor / the learner).
+  if (keys.some((k) => k.startsWith('coursework/') || k.startsWith('apprenticeship/'))) {
     throw new AppError('These files are not available here', ErrorCodes.FORBIDDEN, 403);
   }
 

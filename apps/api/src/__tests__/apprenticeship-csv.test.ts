@@ -160,3 +160,32 @@ describe('planStructureImport', () => {
     expect(plan.summary).toEqual({ unitsNew: 1, unitsUpdated: 0, criteriaNew: 0, criteriaUpdated: 0 });
   });
 });
+
+describe('Skills Portfolio export format', () => {
+  const header = 'code,unitTitle,name,description,completedItems,requiredItems';
+  const csv = [
+    header,
+    '"X/100/0001/01","U1 Talking","1.1","Say why people talk",1,1',
+    '"X/100/0001/02","U1 Talking","1.2","Describe listening, briefly",0,2',
+    '"X/100/0002/01","U2 Safety","1.1","Name a hazard",3,1'
+  ].join('\r\n');
+  const empty = {
+    qualifications: [{ id: 'q1', title: 'Q', sort: 0, externalRef: null }],
+    units: [],
+    criteria: []
+  } as never;
+
+  it('maps the All Units export onto units and criteria (ignoring learner progress)', () => {
+    const plan = planStructureImport(empty, csv);
+    expect(plan.errors).toEqual([]);
+    expect(plan.summary).toMatchObject({ unitsNew: 2, criteriaNew: 3 });
+  });
+
+  it('a single-unit export (no unitTitle) cannot create a unit on its own', () => {
+    const single = ['code,name,description,completedItems,requiredItems', '"X/100/0001/01","1.1","Say why",1,1'].join(
+      '\n'
+    );
+    const plan = planStructureImport(empty, single);
+    expect(plan.errors.length).toBe(1);
+  });
+});

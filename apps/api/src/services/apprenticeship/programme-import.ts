@@ -81,12 +81,46 @@ interface CriterionState {
 
 const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
 
+/**
+ * Skills Portfolio "Export Unit Data" / "Export All Unit Data" files are accepted as-is and mapped onto our columns:
+ * `code` (e.g. A/650/1366/01 = Ofqual unit ref + criterion no.) → criterion_ref, and unit_ref = code without its last
+ * segment; `unitTitle` → unit_title; `name` → criterion_code; `description` → criterion_text; `requiredItems` →
+ * required. `completedItems` is that learner's progress, not structure, so it is ignored. A single-unit export has no
+ * unitTitle, so it can only update a unit that already exists (import "All Units" first).
+ */
+export function fromSkillsPortfolioExport(
+  parsed: ReturnType<typeof parseCsvWithHeader>
+): ReturnType<typeof parseCsvWithHeader> {
+  const h = parsed.headers;
+  if (!(h.includes('code') && h.includes('name') && h.includes('description') && h.includes('requireditems')))
+    return parsed;
+  const records = parsed.records.map(({ row, values }) => {
+    const code = (values['code'] ?? '').trim();
+    const cut = code.lastIndexOf('/');
+    return {
+      row,
+      values: {
+        unit_ref: cut > 0 ? code.slice(0, cut) : '',
+        unit_title: values['unittitle'] ?? '',
+        criterion_ref: code,
+        criterion_code: values['name'] ?? '',
+        criterion_text: values['description'] ?? '',
+        required: values['requireditems'] ?? ''
+      }
+    };
+  });
+  return {
+    headers: ['unit_ref', 'unit_title', 'criterion_ref', 'criterion_code', 'criterion_text', 'required'],
+    records
+  };
+}
+
 export function planStructureImport(
   existing: { qualifications: ImportQualification[]; units: ImportUnit[]; criteria: ImportCriterion[] },
   csv: string
 ): ImportPlan {
   const errors: ImportPlan['errors'] = [];
-  const { headers, records } = parseCsvWithHeader(csv);
+  const { headers, records } = fromSkillsPortfolioExport(parseCsvWithHeader(csv));
   const fail = (row: number, message: string) => errors.push({ row, message });
 
   if (!headers.includes('unit_code') && !headers.includes('unit_title') && !headers.includes('unit_ref')) {
