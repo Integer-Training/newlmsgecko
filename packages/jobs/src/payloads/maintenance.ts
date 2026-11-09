@@ -55,3 +55,21 @@ export const ZAssetStorageCleanupPayload = z.object({
   keys: z.array(ZBucketKey).default([])
 });
 export type TAssetStorageCleanupPayload = z.infer<typeof ZAssetStorageCleanupPayload>;
+
+/**
+ * Gecko Apprenticeships daily jobs. No input is needed (they scan the database); the optional fields exist so a run
+ * can be triggered by hand for a specific day / batch size.
+ */
+export const ZApprUploadCleanupPayload = z.object({
+  batchSize: z.number().int().positive().max(1000).default(200)
+});
+export type TApprUploadCleanupPayload = z.infer<typeof ZApprUploadCleanupPayload>;
+
+export const ZApprDailyScanPayload = z.object({
+  /** Override 'today' (YYYY-MM-DD). Omit for the real date. */
+  today: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional()
+});
+export type TApprDailyScanPayload = z.infer<typeof ZApprDailyScanPayload>;

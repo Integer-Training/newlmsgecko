@@ -249,6 +249,27 @@ describe('learners table status computation', () => {
     expect(page2.total).toBe(7);
   });
 
+  it('adds overdueTaskCount, nextReview and a computed reviewOverdue to every row (defaults when absent)', async () => {
+    vi.mocked(q.listEnrolmentRows).mockResolvedValue([
+      row('late', 'Ann', {
+        overdueTaskCount: 3,
+        nextReview: { id: 'r1', scheduledDate: '2026-05-01', status: 'DRAFT' }
+      }),
+      row('soon', 'Bob', {
+        overdueTaskCount: 0,
+        nextReview: { id: 'r2', scheduledDate: '2099-01-01', status: 'SCHEDULED' }
+      }),
+      row('none', 'Cat', {})
+    ] as never);
+    const res = await listEnrolments(admin, { page: 1, pageSize: 25 }, NOW);
+    const byId = Object.fromEntries(res.items.map((i) => [i.id, i]));
+    expect(byId.late).toMatchObject({ overdueTaskCount: 3, reviewOverdue: true, nextReview: { id: 'r1' } });
+    expect(byId.soon).toMatchObject({ overdueTaskCount: 0, reviewOverdue: false });
+    expect(byId.none).toMatchObject({ overdueTaskCount: 0, nextReview: null, reviewOverdue: false });
+    // the day used for "overdue" is passed to the single rows query
+    expect(vi.mocked(q.listEnrolmentRows).mock.calls[0][0]).toMatchObject({ today: NOW.toISOString().slice(0, 10) });
+  });
+
   it('runs ONE rows query scoped to the actor (tutor → allocated, learner → self)', async () => {
     await listEnrolments(admin, query, NOW);
     await listEnrolments(tutor, query, NOW);

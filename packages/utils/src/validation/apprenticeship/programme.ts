@@ -33,7 +33,8 @@ export const ZProgrammeUpdate = z
     reference: optionalText(100),
     awardingBody: optionalText(200),
     level: optionalText(50),
-    status: z.enum(APPR_PROGRAMME_STATUSES)
+    status: z.enum(APPR_PROGRAMME_STATUSES),
+    reviewIntervalWeeks: z.number().int().min(1).max(52)
   })
   .partial()
   .refine((v) => Object.keys(v).length > 0, { message: 'Nothing to update' });

@@ -1,5 +1,7 @@
 import { snackbar } from '$features/ui/snackbar/store';
 import { enrolmentsApi, type EnrolmentUpdateBody, type Portfolio, type UnitDatesBody } from '../api/enrolments.svelte';
+import { reviewsApi, type ReviewItem } from '../api/reviews.svelte';
+import { tasksApi, type TaskItem } from '../api/tasks.svelte';
 import { evidenceApi, type EvidenceListItem, type PickerQualification } from '../api/evidence.svelte';
 
 /**
@@ -11,6 +13,10 @@ export class PortfolioStore {
   enrolmentId: string;
   data = $state<Portfolio | null>(null);
   evidence = $state<EvidenceListItem[]>([]);
+  tasks = $state<TaskItem[]>([]);
+  reviews = $state<ReviewItem[]>([]);
+  tasksError = $state<string | null>(null);
+  reviewsError = $state<string | null>(null);
   loading = $state(true);
   error = $state<string | null>(null);
   saving = $state(false);
@@ -18,12 +24,22 @@ export class PortfolioStore {
   version = $state(0);
 
   // The evidence side-sheet (one per portfolio, opened from any tab).
-  sheet = $state<{ open: boolean; mode: 'add' | 'view'; evidenceId: string | null; criterionIds: string[] }>({
+  sheet = $state<{
+    open: boolean;
+    mode: 'add' | 'view';
+    evidenceId: string | null;
+    criterionIds: string[];
+    /** Set when answering a task: the form opens pre-filled from it. */
+    taskId: string | null;
+  }>({
     open: false,
     mode: 'view',
     evidenceId: null,
-    criterionIds: []
+    criterionIds: [],
+    taskId: null
   });
+  /** The portfolio tab to show (a notification deep-links with ?tab=tasks|reviews; the header chips jump too). */
+  tab = $state('units');
 
   #reqId = 0;
 
@@ -48,9 +64,11 @@ export class PortfolioStore {
   async load() {
     const reqId = ++this.#reqId;
     this.loading = this.data === null;
-    const [p, e] = await Promise.all([
+    const [p, e, t, r] = await Promise.all([
       enrolmentsApi.getPortfolio(this.enrolmentId),
-      evidenceApi.forEnrolment(this.enrolmentId)
+      evidenceApi.forEnrolment(this.enrolmentId),
+      tasksApi.forEnrolment(this.enrolmentId),
+      reviewsApi.forEnrolment(this.enrolmentId)
     ]);
     if (reqId !== this.#reqId) return;
     this.loading = false;
@@ -61,6 +79,19 @@ export class PortfolioStore {
       this.error = p.error;
     }
     if (e.ok) this.evidence = e.data;
+    // Tasks / reviews fail independently: the rest of the portfolio still works.
+    if (t.ok) {
+      this.tasks = t.data.items;
+      this.tasksError = null;
+    } else {
+      this.tasksError = t.error;
+    }
+    if (r.ok) {
+      this.reviews = r.data.items;
+      this.reviewsError = null;
+    } else {
+      this.reviewsError = r.error;
+    }
     this.version += 1;
   }
 
@@ -109,11 +140,41 @@ export class PortfolioStore {
 
   // ── Evidence sheet ──
   openEvidence(evidenceId: string) {
-    this.sheet = { open: true, mode: 'view', evidenceId, criterionIds: [] };
+    this.sheet = { open: true, mode: 'view', evidenceId, criterionIds: [], taskId: null };
   }
 
-  openNewEvidence(criterionIds: string[] = []) {
-    this.sheet = { open: true, mode: 'add', evidenceId: null, criterionIds };
+  openNewEvidence(criterionIds: string[] = [], taskId: string | null = null) {
+    this.sheet = { open: true, mode: 'add', evidenceId: null, criterionIds, taskId };
+  }
+
+  /** Answer a task: add-evidence sheet pre-filled from it (title, type, criteria, taskId). */
+  openAnswerTask(task: TaskItem) {
+    this.openNewEvidence(
+      task.criteria.map((c) => c.id),
+      task.id
+    );
+  }
+
+  // ── Tasks / reviews ──
+  get overdueTaskCount(): number {
+    return this.data?.summary.overdueTaskCount ?? this.tasks.filter((t) => t.overdue).length;
+  }
+
+  /** The review to show in the header: the API's, else the earliest open one we hold. */
+  get nextReview(): { id: string; scheduledDate: string; status: string; overdue: boolean } | null {
+    const open = this.reviews
+      .filter((r) => !['COMPLETE', 'CANCELLED'].includes(r.status))
+      .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate))[0];
+    const n = this.data?.summary.nextReview ?? open ?? null;
+    if (!n) return null;
+    const overdue = this.data?.summary.reviewOverdue ?? open?.overdue ?? false;
+    return { id: n.id, scheduledDate: n.scheduledDate, status: n.status, overdue };
+  }
+
+  /** Replace one review in place from a mutation response (the header data is refreshed afterwards). */
+  applyReview(r: ReviewItem) {
+    const i = this.reviews.findIndex((x) => x.id === r.id);
+    this.reviews = i === -1 ? [...this.reviews, r] : this.reviews.map((x) => (x.id === r.id ? r : x));
   }
 
   closeSheet() {

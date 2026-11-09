@@ -128,6 +128,8 @@ export const ZEvidenceCreate = z.object({
   status: z.enum(APPR_STAFF_EVIDENCE_STATUSES).optional(),
   /** The id the files were presigned for. Required when files are attached. */
   evidenceId: z.uuid().optional(),
+  /** The task this evidence answers (same learner + programme; checked server-side). */
+  taskId: z.uuid().optional(),
   note: ZEvidenceNoteInput.optional()
 });
 export type EvidenceCreateInput = z.infer<typeof ZEvidenceCreate>;
@@ -141,6 +143,8 @@ export const ZEvidenceUpdate = z
     includeOtj: evidenceFields.includeOtj,
     criterionIds: evidenceFields.criterionIds,
     files: evidenceFields.files,
+    /** Link to / unlink from a task. */
+    taskId: z.uuid().nullable(),
     note: ZEvidenceNoteInput
   })
   .partial()

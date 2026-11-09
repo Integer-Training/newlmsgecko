@@ -3,6 +3,7 @@
   import * as Sheet from '@cio/ui/base/sheet';
   import { Spinner } from '@cio/ui/base/spinner';
   import { Button } from '@cio/ui/base/button';
+  import type { TaskItem } from '../../api/tasks.svelte';
   import { evidenceApi, type EvidenceDetail, type PickerQualification } from '../../api/evidence.svelte';
   import EvidenceForm from './evidence-form.svelte';
   import EvidenceReview from './evidence-review.svelte';
@@ -20,6 +21,9 @@
     tree?: PickerQualification[] | null;
     metIds?: Set<string> | null;
     preCriteria?: string[];
+    /** This learner's tasks (portfolio only): lets new evidence answer one, and names the task a piece answers. */
+    tasks?: TaskItem[];
+    preTaskId?: string | null;
     learnerName?: string | null;
     /** Called after any save / review so the parent can refresh its counts and lists. */
     onChanged: (opts: { reviewed: boolean }) => void;
@@ -34,6 +38,8 @@
     tree = null,
     metIds = null,
     preCriteria = [],
+    tasks = [],
+    preTaskId = null,
     learnerName = null,
     onChanged,
     closeOnReview = false
@@ -128,6 +134,8 @@
             tree={effectiveTree}
             {metIds}
             {preCriteria}
+            {tasks}
+            {preTaskId}
             onSaved={saved}
             onCancel={() => (open = false)}
           />
@@ -147,10 +155,19 @@
               enrolmentId={formEnrolmentId}
               tree={effectiveTree}
               {metIds}
+              {tasks}
               onSaved={saved}
               onCancel={() => (editing = false)}
             />
           {:else}
+            {#if detail.evidence.taskId}
+              <p class="px-4 pb-2 text-sm text-(--muted-foreground)">
+                Answers task:
+                <strong class="text-(--foreground)"
+                  >{tasks.find((t) => t.id === detail?.evidence.taskId)?.title ?? 'a task'}</strong
+                >
+              </p>
+            {/if}
             <EvidenceReview
               {detail}
               tree={effectiveTree}

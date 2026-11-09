@@ -4,3 +4,6 @@ export * from './settings';
 export * from './enrolment';
 export * from './evidence';
 export * from './names';
+export * from './uploads';
+export * from './tasks';
+export * from './reviews';

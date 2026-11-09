@@ -15,6 +15,8 @@ import {
 } from '@api/services/apprenticeship/notifications';
 import { toProgressSummary } from '@api/services/apprenticeship/enrolment';
 import { recomputeEnrolment } from '@api/services/apprenticeship/progress';
+import { assertActiveType, assertAllowedFile, assertCriteriaInProgramme } from '@api/services/apprenticeship/checks';
+import { assertTaskForEvidence, syncTaskStatuses } from '@api/services/apprenticeship/tasks';
 import type { Actor } from '@cio/db/actor';
 import { recordAudit } from '@cio/db/audit';
 import { runInTransaction } from '@cio/db/drizzle';
@@ -23,6 +25,7 @@ import {
   getApprEnrolmentByProgrammeLearner,
   getApprEvidence,
   insertApprEvidence,
+  insertApprUploads,
   insertEvidenceNote,
   listApprEvidenceTypes,
   listEvidenceCriteriaDetail,
@@ -30,12 +33,13 @@ import {
   listEvidenceForLearner,
   listEvidenceNotes,
   listToMark,
+  markUploadsAttached,
+  markUploadsRemoved,
   replaceEvidenceCriteria,
   updateApprEvidence,
   type ApprEvidenceFile,
   type ApprEvidenceRow
 } from '@cio/db/queries/apprenticeship';
-import { getUploadLimits } from '@cio/core/config/upload-limits';
 import { apprenticeshipEvidenceKeyPrefix, generateApprenticeshipEvidenceFileKey } from '@cio/core/utils/upload';
 import { generateDocumentDownloadPresignedUrls, generateDocumentUploadPresignedUrl } from '@cio/core/utils/s3';
 import {
@@ -44,7 +48,6 @@ import {
   type ApprNoteKind
 } from '@cio/utils/constants/apprenticeship';
 import { isUniqueConstraintViolation } from '@cio/utils/errors';
-import { ALLOWED_CONTENT_TYPES, ALLOWED_DOCUMENT_TYPES, ALLOWED_IMAGE_TYPES } from '@cio/utils/validation/constants';
 import type {
   EvidenceCreateInput,
   EvidenceFileInput,
@@ -66,30 +69,6 @@ import type {
 
 const notFound = () => new AppError('Evidence not found', ErrorCodes.NOT_FOUND, 404);
 const badRequest = (message: string, field?: string) => new AppError(message, ErrorCodes.VALIDATION_ERROR, 400, field);
-
-const ALLOWED_TYPES = new Set<string>([...ALLOWED_DOCUMENT_TYPES, ...ALLOWED_IMAGE_TYPES, ...ALLOWED_CONTENT_TYPES]);
-const IMAGE_TYPES = new Set<string>(ALLOWED_IMAGE_TYPES);
-const VIDEO_TYPES = new Set<string>(ALLOWED_CONTENT_TYPES);
-
-function assertAllowedFile(f: { name: string; type?: string; size?: number }): void {
-  if (f.type !== undefined && !ALLOWED_TYPES.has(f.type)) {
-    throw badRequest(`"${f.name}" is not an accepted file type (documents, images or video).`, 'files');
-  }
-  if (f.size === undefined) return;
-  const limits = getUploadLimits();
-  const max = IMAGE_TYPES.has(f.type ?? '')
-    ? limits.imageBytes
-    : VIDEO_TYPES.has(f.type ?? '')
-      ? limits.videoBytes
-      : limits.documentBytes;
-  if (f.size > max) {
-    throw new AppError(
-      `"${f.name}" is too large. The maximum size is ${Math.round(max / 1024 / 1024)}MB.`,
-      'FILE_TOO_LARGE',
-      413
-    );
-  }
-}
 
 // ── State machine (pure) ──
 
@@ -141,20 +120,6 @@ function canReview(actor: Actor, evidence: ApprEvidenceRow): boolean {
   if (!isStaff(actor)) return false;
   if (evidence.status === 'SUBMITTED') return true;
   return evidence.status === 'ACCEPTED' && actor.authenticated && actor.role === 'ADMIN';
-}
-
-async function assertActiveType(organizationId: string, typeKey: string): Promise<void> {
-  const types = await listApprEvidenceTypes(organizationId);
-  if (!types.some((t) => t.key === typeKey && t.active)) throw badRequest('Choose a valid evidence type', 'typeKey');
-}
-
-/** Every criterion must belong to the programme (chain join); a foreign id is a client error, never silently dropped. */
-async function assertCriteriaInProgramme(programmeId: string, criterionIds: string[]): Promise<string[]> {
-  const unique = [...new Set(criterionIds)];
-  const found = await filterCriterionIdsInProgramme(programmeId, unique);
-  if (found.length !== unique.length)
-    throw badRequest('One or more criteria are not part of this programme', 'criterionIds');
-  return unique;
 }
 
 /** Keys must sit under this evidence's own prefix (or already be on the row) — blocks key injection across learners. */
@@ -297,6 +262,15 @@ export async function presignEvidenceUploads(actor: Actor, input: EvidencePresig
       return { name: f.name, key, uploadUrl: await generateDocumentUploadPresignedUrl(key, f.type) };
     })
   );
+  // Track every issued key so the daily clean-up can delete the ones that never reach a saved record.
+  await insertApprUploads(
+    files.map((f) => ({
+      organizationId: enrolment.organizationId,
+      learnerId: enrolment.learnerId,
+      ownerId: actor.authenticated ? actor.userId : null,
+      key: f.key
+    }))
+  );
   return { evidenceId, files };
 }
 
@@ -329,6 +303,8 @@ export async function createEvidence(actor: Actor, enrolmentId: string, input: E
   const evidenceId = input.evidenceId ?? randomUUID();
   assertFileKeys(input.files, apprenticeshipEvidenceKeyPrefix(enrolment.programmeId, enrolment.learnerId, evidenceId));
 
+  if (input.taskId) await assertTaskForEvidence(input.taskId, enrolment);
+
   const reviewedNow = status === 'ACCEPTED';
   let result: { evidence: ApprEvidenceRow; detail: Awaited<ReturnType<typeof recomputeEnrolment>> };
   try {
@@ -344,12 +320,17 @@ export async function createEvidence(actor: Actor, enrolmentId: string, input: E
         minutes: input.minutes,
         includeOtj: input.includeOtj,
         status,
+        taskId: input.taskId ?? null,
         files: toStoredFiles(input.files, [], a.userId),
         createdBy: a.userId,
         reviewedBy: reviewedNow ? a.userId : null,
         reviewedAt: reviewedNow ? new Date().toISOString() : null
       });
       await replaceEvidenceCriteria(tx, evidenceId, criterionIds, staff ? 'STAFF' : 'LEARNER');
+      await markUploadsAttached(
+        input.files.map((f) => f.key),
+        tx
+      );
       await insertEvidenceNote(tx, {
         evidenceId,
         authorId: a.userId,
@@ -366,6 +347,7 @@ export async function createEvidence(actor: Actor, enrolmentId: string, input: E
           statusAtTime: status
         });
       }
+      await syncTaskStatuses(tx, [input.taskId]);
       return { evidence, detail: await recomputeEnrolment(tx, enrolment.id) };
     });
   } catch (error) {
@@ -425,12 +407,20 @@ export async function updateEvidence(actor: Actor, evidenceId: string, input: Ev
   };
 
   const enrolment = await getApprEnrolmentByProgrammeLearner(evidence.programmeId, evidence.learnerId);
+  // Linking to a (different) task: it must belong to this learner + programme. The old task is re-synced too.
+  if (input.taskId) await assertTaskForEvidence(input.taskId, evidence);
+  const keptKeys = files?.map((f) => f.key) ?? [];
+  const droppedKeys = files ? evidence.files.map((f) => f.key).filter((k) => !keptKeys.includes(k)) : [];
   const result = await runInTransaction(async (tx) => {
     // Conditional on the status we read: a concurrent review makes this a 409 instead of a silent overwrite.
     const updated = await updateApprEvidence(tx, evidenceId, patch, evidence.status);
     if (!updated)
       throw new AppError('This evidence was just reviewed — reload and try again', ErrorCodes.CONFLICT, 409);
     if (criterionIds) await replaceEvidenceCriteria(tx, evidenceId, criterionIds, staff ? 'STAFF' : 'LEARNER');
+    if (files) {
+      await markUploadsAttached(keptKeys, tx);
+      await markUploadsRemoved(droppedKeys, tx);
+    }
     await insertEvidenceNote(tx, {
       evidenceId,
       authorId: a.userId,
@@ -456,6 +446,8 @@ export async function updateEvidence(actor: Actor, evidenceId: string, input: Ev
         statusAtTime: nextStatus
       });
     }
+    // A resubmission (or a re-link) changes which evidence is the latest for its task(s): keep the cache in step.
+    await syncTaskStatuses(tx, [evidence.taskId, updated.taskId]);
     return { evidence: updated, detail: enrolment ? await recomputeEnrolment(tx, enrolment.id) : null };
   });
 
@@ -510,6 +502,7 @@ export async function reviewEvidence(actor: Actor, evidenceId: string, input: Ev
         statusAtTime: next
       });
     }
+    await syncTaskStatuses(tx, [updated.taskId]);
     return { evidence: updated, detail: enrolment ? await recomputeEnrolment(tx, enrolment.id) : null };
   });
 

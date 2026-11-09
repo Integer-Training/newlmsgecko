@@ -29,7 +29,6 @@
   let editing = $state(false);
   let title = $state('');
   let reference = $state('');
-  let addingUnit = $state(false);
   let newCode = $state('');
   let newTitle = $state('');
   let busy = $state(false);

@@ -16,6 +16,8 @@
   import EvidenceTab from '../components/portfolio/evidence-tab.svelte';
   import OtjTab from '../components/portfolio/otj-tab.svelte';
   import AchievedTab from '../components/portfolio/achieved-tab.svelte';
+  import TasksTab from '../components/portfolio/tasks-tab.svelte';
+  import ReviewsTab from '../components/portfolio/reviews-tab.svelte';
   import DatesDialog from '../components/portfolio/dates-dialog.svelte';
   import SpreadDialog from '../components/portfolio/spread-dialog.svelte';
   import EvidenceSheet from '../components/evidence/evidence-sheet.svelte';
@@ -34,12 +36,25 @@
 
   // svelte-ignore state_referenced_locally
   const store = new PortfolioStore(enrolmentId);
-  let tab = $state('units');
   let datesOpen = $state(false);
   let spreadOpen = $state(false);
 
   onMount(() => {
     store.load();
+  });
+
+  // A notification links here with ?tab=tasks|reviews: open on that tab (once the portfolio has loaded), then drop it.
+  const TABS = ['units', 'map', 'evidence', 'tasks', 'reviews', 'otj', 'achieved'];
+  let openedTab = false;
+  $effect(() => {
+    if (openedTab || !store.data) return;
+    const t = appPage.url.searchParams.get('tab');
+    if (!t) return;
+    openedTab = true;
+    if (TABS.includes(t)) store.tab = t;
+    const url = new URL(appPage.url);
+    url.searchParams.delete('tab');
+    replaceState(url, appPage.state);
   });
 
   // A notification links here with ?evidence={id}: open that piece once the portfolio has loaded, then drop the
@@ -97,13 +112,29 @@
         <div class="space-y-4">
           <SummaryStrip {store} onEditDates={() => (datesOpen = true)} onSpread={() => (spreadOpen = true)} />
 
-          <Tabs.Root bind:value={tab}>
+          <Tabs.Root bind:value={store.tab}>
             <Tabs.List class="ui:h-auto ui:flex-wrap">
               <Tabs.Trigger value="units">Units</Tabs.Trigger>
               <Tabs.Trigger value="map">Criteria map</Tabs.Trigger>
               <Tabs.Trigger value="evidence">
                 Evidence
                 <span class="text-xs text-(--muted-foreground)">({store.evidence.length})</span>
+              </Tabs.Trigger>
+              <Tabs.Trigger value="tasks">
+                Tasks
+                <span class="text-xs text-(--muted-foreground)">({store.tasks.length})</span>
+                {#if store.overdueTaskCount > 0}
+                  <span
+                    class="ml-1 rounded-full bg-rose-600 px-1.5 text-xs font-medium text-white"
+                    aria-label="{store.overdueTaskCount} overdue">{store.overdueTaskCount}</span
+                  >
+                {/if}
+              </Tabs.Trigger>
+              <Tabs.Trigger value="reviews">
+                Reviews
+                {#if store.nextReview?.overdue}
+                  <span class="ml-1 rounded-full bg-rose-600 px-1.5 text-xs font-medium text-white">Overdue</span>
+                {/if}
               </Tabs.Trigger>
               <Tabs.Trigger value="otj">Off-the-job</Tabs.Trigger>
               <Tabs.Trigger value="achieved">Achieved</Tabs.Trigger>
@@ -112,6 +143,8 @@
               <Tabs.Content value="units"><UnitsTab {store} /></Tabs.Content>
               <Tabs.Content value="map"><CriteriaGrid {store} /></Tabs.Content>
               <Tabs.Content value="evidence"><EvidenceTab {store} /></Tabs.Content>
+              <Tabs.Content value="tasks"><TasksTab {store} /></Tabs.Content>
+              <Tabs.Content value="reviews"><ReviewsTab {store} /></Tabs.Content>
               <Tabs.Content value="otj"><OtjTab {store} /></Tabs.Content>
               <Tabs.Content value="achieved"><AchievedTab {store} /></Tabs.Content>
             </div>
@@ -130,6 +163,8 @@
           tree={store.pickerTree}
           {metIds}
           preCriteria={store.sheet.criterionIds}
+          tasks={store.tasks}
+          preTaskId={store.sheet.taskId}
           learnerName={store.data.learner.name}
           onChanged={() => store.refresh()}
         />

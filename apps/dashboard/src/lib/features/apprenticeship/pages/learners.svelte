@@ -227,6 +227,22 @@
                   <Table.Cell>
                     <p class="font-medium">{r.learner.name}</p>
                     <p class="text-xs text-(--muted-foreground)">{r.programmeTitle}</p>
+                    {#if (r.overdueTaskCount ?? 0) > 0 || r.reviewOverdue}
+                      <div class="mt-1 flex flex-wrap gap-1">
+                        {#if (r.overdueTaskCount ?? 0) > 0}
+                          <span
+                            class="inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-xs font-medium whitespace-nowrap text-rose-800 dark:bg-rose-500/20 dark:text-rose-300"
+                            >Overdue tasks {r.overdueTaskCount}</span
+                          >
+                        {/if}
+                        {#if r.reviewOverdue}
+                          <span
+                            class="inline-flex items-center rounded-full bg-rose-100 px-2 py-0.5 text-xs font-medium whitespace-nowrap text-rose-800 dark:bg-rose-500/20 dark:text-rose-300"
+                            >Review overdue</span
+                          >
+                        {/if}
+                      </div>
+                    {/if}
                   </Table.Cell>
                   <Table.Cell>
                     <ProgressBar

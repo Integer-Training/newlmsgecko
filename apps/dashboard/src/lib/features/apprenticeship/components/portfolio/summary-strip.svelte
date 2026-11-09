@@ -94,6 +94,32 @@
       </div>
     </div>
 
+    <div class="flex flex-wrap items-center gap-2 text-sm">
+      <button
+        type="button"
+        class="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 hover:bg-(--muted) {store.overdueTaskCount >
+        0
+          ? 'border-rose-300 text-rose-700 dark:text-rose-300'
+          : ''}"
+        onclick={() => (store.tab = 'tasks')}
+      >
+        Overdue tasks <strong>{store.overdueTaskCount}</strong>
+      </button>
+      {#if store.nextReview}
+        <button
+          type="button"
+          class="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 hover:bg-(--muted) {store.nextReview
+            .overdue
+            ? 'border-rose-300 text-rose-700 dark:text-rose-300'
+            : ''}"
+          onclick={() => (store.tab = 'reviews')}
+        >
+          Next review <strong>{fmtDate(store.nextReview.scheduledDate)}</strong>
+          {#if store.nextReview.overdue}<span class="font-medium">· Overdue</span>{/if}
+        </button>
+      {/if}
+    </div>
+
     <p class="text-sm text-(--muted-foreground)">
       Evidence: <strong class="text-(--foreground)">{d.summary.counts.submitted}</strong> to mark ·
       <strong class="text-(--foreground)">{d.summary.counts.accepted}</strong> accepted ·

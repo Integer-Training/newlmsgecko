@@ -28,6 +28,10 @@ vi.mock('@cio/db/queries/apprenticeship', () => ({
   upsertEnrolmentUnitDates: vi.fn(),
   getApprEvidence: vi.fn(),
   insertApprEvidence: vi.fn(),
+  insertApprReview: vi.fn(async () => ({ id: 'rev-1' })),
+  insertApprUploads: vi.fn(async () => undefined),
+  markUploadsAttached: vi.fn(async () => undefined),
+  markUploadsRemoved: vi.fn(async () => undefined),
   updateApprEvidence: vi.fn(),
   replaceEvidenceCriteria: vi.fn(),
   insertEvidenceNote: vi.fn(async () => ({ kind: 'GENERAL' })),
@@ -555,6 +559,20 @@ describe('services scope TUTOR (allocated only) and LEARNER (self) for the later
     vi.mocked(isTutorAllocatedToLearner).mockResolvedValue(true);
     const data = await getPortfolio(ACTORS.tutor, ENR);
     expect(data.learner.id).toBe(LRN);
+    expect(data.summary).toMatchObject({ overdueTaskCount: 0, nextReview: null, reviewOverdue: false });
+  });
+  it('the portfolio summary carries overdue tasks and the next review (overdue computed on read)', async () => {
+    vi.mocked(q.getEnrolmentOverview).mockResolvedValue({
+      ...OVERVIEW,
+      overdueTaskCount: 2,
+      nextReview: { id: 'r1', scheduledDate: '2020-01-01', status: 'SCHEDULED' }
+    } as never);
+    const data = await getPortfolio(ACTORS.admin, ENR);
+    expect(data.summary).toMatchObject({
+      overdueTaskCount: 2,
+      nextReview: { id: 'r1', scheduledDate: '2020-01-01', status: 'SCHEDULED' },
+      reviewOverdue: true
+    });
   });
   it("a learner cannot read a classmate's portfolio or evidence", async () => {
     vi.mocked(q.getEnrolmentOverview).mockResolvedValue({

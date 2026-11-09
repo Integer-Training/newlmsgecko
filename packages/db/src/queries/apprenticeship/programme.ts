@@ -92,6 +92,7 @@ export async function updateApprProgramme(
     awardingBody: string | null;
     level: string | null;
     status: string;
+    reviewIntervalWeeks: number;
   }>,
   client: DbOrTxClient = db
 ) {

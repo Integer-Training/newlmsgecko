@@ -55,6 +55,8 @@ export interface ProgrammeTree {
   awardingBody: string | null;
   level: string | null;
   status: ProgrammeStatus;
+  /** Weeks between progress reviews (1–52); the API defaults it to 12. */
+  reviewIntervalWeeks?: number;
   qualifications: Qualification[];
 }
 export interface ImportResult {
@@ -158,6 +160,7 @@ class ProgrammesApi extends BaseApi {
       level: string | null;
     }> & {
       status?: ProgrammeStatus;
+      reviewIntervalWeeks?: number;
     }
   ) {
     const res = await this.execute<(typeof classroomio.apprenticeship.programmes)[':id']['$patch']>({

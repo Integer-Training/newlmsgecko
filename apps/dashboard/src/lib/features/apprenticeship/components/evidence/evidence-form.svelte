@@ -16,6 +16,7 @@
     APPR_NOTE_MAX
   } from '@cio/utils/constants/apprenticeship';
   import { snackbar } from '$features/ui/snackbar/store';
+  import type { TaskItem } from '../../api/tasks.svelte';
   import {
     evidenceApi,
     type EvidenceDetail,
@@ -36,18 +37,34 @@
     tree: PickerQualification[];
     metIds?: Set<string> | null;
     preCriteria?: string[];
+    /** This learner's tasks, so a new piece of evidence can answer one; `preTaskId` opens it pre-filled from that task. */
+    tasks?: TaskItem[];
+    preTaskId?: string | null;
     onSaved: () => void;
     onCancel: () => void;
   }
-  let { initial = null, enrolmentId, tree, metIds = null, preCriteria = [], onSaved, onCancel }: Props = $props();
+  let {
+    initial = null,
+    enrolmentId,
+    tree,
+    metIds = null,
+    preCriteria = [],
+    tasks = [],
+    preTaskId = null,
+    onSaved,
+    onCancel
+  }: Props = $props();
 
   const ev = initial?.evidence;
-  let title = $state(ev?.title ?? '');
+  // svelte-ignore state_referenced_locally
+  const preTask = !initial && preTaskId ? (tasks.find((t) => t.id === preTaskId) ?? null) : null;
+  let taskId = $state<string>(preTask?.id ?? '');
+  let title = $state(ev?.title ?? preTask?.title ?? '');
   let details = $state(ev?.details ?? '');
   let hours = $state(ev ? String(Math.floor(ev.minutes / 60)) : '0');
   let mins = $state(ev ? String(ev.minutes % 60) : '0');
   let includeOtj = $state(ev?.includeOtj ?? false);
-  let typeKey = $state(ev?.typeKey ?? '');
+  let typeKey = $state(ev?.typeKey ?? preTask?.typeKey ?? '');
   let criterionIds = $state<string[]>(
     initial ? initial.criteria.flatMap((q) => q.units.flatMap((u) => u.criteria.map((c) => c.id))) : [...preCriteria]
   );
@@ -70,6 +87,22 @@
   const minutes = $derived(
     Math.max(0, Math.floor(Number(hours) || 0)) * 60 + Math.max(0, Math.floor(Number(mins) || 0))
   );
+  // Tasks this evidence can answer: the ones not yet complete.
+  const taskOptions = $derived(tasks.filter((t) => t.status !== 'COMPLETE'));
+  const taskLabel = $derived(tasks.find((t) => t.id === taskId)?.title ?? 'No task');
+  const linkedTaskTitle = $derived(ev?.taskId ? (tasks.find((t) => t.id === ev.taskId)?.title ?? 'a task') : null);
+
+  // Picking a task fills in what is still empty and adds its criteria to the ticked ones.
+  function pickTask(id: string) {
+    taskId = id;
+    const t = tasks.find((x) => x.id === id);
+    if (!t) return;
+    if (!title.trim()) title = t.title;
+    if (!typeKey) typeKey = t.typeKey;
+    const extra = t.criteria.map((c) => c.id).filter((c) => !criterionIds.includes(c));
+    if (extra.length > 0) criterionIds = [...criterionIds, ...extra];
+  }
+
   const canSave = $derived(!!title.trim() && !!typeKey && criterionIds.length > 0 && !saving && !uploading);
 
   async function onFilesPicked(e: Event) {
@@ -117,6 +150,7 @@
           ? await evidenceApi.create(enrolmentId, {
               ...fields,
               status,
+              ...(taskId ? { taskId } : {}),
               ...(uploadEvidenceId && files.length > 0 ? { evidenceId: uploadEvidenceId } : {}),
               ...(noteBody ? { note: noteBody } : {})
             })
@@ -142,6 +176,27 @@
     save();
   }}
 >
+  {#if initial && linkedTaskTitle}
+    <p class="text-sm text-(--muted-foreground)">
+      Answers task: <strong class="text-(--foreground)">{linkedTaskTitle}</strong>
+    </p>
+  {:else if !initial && taskOptions.length > 0}
+    <div class="space-y-1">
+      <span class="text-sm font-medium" id="ev-task-label">Task (optional)</span>
+      <Select.Root type="single" value={taskId} onValueChange={pickTask}>
+        <Select.Trigger class="ui:w-full" aria-labelledby="ev-task-label"
+          ><p class="truncate">{taskLabel}</p></Select.Trigger
+        >
+        <Select.Content>
+          <Select.Item value="">No task</Select.Item>
+          {#each taskOptions as t (t.id)}
+            <Select.Item value={t.id}>{t.title}</Select.Item>
+          {/each}
+        </Select.Content>
+      </Select.Root>
+      <p class="text-xs text-(--muted-foreground)">Answering a task fills in its title, type and criteria for you.</p>
+    </div>
+  {/if}
   <div class="space-y-1">
     <div class="flex items-baseline justify-between">
       <label for="ev-title" class="text-sm font-medium">Title <span class="text-red-500">*</span></label>

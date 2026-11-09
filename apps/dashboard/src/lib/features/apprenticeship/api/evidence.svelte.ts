@@ -65,6 +65,8 @@ export interface EvidenceDetail {
     status: string;
     statusLabel: string;
     files: EvidenceFile[];
+    /** The task this answers, if any. */
+    taskId?: string | null;
     createdAt: string;
     createdBy: string | null;
   };
@@ -121,6 +123,7 @@ export interface EvidenceCreateBody {
   files: { key: string; name: string; size?: number; type?: string }[];
   status?: 'SUBMITTED' | 'ACCEPTED';
   evidenceId?: string;
+  taskId?: string;
   note?: { body: string; kind: 'AUDIT' | 'GENERAL' };
 }
 

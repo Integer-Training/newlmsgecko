@@ -11,7 +11,7 @@ import { createOrgUser } from '@api/services/organization/users';
 import { createTutorAllocation } from '@api/services/organization/allocation';
 import type { Actor } from '@cio/db/actor';
 import { recordAudit } from '@cio/db/audit';
-import { runInTransaction } from '@cio/db/drizzle';
+import { runInTransaction, type TxClient } from '@cio/db/drizzle';
 import { getOrgMemberRoleId } from '@cio/db/queries/allocation';
 import {
   countEvidenceByCriterion,
@@ -21,6 +21,12 @@ import {
   getEnrolmentOverview,
   getEvidenceTotals,
   insertApprEnrolment,
+  insertApprReview,
+  getApprProgramme,
+  listPlannedPlanTasksForEnrolment,
+  listReviewsForEnrolment,
+  updateApprReviewIfUnchanged,
+  updateApprTask,
   insertEnrolmentUnits,
   listAcceptedEvidenceTitles,
   listApprPickerPeople,
@@ -41,10 +47,13 @@ import {
   computeEnrolmentProgress,
   criterionMet,
   expectedPct,
+  firstReviewDate,
+  isReviewOverdue,
   otjExpectedMinutes,
   otjTargetMinutes,
   progressStatus,
   spreadUnitDates,
+  taskDueDate,
   toDayNumber,
   type ApprUnitInput
 } from '@cio/utils/functions/apprenticeship-progress';
@@ -140,6 +149,11 @@ export function computeRowProgress(row: RowProgressInput, settings: ApprSettings
   };
 }
 
+/** Overdue = the earliest open review's date has passed (computed on read, never stored). */
+function reviewOverdueOf(nextReview: { scheduledDate: string; status: string } | null | undefined, today: string) {
+  return nextReview ? isReviewOverdue(nextReview, today) : false;
+}
+
 // ── Learners table ──
 
 export async function listEnrolments(actor: Actor, query: EnrolmentListQuery, now: Date = new Date()) {
@@ -148,7 +162,8 @@ export async function listEnrolments(actor: Actor, query: EnrolmentListQuery, no
     organizationId: a.orgId,
     programmeId: query.programmeId,
     tutorId: query.tutorId,
-    search: query.search || undefined
+    search: query.search || undefined,
+    today: todayIso(now)
   };
   if (a.role === 'TUTOR') scope.restrictToTutorId = a.userId;
   else if (a.role === 'LEARNER') scope.restrictToLearnerId = a.userId;
@@ -180,7 +195,10 @@ export async function listEnrolments(actor: Actor, query: EnrolmentListQuery, no
       },
       toMark: r.submittedCount,
       acceptedCount: r.acceptedCount,
-      referredCount: r.referredCount
+      referredCount: r.referredCount,
+      overdueTaskCount: r.overdueTaskCount ?? 0,
+      nextReview: r.nextReview ?? null,
+      reviewOverdue: reviewOverdueOf(r.nextReview, today)
     };
   });
 
@@ -275,6 +293,16 @@ export async function createEnrolment(actor: Actor, input: EnrolmentCreateInput)
         row.id,
         structure.units.map((u) => u.id)
       );
+      // The first progress review: learner start + the programme's review interval (staff can reschedule it).
+      const firstReview = firstReviewDate(input.startDate, programme.reviewIntervalWeeks, todayIso());
+      if (firstReview) {
+        await insertApprReview(tx, {
+          organizationId: a.orgId,
+          enrolmentId: row.id,
+          scheduledDate: firstReview,
+          createdBy: a.userId
+        });
+      }
       await recomputeEnrolment(tx, row.id);
       return row.id;
     });
@@ -305,7 +333,7 @@ export async function createEnrolment(actor: Actor, input: EnrolmentCreateInput)
 /** Everything the portfolio page needs, loaded in one parallel round after the overview/access check. */
 async function loadPortfolio(actor: Actor, enrolmentId: string, now: Date = new Date()) {
   requireAuthed(actor);
-  const overview = await getEnrolmentOverview(enrolmentId);
+  const overview = await getEnrolmentOverview(enrolmentId, undefined, todayIso(now));
   if (!overview || !(await canAccessLearner(actor, overview.enrolment.organizationId, overview.enrolment.learnerId))) {
     throw notFound();
   }
@@ -397,6 +425,7 @@ async function loadPortfolio(actor: Actor, enrolmentId: string, now: Date = new 
     },
     counts: { submitted: totals.submitted, accepted: totals.accepted, referred: totals.referred }
   };
+  const nextReview = overview.nextReview ?? null;
 
   return {
     enrolment: {
@@ -418,7 +447,12 @@ async function loadPortfolio(actor: Actor, enrolmentId: string, now: Date = new 
       level: overview.programmeLevel
     },
     tutors: overview.tutors ?? [],
-    summary,
+    summary: {
+      ...summary,
+      overdueTaskCount: overview.overdueTaskCount ?? 0,
+      nextReview,
+      reviewOverdue: reviewOverdueOf(nextReview, todayIso(now))
+    },
     qualifications
   };
 }
@@ -428,6 +462,32 @@ export async function getPortfolio(actor: Actor, enrolmentId: string) {
 }
 
 // ── Edit ──
+
+/**
+ * A moved start date moves what was derived from it: the FIRST review (only while it is still an untouched SCHEDULED
+ * one and no review has completed) and the due dates of still-PLANNED plan tasks (their overdue alert is re-armed).
+ * Submitted / referred / complete tasks and individual tasks keep their dates.
+ */
+async function rebaseOnStartDate(tx: TxClient, enrolmentId: string, startDate: string, intervalWeeks: number) {
+  const reviews = await listReviewsForEnrolment(enrolmentId, tx);
+  const first = [...reviews].sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate))[0];
+  const untouched =
+    first &&
+    first.status === 'SCHEDULED' &&
+    !first.heldDate &&
+    !first.tutorSignedAt &&
+    !first.learnerSignedAt &&
+    !first.employerSignedAt &&
+    !reviews.some((r) => r.status === 'COMPLETE');
+  const next = firstReviewDate(startDate, intervalWeeks, todayIso());
+  if (untouched && next && next !== first.scheduledDate) {
+    await updateApprReviewIfUnchanged(tx, first.id, first.updatedAt, { scheduledDate: next, dueNotifiedAt: null });
+  }
+  for (const task of await listPlannedPlanTasksForEnrolment(enrolmentId, tx)) {
+    const due = taskDueDate(startDate, task.monthOffset);
+    if (due !== task.dueDate) await updateApprTask(tx, task.id, { dueDate: due, overdueNotifiedAt: null }, 'PLANNED');
+  }
+}
 
 export async function updateEnrolment(actor: Actor, enrolmentId: string, patch: EnrolmentUpdateInput) {
   const a = assertStaff(actor);
@@ -442,8 +502,11 @@ export async function updateEnrolment(actor: Actor, enrolmentId: string, patch: 
   if (s !== null && e !== null && e < s) {
     throw badRequest('Planned end date must be on or after the start date', 'plannedEndDate');
   }
+  const startChanged = patch.startDate !== undefined && patch.startDate !== enrolment.startDate;
+  const programme = startChanged ? await getApprProgramme(enrolment.programmeId) : null;
   await runInTransaction(async (tx) => {
     await updateApprEnrolment(enrolmentId, patch, tx);
+    if (startChanged) await rebaseOnStartDate(tx, enrolmentId, patch.startDate!, programme?.reviewIntervalWeeks ?? 12);
     await recomputeEnrolment(tx, enrolmentId);
   });
   await recordAudit({

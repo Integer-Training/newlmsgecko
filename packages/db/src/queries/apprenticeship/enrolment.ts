@@ -28,7 +28,23 @@ export interface EnrolmentListScope {
   restrictToTutorId?: string;
   /** LEARNER actor: only this learner. */
   restrictToLearnerId?: string;
+  /** 'YYYY-MM-DD' used for the overdue-task count (default: today, UTC). */
+  today?: string;
 }
+
+export interface ApprNextReviewRef {
+  id: string;
+  scheduledDate: string;
+  status: string;
+}
+
+// Round 2 list/portfolio columns, as correlated subqueries (every column qualified — an unqualified one inside a
+// subquery would silently match the subquery's own table): overdue task count and the earliest open review.
+const overdueTaskCountOf = (today: string) =>
+  sql<number>`(select count(*) from appr_task ot where ot.enrolment_id = ${sql.raw('"appr_enrolment"."id"')} and ot.due_date < ${today}::date and ot.status <> 'COMPLETE')::int`;
+const nextReviewOf = sql<ApprNextReviewRef | null>`(select json_build_object('id', nr.id, 'scheduledDate', nr.scheduled_date, 'status', nr.status)
+  from appr_review nr where nr.enrolment_id = ${sql.raw('"appr_enrolment"."id"')} and nr.status in ('SCHEDULED', 'DRAFT', 'AWAITING_SIGNATURES')
+  order by nr.scheduled_date asc, nr.created_at asc limit 1)`;
 
 /** The learners table: every matching enrolment of the org with learner, programme, tutors and cache columns. ONE statement. */
 export async function listEnrolmentRows(scope: EnrolmentListScope, client: DbOrTxClient = db) {
@@ -68,7 +84,9 @@ export async function listEnrolmentRows(scope: EnrolmentListScope, client: DbOrT
       submittedCount: e.submittedCount,
       acceptedCount: e.acceptedCount,
       referredCount: e.referredCount,
-      tutors: tutorsOf
+      tutors: tutorsOf,
+      overdueTaskCount: overdueTaskCountOf(scope.today ?? new Date().toISOString().slice(0, 10)),
+      nextReview: nextReviewOf
     })
     .from(e)
     .innerJoin(schema.profile, eq(schema.profile.id, e.learnerId))
@@ -78,7 +96,11 @@ export async function listEnrolmentRows(scope: EnrolmentListScope, client: DbOrT
 }
 
 /** Enrolment + learner + programme + allocated tutors, for the portfolio header. One statement. */
-export async function getEnrolmentOverview(enrolmentId: string, client: DbOrTxClient = db) {
+export async function getEnrolmentOverview(
+  enrolmentId: string,
+  client: DbOrTxClient = db,
+  today: string = new Date().toISOString().slice(0, 10)
+) {
   const e = schema.apprEnrolment;
   const [row] = await client
     .select({
@@ -88,7 +110,9 @@ export async function getEnrolmentOverview(enrolmentId: string, client: DbOrTxCl
       programmeTitle: schema.apprProgramme.title,
       programmeReference: schema.apprProgramme.reference,
       programmeLevel: schema.apprProgramme.level,
-      tutors: tutorsOf
+      tutors: tutorsOf,
+      overdueTaskCount: overdueTaskCountOf(today),
+      nextReview: nextReviewOf
     })
     .from(e)
     .innerJoin(schema.profile, eq(schema.profile.id, e.learnerId))

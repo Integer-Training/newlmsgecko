@@ -12,7 +12,9 @@ vi.mock('@cio/db/queries/comms', () => ({
   getLessonLinkTargets: vi.fn(async () => new Map())
 }));
 vi.mock('@cio/db/queries/apprenticeship', () => ({
-  getEvidenceLinkTargets: vi.fn(async () => new Map())
+  getEvidenceLinkTargets: vi.fn(async () => new Map()),
+  getTaskLinkTargets: vi.fn(async () => new Map()),
+  getReviewLinkTargets: vi.fn(async () => new Map())
 }));
 
 import {
@@ -22,7 +24,7 @@ import {
   markAllNotificationsRead,
   getLessonLinkTargets
 } from '@cio/db/queries/comms';
-import { getEvidenceLinkTargets } from '@cio/db/queries/apprenticeship';
+import { getEvidenceLinkTargets, getReviewLinkTargets, getTaskLinkTargets } from '@cio/db/queries/apprenticeship';
 import {
   getNotificationCentre,
   markOwnNotificationRead,
@@ -148,6 +150,68 @@ describe('getNotificationCentre — self-scoped + enriched', () => {
       mList.mockResolvedValue([evRow('appr.evidence.referred')] as never);
       expect((await getNotificationCentre(learner)).items[0].link).toBe('/lms/apprenticeship');
     });
+  });
+});
+
+describe('Gecko Apprenticeships tasks + reviews alerts → the right tab, in the reader’s own shell', () => {
+  const tutor: Actor = { authenticated: true, userId: 't-1', role: 'TUTOR', status: 'ACTIVE', orgId: 'o1' };
+  const admin: Actor = { authenticated: true, userId: 'a-1', role: 'ADMIN', status: 'ACTIVE', orgId: 'o1' };
+  const taskRow = (type: string) => row({ type, entityType: 'appr_task', entityId: 'task-1' });
+  const reviewRow = (type: string) => row({ type, entityType: 'appr_review', entityId: 'rev-1' });
+  beforeEach(() => {
+    vi.mocked(getTaskLinkTargets).mockResolvedValue(
+      new Map([['task-1', { enrolmentId: 'enr-1', title: 'Reflective log', learnerName: 'Amy Apprentice' }]])
+    );
+    vi.mocked(getReviewLinkTargets).mockResolvedValue(
+      new Map([['rev-1', { enrolmentId: 'enr-1', learnerName: 'Amy Apprentice' }]])
+    );
+  });
+
+  it('apprentice: assigned → their tasks tab; overdue names the task; review to sign → their reviews tab', async () => {
+    mList.mockResolvedValue([
+      taskRow('appr.task.assigned'),
+      taskRow('appr.task.overdue'),
+      reviewRow('appr.review.sign')
+    ] as never);
+    const res = await getNotificationCentre(learner);
+    expect(getTaskLinkTargets).toHaveBeenCalledWith(['task-1']);
+    expect(getReviewLinkTargets).toHaveBeenCalledWith(['rev-1']);
+    expect(res.items[0].link).toBe('/lms/apprenticeship/enr-1?tab=tasks');
+    expect(res.items[1]).toMatchObject({
+      subject: 'Task overdue — Reflective log',
+      link: '/lms/apprenticeship/enr-1?tab=tasks'
+    });
+    expect(res.items[2]).toMatchObject({
+      subject: 'Your progress review is ready to sign',
+      link: '/lms/apprenticeship/enr-1?tab=reviews'
+    });
+  });
+
+  it('tutor and admin: overdue / review due → the caseload portfolio tab (admins use the same staff path)', async () => {
+    mList.mockResolvedValue([taskRow('appr.task.overdue'), reviewRow('appr.review.due')] as never);
+    for (const who of [tutor, admin]) {
+      const res = await getNotificationCentre(who);
+      expect(res.items[0]).toMatchObject({
+        subject: 'Task overdue — Amy Apprentice: Reflective log',
+        link: '/caseload/apprenticeships/learners/enr-1?tab=tasks'
+      });
+      expect(res.items[1]).toMatchObject({
+        subject: 'Progress review due — Amy Apprentice: apprenticeship',
+        link: '/caseload/apprenticeships/learners/enr-1?tab=reviews'
+      });
+    }
+  });
+
+  it('a task or review that no longer exists falls back to the apprenticeship home; no lookups when there are none', async () => {
+    vi.mocked(getTaskLinkTargets).mockResolvedValue(new Map());
+    mList.mockResolvedValue([taskRow('appr.task.assigned')] as never);
+    expect((await getNotificationCentre(learner)).items[0].link).toBe('/lms/apprenticeship');
+    vi.mocked(getTaskLinkTargets).mockClear();
+    vi.mocked(getReviewLinkTargets).mockClear();
+    mList.mockResolvedValue([row()] as never);
+    await getNotificationCentre(learner);
+    expect(getTaskLinkTargets).not.toHaveBeenCalled();
+    expect(getReviewLinkTargets).not.toHaveBeenCalled();
   });
 });
 

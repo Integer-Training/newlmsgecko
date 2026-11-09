@@ -19,7 +19,13 @@ export const NOTIFICATION_TYPES = [
   // Gecko Apprenticeships — evidence submitted / resubmitted (→ allocated tutors), accepted / referred (→ apprentice).
   'appr.evidence.submitted',
   'appr.evidence.accepted',
-  'appr.evidence.referred'
+  'appr.evidence.referred',
+  // Round 2: task assigned (-> apprentice), task overdue (-> apprentice + allocated tutors), review ready to sign
+  // (-> apprentice), review coming due (-> allocated tutors).
+  'appr.task.assigned',
+  'appr.task.overdue',
+  'appr.review.sign',
+  'appr.review.due'
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
@@ -47,7 +53,11 @@ export const NOTIFICATION_TYPE_CATEGORY: Record<NotificationType, NotificationCa
   'registration.submitted': 'registration',
   'appr.evidence.submitted': 'coursework',
   'appr.evidence.accepted': 'coursework',
-  'appr.evidence.referred': 'coursework'
+  'appr.evidence.referred': 'coursework',
+  'appr.task.assigned': 'coursework',
+  'appr.task.overdue': 'coursework',
+  'appr.review.sign': 'coursework',
+  'appr.review.due': 'coursework'
 };
 
 export function categoryForNotificationType(type: NotificationType): NotificationCategory {

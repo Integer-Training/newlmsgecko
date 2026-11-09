@@ -297,3 +297,19 @@ export function reviewFullySigned(r: {
 }): boolean {
   return Boolean(r.tutorSignedAt && r.learnerSignedAt && r.employerSignedAt);
 }
+
+/**
+ * Date of an enrolment's FIRST review: start + interval, but never in the past — a date already gone (late back-fill,
+ * or a start date moved backwards) becomes today + 7 days so the tutor has a week's notice. No start date → null.
+ */
+export function firstReviewDate(
+  startDate: string | null | undefined,
+  intervalWeeks: number,
+  today: string
+): string | null {
+  const natural = nextReviewDate(startDate, intervalWeeks);
+  if (!natural) return null;
+  const n = toDayNumber(natural);
+  const t = toDayNumber(today);
+  return n !== null && t !== null && n < t ? addDays(today, 7) : natural;
+}

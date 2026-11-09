@@ -4,11 +4,18 @@ import { Queue, Worker } from 'bullmq';
 
 import { runAnalyticsRollupDaily } from '@cio/analytics';
 import { purgeAssetStorage } from '@cio/core/services/assets/assets';
+import {
+  runApprReviewDueScan,
+  runApprTaskOverdueScan,
+  runApprUploadCleanup
+} from '@cio/core/services/apprenticeship/maintenance';
 import { deleteSystemEventsOlderThan, pruneDeadLetterJobsOlderThan, reapStuckMediaJobs } from '@cio/db/queries';
 import {
   JOB_NAMES,
   QUEUE_NAMES,
   ZAnalyticsDailyRollupPayload,
+  ZApprDailyScanPayload,
+  ZApprUploadCleanupPayload,
   ZAssetStorageCleanupPayload,
   ZDeadLetterCleanupPayload,
   ZMediaJobReapPayload,
@@ -84,6 +91,28 @@ const worker = new Worker(
       return { deleted };
     }
 
+    // Gecko Apprenticeships daily jobs (counts only in the logs — no learner or file names).
+    if (job.name === JOB_NAMES.maintenance.apprUploadCleanup) {
+      const data = ZApprUploadCleanupPayload.parse(job.data ?? {});
+      const result = await runApprUploadCleanup({ batchSize: data.batchSize });
+      log.info('appr-upload-cleanup-done', { ...result });
+      return result;
+    }
+
+    if (job.name === JOB_NAMES.maintenance.apprTaskOverdueScan) {
+      const data = ZApprDailyScanPayload.parse(job.data ?? {});
+      const result = await runApprTaskOverdueScan({ today: data.today });
+      log.info('appr-task-overdue-scan-done', result);
+      return result;
+    }
+
+    if (job.name === JOB_NAMES.maintenance.apprReviewDueScan) {
+      const data = ZApprDailyScanPayload.parse(job.data ?? {});
+      const result = await runApprReviewDueScan({ today: data.today });
+      log.info('appr-review-due-scan-done', result);
+      return result;
+    }
+
     throw new Error(`Unknown maintenance job: ${job.name}`);
   },
   { connection, concurrency: 1 }
@@ -131,6 +160,16 @@ async function registerSchedulers(): Promise<void> {
       name: JOB_NAMES.maintenance.systemEventPurge,
       everyMs: 86_400_000
     });
+
+    // Gecko Apprenticeships: upload clean-up, overdue-task and review-due scans — once a day each.
+    for (const [id, name] of [
+      ['appr-upload-cleanup-scheduler', JOB_NAMES.maintenance.apprUploadCleanup],
+      ['appr-task-overdue-scan-scheduler', JOB_NAMES.maintenance.apprTaskOverdueScan],
+      ['appr-review-due-scan-scheduler', JOB_NAMES.maintenance.apprReviewDueScan]
+    ] as const) {
+      await maintenanceQueue.upsertJobScheduler(id, { every: 86_400_000 }, { name, data: {} });
+      log.info('appr-scheduler-registered', { name, everyMs: 86_400_000 });
+    }
   } catch (err) {
     log.error('maintenance-scheduler-register-failed', { error: errorMessage(err) });
   }

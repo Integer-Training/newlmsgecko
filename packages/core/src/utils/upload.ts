@@ -134,3 +134,30 @@ export function generateApprenticeshipEvidenceFileKey(
 ): string {
   return `${apprenticeshipEvidenceKeyPrefix(programmeId, learnerId, evidenceId)}${generateFileKey(fileName)}`;
 }
+
+/**
+ * Object-key prefix for the brief files of one apprenticeship task plan: `apprenticeship/plans/{planId}/...`. Plan and
+ * plan-item files live here; tasks copied from a plan keep referencing the same keys (the clean-up job never removes
+ * them). Ownership is re-checked against appr_upload (org) when files are attached.
+ */
+export function apprenticeshipPlanKeyPrefix(planId: string): string {
+  return `apprenticeship/plans/${planId}/`;
+}
+
+export function generateApprenticeshipPlanFileKey(planId: string, fileName: string): string {
+  return `${apprenticeshipPlanKeyPrefix(planId)}${generateFileKey(fileName)}`;
+}
+
+/** Key prefix for the brief files of one individual task: `apprenticeship/{programmeId}/{learnerId}/tasks/{taskId}/`. */
+export function apprenticeshipTaskKeyPrefix(programmeId: string, learnerId: string, taskId: string): string {
+  return `apprenticeship/${programmeId}/${learnerId}/tasks/${taskId}/`;
+}
+
+export function generateApprenticeshipTaskFileKey(
+  programmeId: string,
+  learnerId: string,
+  taskId: string,
+  fileName: string
+): string {
+  return `${apprenticeshipTaskKeyPrefix(programmeId, learnerId, taskId)}${generateFileKey(fileName)}`;
+}

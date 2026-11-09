@@ -8,7 +8,7 @@ import {
   markNotificationRead,
   type NotificationRow
 } from '@cio/db/queries/comms';
-import { getEvidenceLinkTargets } from '@cio/db/queries/apprenticeship';
+import { getEvidenceLinkTargets, getReviewLinkTargets, getTaskLinkTargets } from '@cio/db/queries/apprenticeship';
 
 // PearlLMS Phase 6 Step 3 — the in-app notification centre service. STRICTLY self-only: every read/mutation
 // uses the ACTOR's own id (taken from the resolved session, never from the URL) — there is no way to name
@@ -34,6 +34,20 @@ function assertAuthed(actor: Actor): asserts actor is Extract<Actor, { authentic
 }
 
 type EvidenceTargets = Awaited<ReturnType<typeof getEvidenceLinkTargets>>;
+type TaskTargets = Awaited<ReturnType<typeof getTaskLinkTargets>>;
+type ReviewTargets = Awaited<ReturnType<typeof getReviewLinkTargets>>;
+
+interface ApprTargets {
+  tasks: TaskTargets;
+  reviews: ReviewTargets;
+}
+
+/** Gecko Apprenticeships: open the portfolio on a tab (tasks / reviews) — in the reader's own shell. */
+function portfolioTabLink(enrolmentId: string | undefined, tab: 'tasks' | 'reviews', isStaff: boolean): string {
+  if (!enrolmentId) return isStaff ? '/caseload/apprenticeships' : '/lms/apprenticeship';
+  const base = isStaff ? '/caseload/apprenticeships/learners' : '/lms/apprenticeship';
+  return `${base}/${enrolmentId}?tab=${tab}`;
+}
 
 /** Gecko Apprenticeships: open the portfolio with that evidence's sheet — in the reader's own shell. */
 function evidenceLink(row: NotificationRow, evidence: EvidenceTargets, isStaff: boolean): string {
@@ -48,7 +62,8 @@ function enrich(
   lessons: Map<string, { courseId: string; title: string | null }>,
   homePath: string,
   evidence: EvidenceTargets = new Map(),
-  isStaff = false
+  isStaff = false,
+  appr: ApprTargets = { tasks: new Map(), reviews: new Map() }
 ): NotificationItem {
   const base = { id: row.id, type: row.type, createdAt: row.createdAt, read: row.readAt != null };
   const lesson = row.entityType === 'lesson' && row.entityId ? lessons.get(row.entityId) : undefined;
@@ -89,6 +104,40 @@ function enrich(
         link: evidenceLink(row, evidence, isStaff)
       };
     }
+    case 'appr.task.assigned': {
+      const task = row.entityId ? appr.tasks.get(row.entityId) : undefined;
+      return {
+        ...base,
+        subject: 'New apprenticeship tasks have been assigned to you',
+        link: portfolioTabLink(task?.enrolmentId, 'tasks', isStaff)
+      };
+    }
+    case 'appr.task.overdue': {
+      const task = row.entityId ? appr.tasks.get(row.entityId) : undefined;
+      const who = isStaff && task?.learnerName ? `${task.learnerName}: ` : '';
+      return {
+        ...base,
+        subject: `Task overdue — ${who}${task?.title ?? 'apprenticeship task'}`,
+        link: portfolioTabLink(task?.enrolmentId, 'tasks', isStaff)
+      };
+    }
+    case 'appr.review.sign': {
+      const review = row.entityId ? appr.reviews.get(row.entityId) : undefined;
+      return {
+        ...base,
+        subject: 'Your progress review is ready to sign',
+        link: portfolioTabLink(review?.enrolmentId, 'reviews', isStaff)
+      };
+    }
+    case 'appr.review.due': {
+      const review = row.entityId ? appr.reviews.get(row.entityId) : undefined;
+      const who = review?.learnerName ? `${review.learnerName}: ` : '';
+      return {
+        ...base,
+        subject: `Progress review due — ${who}apprenticeship`,
+        link: portfolioTabLink(review?.enrolmentId, 'reviews', isStaff)
+      };
+    }
     default:
       return { ...base, subject: 'Notification', link: homePath };
   }
@@ -114,13 +163,22 @@ export async function getNotificationCentre(
     ...new Set(rows.filter((r) => r.entityType === 'appr_evidence' && r.entityId).map((r) => r.entityId as string))
   ];
   const evidence = await getEvidenceLinkTargets(evidenceIds);
+  const idsOf = (entityType: string) => [
+    ...new Set(rows.filter((r) => r.entityType === entityType && r.entityId).map((r) => r.entityId as string))
+  ];
+  const taskIds = idsOf('appr_task');
+  const reviewIds = idsOf('appr_review');
+  const appr: ApprTargets = {
+    tasks: taskIds.length ? await getTaskLinkTargets(taskIds) : new Map(),
+    reviews: reviewIds.length ? await getReviewLinkTargets(reviewIds) : new Map()
+  };
 
   // The recipient's home dashboard — where their broadcast banner + feed live (tutor → /caseload, else /lms).
   const homePath = actor.role === 'TUTOR' ? '/caseload' : '/lms';
 
   // Admins and tutors open apprenticeship links in the caseload shell (requireStaff); learners in /lms.
   const isStaff = actor.role === 'TUTOR' || actor.role === 'ADMIN';
-  return { items: rows.map((r) => enrich(r, lessons, homePath, evidence, isStaff)), unreadCount };
+  return { items: rows.map((r) => enrich(r, lessons, homePath, evidence, isStaff, appr)), unreadCount };
 }
 
 /** Mark ONE of the actor's own notifications read — scoped to actor.userId (a foreign id affects nothing). */

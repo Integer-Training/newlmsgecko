@@ -30,6 +30,9 @@ export interface EnrolmentRow {
   toMark: number;
   acceptedCount: number;
   referredCount: number;
+  overdueTaskCount?: number;
+  nextReview?: { id: string; scheduledDate: string; status: string } | null;
+  reviewOverdue?: boolean;
 }
 
 export interface EnrolmentList {
@@ -60,6 +63,10 @@ export interface ProgressSummary {
     status: ApprProgressStatus;
   };
   counts: { submitted: number; accepted: number; referred: number };
+  /** Tasks / reviews round 2 — absent until the API provides them. */
+  overdueTaskCount?: number;
+  nextReview?: { id: string; scheduledDate: string; status: string } | null;
+  reviewOverdue?: boolean;
 }
 
 export interface PortfolioCriterion {

@@ -21,6 +21,7 @@
   let awardingBody = $state('');
   let level = $state('');
   let description = $state('');
+  let reviewWeeks = $state('12');
   let saving = $state(false);
   let toggling = $state(false);
 
@@ -34,7 +35,8 @@
       programme.reference,
       programme.awardingBody,
       programme.level,
-      programme.description
+      programme.description,
+      programme.reviewIntervalWeeks
     ]);
     if (key === seeded) return;
     seeded = key;
@@ -43,26 +45,34 @@
     awardingBody = programme.awardingBody ?? '';
     level = programme.level ?? '';
     description = programme.description ?? '';
+    reviewWeeks = String(programme.reviewIntervalWeeks ?? 12);
   });
+
+  // Review every N weeks: a whole number from 1 to 52.
+  const weeks = $derived(Number(reviewWeeks));
+  const weeksValid = $derived(reviewWeeks.trim() !== '' && Number.isInteger(weeks) && weeks >= 1 && weeks <= 52);
+  const weeksChanged = $derived(weeksValid && weeks !== (programme.reviewIntervalWeeks ?? 12));
 
   const dirty = $derived(
     title.trim() !== programme.title ||
       reference.trim() !== (programme.reference ?? '') ||
       awardingBody.trim() !== (programme.awardingBody ?? '') ||
       level.trim() !== (programme.level ?? '') ||
-      description.trim() !== (programme.description ?? '')
+      description.trim() !== (programme.description ?? '') ||
+      weeksChanged
   );
 
   async function save(e: Event) {
     e.preventDefault();
-    if (!title.trim() || !dirty || saving) return;
+    if (!title.trim() || !weeksValid || !dirty || saving) return;
     saving = true;
     const ok = await programmesApi.updateProgramme(programme.id, {
       title: title.trim(),
       reference: reference.trim() || null,
       awardingBody: awardingBody.trim() || null,
       level: level.trim() || null,
-      description: description.trim() || null
+      description: description.trim() || null,
+      ...(weeksChanged ? { reviewIntervalWeeks: weeks } : {})
     });
     saving = false;
     if (ok) snackbar.success('Programme saved');
@@ -116,7 +126,26 @@
     <label for="pd-desc" class="text-sm font-medium">Description</label>
     <Textarea id="pd-desc" bind:value={description} rows={2} maxlength={5000} />
   </div>
+  <div class="space-y-1">
+    <label for="pd-review" class="text-sm font-medium">Review every (weeks)</label>
+    <Input
+      id="pd-review"
+      type="number"
+      min="1"
+      max="52"
+      step="1"
+      class="ui:w-28"
+      bind:value={reviewWeeks}
+      aria-invalid={!weeksValid}
+      aria-describedby="pd-review-hint"
+    />
+    <p id="pd-review-hint" class="text-xs {weeksValid ? 'text-(--muted-foreground)' : 'text-rose-600'}">
+      {weeksValid
+        ? 'How often a progress review is due for each learner on this programme.'
+        : 'Enter a whole number from 1 to 52.'}
+    </p>
+  </div>
   <div>
-    <Button type="submit" disabled={!dirty || !title.trim()} loading={saving}>Save details</Button>
+    <Button type="submit" disabled={!dirty || !title.trim() || !weeksValid} loading={saving}>Save details</Button>
   </div>
 </form>

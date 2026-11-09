@@ -85,7 +85,16 @@ export async function updateApprEvidence(
   patch: Partial<
     Pick<
       ApprEvidenceRow,
-      'title' | 'details' | 'typeKey' | 'minutes' | 'includeOtj' | 'status' | 'files' | 'reviewedBy' | 'reviewedAt'
+      | 'title'
+      | 'details'
+      | 'typeKey'
+      | 'minutes'
+      | 'includeOtj'
+      | 'status'
+      | 'files'
+      | 'reviewedBy'
+      | 'reviewedAt'
+      | 'taskId'
     >
   >,
   expectedStatus?: string
