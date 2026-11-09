@@ -26,6 +26,7 @@ vi.mock('@cio/db/queries/apprenticeship', () => ({
   listGlhLogs: vi.fn(async () => []),
   insertGlhLog: vi.fn(),
   deleteGlhLog: vi.fn(),
+  getEnrolmentLearnerIds: vi.fn(async () => new Map()),
   getApprUnitInProgramme: vi.fn(async () => ({ id: 'u1' })),
   updateApprUnit: vi.fn(async (id: string) => ({ id }))
 }));
@@ -38,7 +39,7 @@ vi.mock('@cio/db/queries/allocation', () => ({
 vi.mock('@cio/db/audit', () => ({ recordAudit: vi.fn(async () => undefined) }));
 vi.mock('@cio/db/drizzle', () => ({ runInTransaction: (fn: (tx: unknown) => unknown) => fn({ tx: true }) }));
 vi.mock('@api/services/apprenticeship/notifications', () => ({
-  notifyGatewayReady: vi.fn(async () => undefined),
+  notifyGatewayReadyOrRelease: vi.fn(async () => undefined),
   notifySafely: async (_label: string, fn: () => Promise<void>) => {
     try {
       await fn();
@@ -50,7 +51,7 @@ vi.mock('@api/services/apprenticeship/notifications', () => ({
 
 import * as q from '@cio/db/queries/apprenticeship';
 import { isTutorAllocatedToLearner } from '@cio/db/queries/allocation';
-import { notifyGatewayReady } from '@api/services/apprenticeship/notifications';
+import { notifyGatewayReadyOrRelease } from '@api/services/apprenticeship/notifications';
 import { recomputeEnrolment } from '@api/services/apprenticeship/progress';
 import { buildGatewayView, buildGlhView } from '@api/services/apprenticeship/gateway-core';
 import {
@@ -132,6 +133,8 @@ beforeEach(() => {
   vi.mocked(q.reopenGateway).mockResolvedValue({} as never);
   vi.mocked(q.setEpa).mockResolvedValue({} as never);
   vi.mocked(q.claimGatewayReady).mockResolvedValue(true);
+  vi.mocked(q.listEnrolmentIdsForProgramme).mockResolvedValue(['enr-1', 'enr-2']);
+  vi.mocked(notifyGatewayReadyOrRelease).mockResolvedValue(undefined);
 });
 
 describe('gateway view (pure)', () => {
@@ -259,17 +262,17 @@ describe('manual ticks', () => {
       expect.objectContaining({ done: true, note: 'Signed off', by: 'u-tutor' })
     );
     // the mocked tick does not change stored ticks, so the learner is not ready yet -> nobody is told
-    expect(notifyGatewayReady).not.toHaveBeenCalled();
+    expect(notifyGatewayReadyOrRelease).not.toHaveBeenCalled();
   });
 
   it('tells tutors + admins once when the tick completes the checklist', async () => {
     vi.mocked(q.getApprEnrolment).mockResolvedValue(enrolment({ gatewayItems: ALL_MANUAL_DONE }) as never);
     await setGatewayItem(admin, ENR, 'tutor', { done: true });
-    expect(notifyGatewayReady).toHaveBeenCalledTimes(1);
-    expect(notifyGatewayReady).toHaveBeenCalledWith({ enrolmentId: ENR, learnerId: LRN, organizationId: ORG });
+    expect(notifyGatewayReadyOrRelease).toHaveBeenCalledTimes(1);
+    expect(notifyGatewayReadyOrRelease).toHaveBeenCalledWith({ enrolmentId: ENR, learnerId: LRN, organizationId: ORG });
     vi.mocked(q.claimGatewayReady).mockResolvedValue(false);
     await setGatewayItem(admin, ENR, 'tutor', { done: true });
-    expect(notifyGatewayReady).toHaveBeenCalledTimes(1);
+    expect(notifyGatewayReadyOrRelease).toHaveBeenCalledTimes(1);
   });
 
   it('an AUTO item cannot be ticked (400); a key not on the checklist is 404', async () => {
@@ -375,7 +378,7 @@ describe('EPA', () => {
 
   it('FAIL clears achieved_at; clearing a recorded result is ADMIN only and clears everything derived', async () => {
     passed({ epaResult: 'PASS', epaResultDate: '2026-07-01', achievedAt: '2026-07-01T00:00:00Z' });
-    await updateEpa(tutor, ENR, { epaResult: 'FAIL' });
+    await updateEpa(admin, ENR, { epaResult: 'FAIL' });
     expect(vi.mocked(q.setEpa).mock.calls[0][2]).toMatchObject({ epaResult: 'FAIL', achievedAt: null });
 
     await expect(updateEpa(tutor, ENR, { epaResult: null })).rejects.toMatchObject({ statusCode: 403 });
@@ -391,6 +394,97 @@ describe('EPA', () => {
     passed();
     vi.mocked(q.setEpa).mockResolvedValueOnce(null as never);
     await expect(updateEpa(admin, ENR, { epaBookedDate: '2026-06-01' })).rejects.toMatchObject({ statusCode: 409 });
+  });
+});
+
+describe('EPA: recorded results, date sanity, optimistic concurrency', () => {
+  const NOW = new Date('2026-08-01T10:00:00Z');
+  const passed = (over: Record<string, unknown> = {}) =>
+    vi
+      .mocked(q.getApprEnrolment)
+      .mockResolvedValue(enrolment({ gatewayPassedAt: '2026-05-01T09:00:00Z', ...over }) as never);
+
+  it('once a result exists, ANY change to the result or its date is admin-only; unchanged values and booking are not', async () => {
+    passed({ epaResult: 'PASS', epaResultDate: '2026-07-01', epaBookedDate: '2026-06-01' });
+    await expect(updateEpa(tutor, ENR, { epaResult: 'MERIT' }, NOW)).rejects.toMatchObject({ statusCode: 403 });
+    await expect(updateEpa(tutor, ENR, { epaResultDate: '2026-07-02' }, NOW)).rejects.toMatchObject({
+      statusCode: 403
+    });
+    expect(q.setEpa).not.toHaveBeenCalled();
+    // same values re-sent, or only the booked date: allowed for staff
+    await expect(updateEpa(tutor, ENR, { epaResult: 'PASS', epaResultDate: '2026-07-01' }, NOW)).resolves.toBeTruthy();
+    await expect(updateEpa(tutor, ENR, { epaBookedDate: '2026-06-02' }, NOW)).resolves.toBeTruthy();
+    await expect(updateEpa(admin, ENR, { epaResult: 'MERIT' }, NOW)).resolves.toBeTruthy();
+  });
+
+  it('result date: not before the gateway date, not in the future; booked date: not before the gateway date', async () => {
+    passed();
+    await expect(updateEpa(tutor, ENR, { epaResult: 'PASS', epaResultDate: '2026-04-30' }, NOW)).rejects.toMatchObject({
+      statusCode: 400
+    });
+    await expect(updateEpa(tutor, ENR, { epaResult: 'PASS', epaResultDate: '2026-08-02' }, NOW)).rejects.toMatchObject({
+      statusCode: 400
+    });
+    await expect(updateEpa(tutor, ENR, { epaBookedDate: '2026-04-30' }, NOW)).rejects.toMatchObject({
+      statusCode: 400
+    });
+    expect(q.setEpa).not.toHaveBeenCalled();
+    await expect(updateEpa(tutor, ENR, { epaResult: 'PASS', epaResultDate: '2026-05-01' }, NOW)).resolves.toBeTruthy(); // same day as the gateway
+    await expect(updateEpa(tutor, ENR, { epaResult: 'PASS', epaResultDate: '2026-08-01' }, NOW)).resolves.toBeTruthy(); // today
+    await expect(updateEpa(tutor, ENR, { epaBookedDate: '2026-12-01' }, NOW)).resolves.toBeTruthy(); // booking ahead is fine
+  });
+
+  it('writes conditionally on the EPA fields as read: a concurrent change is a 409', async () => {
+    passed({ epaBookedDate: '2026-06-01' });
+    await updateEpa(tutor, ENR, { epaBookedDate: '2026-06-15' }, NOW);
+    expect(vi.mocked(q.setEpa).mock.calls[0][3]).toEqual({
+      epaBookedDate: '2026-06-01',
+      epaResult: null,
+      epaResultDate: null
+    });
+    vi.mocked(q.setEpa).mockResolvedValueOnce(null as never);
+    await expect(updateEpa(tutor, ENR, { epaBookedDate: '2026-06-20' }, NOW)).rejects.toMatchObject({
+      statusCode: 409
+    });
+  });
+});
+
+describe('ready alert survives a failed send', () => {
+  it('notifyGatewayReadyOrRelease is used after a claim (the release itself is covered in the notifications tests)', async () => {
+    vi.mocked(q.getApprEnrolment).mockResolvedValue(enrolment({ gatewayItems: ALL_MANUAL_DONE }) as never);
+    await setGatewayItem(admin, ENR, 'tutor', { done: true });
+    expect(notifyGatewayReadyOrRelease).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('programme checklist recompute is batched', () => {
+  it('recomputes in transactions of 100, claims the ready flag, and notifies only after each batch', async () => {
+    const ids = Array.from({ length: 250 }, (_, i) => `e${i}`);
+    vi.mocked(q.listEnrolmentIdsForProgramme).mockResolvedValue(ids);
+    vi.mocked(q.getApprEnrolment).mockImplementation((async (id: string) =>
+      enrolment({ id, gatewayItems: ALL_MANUAL_DONE })) as never);
+    vi.mocked(q.getEnrolmentLearnerIds).mockImplementation(
+      (async (batch: string[]) => new Map(batch.map((id) => [id, `l-${id}`]))) as never
+    );
+    const events: string[] = [];
+    vi.mocked(q.claimGatewayReady).mockImplementation((async (_tx: unknown, id: string) => {
+      events.push(`claim ${id}`);
+      return id === 'e0' || id === 'e150';
+    }) as never);
+    vi.mocked(notifyGatewayReadyOrRelease).mockImplementation(
+      (async (c: { enrolmentId: string }) => void events.push(`notify ${c.enrolmentId}`)) as never
+    );
+    await putGatewayChecklist(admin, PROG, { checklist: [{ key: 'tutor', label: 'T', kind: 'MANUAL' }] });
+    expect(q.writeEnrolmentCache).toHaveBeenCalledTimes(250);
+    // batch 1 (e0..e99) commits and notifies e0 before batch 2 claims anything; e150 is in batch 2
+    expect(events.indexOf('notify e0')).toBeGreaterThan(events.indexOf('claim e99'));
+    expect(events.indexOf('notify e0')).toBeLessThan(events.indexOf('claim e100'));
+    expect(events.filter((e) => e.startsWith('notify'))).toEqual(['notify e0', 'notify e150']);
+    expect(notifyGatewayReadyOrRelease).toHaveBeenCalledWith({
+      enrolmentId: 'e150',
+      learnerId: 'l-e150',
+      organizationId: ORG
+    });
   });
 });
 

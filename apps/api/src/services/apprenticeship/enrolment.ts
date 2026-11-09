@@ -7,7 +7,7 @@ import {
   requireAuthed
 } from '@api/services/apprenticeship/access';
 import { buildGatewayView, buildGlhView, resolveChecklist } from '@api/services/apprenticeship/gateway-core';
-import { notifyGatewayReady, notifySafely } from '@api/services/apprenticeship/notifications';
+import { notifyGatewayReadyOrRelease } from '@api/services/apprenticeship/notifications';
 import { recomputeEnrolment, todayIso, type EnrolmentProgressDetail } from '@api/services/apprenticeship/progress';
 import { createOrgUser } from '@api/services/organization/users';
 import { createTutorAllocation } from '@api/services/organization/allocation';
@@ -559,13 +559,11 @@ export async function updateEnrolment(actor: Actor, enrolmentId: string, patch: 
   });
   // New hours / OTJ target can make the learner ready: the claim happened in the transaction, tell tutors + admins.
   if (detail?.gatewayReadyClaimed) {
-    await notifySafely('gateway ready', () =>
-      notifyGatewayReady({
-        enrolmentId,
-        learnerId: enrolment.learnerId,
-        organizationId: enrolment.organizationId
-      })
-    );
+    await notifyGatewayReadyOrRelease({
+      enrolmentId,
+      learnerId: enrolment.learnerId,
+      organizationId: enrolment.organizationId
+    });
   }
   await recordAudit({
     actor,

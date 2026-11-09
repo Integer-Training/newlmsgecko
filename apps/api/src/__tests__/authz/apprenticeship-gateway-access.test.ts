@@ -41,7 +41,7 @@ vi.mock('@cio/db/drizzle', () => ({ runInTransaction: (fn: (tx: unknown) => unkn
 vi.mock('@api/services/organization/users', () => ({ createOrgUser: vi.fn() }));
 vi.mock('@api/services/organization/allocation', () => ({ createTutorAllocation: vi.fn() }));
 vi.mock('@api/services/apprenticeship/notifications', () => ({
-  notifyGatewayReady: vi.fn(async () => undefined),
+  notifyGatewayReadyOrRelease: vi.fn(async () => undefined),
   notifySafely: async (_l: string, fn: () => Promise<void>) => {
     try {
       await fn();

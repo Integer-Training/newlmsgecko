@@ -1,5 +1,5 @@
 import { listTutorsForLearner, listTutorsForLearnerInOrg } from '@cio/db/queries/allocation';
-import { listOrgAdminIds } from '@cio/db/queries/apprenticeship';
+import { listOrgAdminIds, releaseGatewayReady } from '@cio/db/queries/apprenticeship';
 import { markNotificationsReadForEntity } from '@cio/db/queries/comms';
 import { emitNotification } from '@api/services/comms/notify';
 
@@ -78,6 +78,23 @@ export async function notifyGatewayReady(ctx: {
     entityType: ENROLMENT_ENTITY,
     entityId: ctx.enrolmentId
   });
+}
+
+/**
+ * Send the gateway-ready alert after the flag was claimed. If the send fails, release the claim (best-effort) so the
+ * daily scan retries instead of the alert being lost. Never throws.
+ */
+export async function notifyGatewayReadyOrRelease(ctx: {
+  enrolmentId: string;
+  learnerId: string;
+  organizationId: string;
+}): Promise<void> {
+  try {
+    await notifyGatewayReady(ctx);
+  } catch (error) {
+    console.error('[apprenticeship] gateway ready notification failed (released for retry):', error);
+    await releaseGatewayReady(ctx.enrolmentId).catch(() => undefined);
+  }
 }
 
 /** Run a notification without ever failing the caller (the evidence change has already committed). */

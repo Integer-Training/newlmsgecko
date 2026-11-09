@@ -16,6 +16,7 @@ vi.mock('@cio/db/queries/apprenticeship', () => ({
   listApprEvidenceTypes: vi.fn(async () => [{ key: 'assignment', label: 'Assignment', active: true }]),
   filterCriterionIdsInProgramme: vi.fn(async (_p: string, ids: string[]) => ids),
   insertApprUploads: vi.fn(async () => undefined),
+  lockApprEnrolment: vi.fn(async () => null),
   markUploadsAttached: vi.fn(async () => undefined),
   markUploadsRemoved: vi.fn(async () => undefined),
   filterUploadKeysInOrg: vi.fn(async (_o: string, keys: string[]) => keys),

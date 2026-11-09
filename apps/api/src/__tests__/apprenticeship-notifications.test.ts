@@ -8,16 +8,20 @@ vi.mock('@cio/db/queries/allocation', () => ({
   listTutorsForLearner: vi.fn(async () => []),
   listTutorsForLearnerInOrg: vi.fn(async () => [])
 }));
-vi.mock('@cio/db/queries/apprenticeship', () => ({ listOrgAdminIds: vi.fn(async () => []) }));
+vi.mock('@cio/db/queries/apprenticeship', () => ({
+  listOrgAdminIds: vi.fn(async () => []),
+  releaseGatewayReady: vi.fn(async () => undefined)
+}));
 vi.mock('@cio/db/queries/comms', () => ({ markNotificationsReadForEntity: vi.fn(async () => 0) }));
 vi.mock('@api/services/comms/notify', () => ({ emitNotification: vi.fn(async () => undefined) }));
 
 import { listTutorsForLearner, listTutorsForLearnerInOrg } from '@cio/db/queries/allocation';
-import { listOrgAdminIds } from '@cio/db/queries/apprenticeship';
+import { listOrgAdminIds, releaseGatewayReady } from '@cio/db/queries/apprenticeship';
 import { markNotificationsReadForEntity } from '@cio/db/queries/comms';
 import { emitNotification } from '@api/services/comms/notify';
 import {
   notifyGatewayReady,
+  notifyGatewayReadyOrRelease,
   notifyEvidenceReviewed,
   notifyEvidenceSubmitted,
   notifySafely
@@ -101,5 +105,32 @@ describe('notifyGatewayReady', () => {
     vi.mocked(listOrgAdminIds).mockResolvedValue([]);
     await notifyGatewayReady({ enrolmentId: 'enr-1', learnerId: 'l-1', organizationId: 'org-1' });
     expect(emitNotification).not.toHaveBeenCalled();
+  });
+});
+
+describe('notifyGatewayReadyOrRelease', () => {
+  const ctx = { enrolmentId: 'enr-1', learnerId: 'l-1', organizationId: 'org-1' };
+  beforeEach(() => {
+    vi.mocked(listTutorsForLearnerInOrg).mockResolvedValue([{ tutorId: 't1', email: null }] as never);
+    vi.mocked(listOrgAdminIds).mockResolvedValue([]);
+  });
+
+  it('sends normally and does NOT release the claim', async () => {
+    await notifyGatewayReadyOrRelease(ctx);
+    expect(emitNotification).toHaveBeenCalledTimes(1);
+    expect(releaseGatewayReady).not.toHaveBeenCalled();
+  });
+
+  it('a failed send releases the claim (best-effort) so the daily scan retries - and never throws', async () => {
+    vi.mocked(listOrgAdminIds).mockRejectedValueOnce(new Error('db blip'));
+    await expect(notifyGatewayReadyOrRelease(ctx)).resolves.toBeUndefined();
+    expect(releaseGatewayReady).toHaveBeenCalledWith('enr-1');
+    expect(emitNotification).not.toHaveBeenCalled();
+  });
+
+  it('even if the release itself fails nothing is thrown', async () => {
+    vi.mocked(listOrgAdminIds).mockRejectedValueOnce(new Error('db blip'));
+    vi.mocked(releaseGatewayReady).mockRejectedValueOnce(new Error('still down'));
+    await expect(notifyGatewayReadyOrRelease(ctx)).resolves.toBeUndefined();
   });
 });

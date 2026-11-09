@@ -8,6 +8,7 @@ import {
   insertFirstReviewIfNone,
   listGatewayReadyCandidates,
   listOrgAdminIds,
+  releaseGatewayReady,
   listEnrolmentsNeedingFirstReview,
   listReferencedUploadKeys,
   listUploadsForCleanup,
@@ -211,7 +212,26 @@ export async function runApprFirstReviewBackfill(opts: { today?: string; batchSi
  * Readiness uses the progress cache (the same values the last recompute wrote) with the shared gateway rule.
  */
 export async function runApprGatewayReadyScan(opts: { batchSize?: number } = {}) {
-  const candidates = await listGatewayReadyCandidates(opts.batchSize ?? 500);
+  const pageSize = opts.batchSize ?? 500;
+  let candidateCount = 0;
+  let flagged = 0;
+  let notifications = 0;
+  // Keyset-page through the WHOLE candidate set in id order, so no learner is ever skipped by a page limit.
+  let afterId: string | undefined;
+  for (;;) {
+    const candidates = await listGatewayReadyCandidates(pageSize, afterId);
+    if (candidates.length === 0) break;
+    afterId = candidates[candidates.length - 1].id;
+    candidateCount += candidates.length;
+    const result = await scanGatewayPage(candidates);
+    flagged += result.flagged;
+    notifications += result.notifications;
+    if (candidates.length < pageSize) break;
+  }
+  return { candidates: candidateCount, flagged, notifications };
+}
+
+async function scanGatewayPage(candidates: Awaited<ReturnType<typeof listGatewayReadyCandidates>>) {
   let flagged = 0;
   let notifications = 0;
   for (const c of candidates) {
@@ -237,16 +257,23 @@ export async function runApprGatewayReadyScan(opts: { batchSize?: number } = {})
     });
     if (!ready || !(await claimGatewayReadyNow(c.id))) continue;
     flagged += 1;
-    const [tutors, admins] = await Promise.all([
-      listTutorsForLearnerInOrg(c.learnerId, c.organizationId),
-      listOrgAdminIds(c.organizationId)
-    ]);
-    notifications += await notifyAll(
-      [...tutors.map((t) => t.tutorId), ...admins],
-      'appr.gateway.ready',
-      'appr_enrolment',
-      c.id
-    );
+    try {
+      const [tutors, admins] = await Promise.all([
+        listTutorsForLearnerInOrg(c.learnerId, c.organizationId),
+        listOrgAdminIds(c.organizationId)
+      ]);
+      notifications += await notifyAll(
+        [...tutors.map((t) => t.tutorId), ...admins],
+        'appr.gateway.ready',
+        'appr_enrolment',
+        c.id
+      );
+    } catch (error) {
+      // Could not even work out who to tell: undo the claim so tomorrow's scan retries this learner.
+      console.error('[apprenticeship] gateway ready send failed (will retry):', error);
+      flagged -= 1;
+      await releaseGatewayReady(c.id).catch(() => undefined);
+    }
   }
-  return { candidates: candidates.length, flagged, notifications };
+  return { flagged, notifications };
 }

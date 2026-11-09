@@ -1,6 +1,6 @@
 import * as schema from '@db/schema';
 
-import { and, db, eq, inArray, isNotNull, isNull, sql, type DbOrTxClient } from '@db/drizzle';
+import { and, db, eq, gt, inArray, isNotNull, isNull, sql, type DbOrTxClient } from '@db/drizzle';
 import { profileDisplayName } from './names';
 import { ROLE } from '@cio/utils/constants';
 
@@ -49,12 +49,24 @@ export async function setEpa(
     epaResult?: string | null;
     epaResultDate?: string | null;
     achievedAt?: string | null;
-  }
+  },
+  /** The EPA fields as the caller read them: the update only applies if they are unchanged (else null -> 409). */
+  expected?: { epaBookedDate: string | null; epaResult: string | null; epaResultDate: string | null }
 ) {
+  const same = (col: typeof e.epaBookedDate | typeof e.epaResult | typeof e.epaResultDate, v: string | null) =>
+    sql`${col} is not distinct from ${v}`;
   const [row] = await tx
     .update(e)
     .set(patch)
-    .where(and(eq(e.id, enrolmentId), isNotNull(e.gatewayPassedAt)))
+    .where(
+      and(
+        eq(e.id, enrolmentId),
+        isNotNull(e.gatewayPassedAt),
+        expected ? same(e.epaBookedDate, expected.epaBookedDate) : undefined,
+        expected ? same(e.epaResult, expected.epaResult) : undefined,
+        expected ? same(e.epaResultDate, expected.epaResultDate) : undefined
+      )
+    )
     .returning();
   return row ?? null;
 }
@@ -67,6 +79,17 @@ export async function claimGatewayReady(tx: DbOrTxClient, enrolmentId: string): 
     .where(and(eq(e.id, enrolmentId), isNull(e.gatewayReadyNotifiedAt), isNull(e.gatewayPassedAt)))
     .returning({ id: e.id });
   return rows.length > 0;
+}
+
+/** Take a row lock on the enrolment (learner evidence writes re-check the gateway lock under it). */
+export async function lockApprEnrolment(tx: DbOrTxClient, enrolmentId: string) {
+  const [row] = await tx.select().from(e).where(eq(e.id, enrolmentId)).for('update');
+  return row ?? null;
+}
+
+/** Best-effort undo of a claim whose notification could not be sent, so the daily scan retries it. */
+export async function releaseGatewayReady(enrolmentId: string, client: DbOrTxClient = db) {
+  await clearGatewayReady(client, enrolmentId);
 }
 
 /** Readiness dropped (evidence referred): clear the flag so the notification can fire again. */
@@ -116,7 +139,7 @@ export async function claimGatewayReadyNow(enrolmentId: string, client: DbOrTxCl
  * that does not claim, e.g. a programme-level one): not confirmed, not achieved, not yet notified. Carries the cached
  * progress the readiness rule needs; the scan decides who is actually ready.
  */
-export async function listGatewayReadyCandidates(limit: number, client: DbOrTxClient = db) {
+export async function listGatewayReadyCandidates(limit: number, afterId?: string, client: DbOrTxClient = db) {
   const p = schema.apprProgramme;
   return client
     .select({
@@ -138,7 +161,14 @@ export async function listGatewayReadyCandidates(limit: number, client: DbOrTxCl
     .from(e)
     .innerJoin(p, eq(p.id, e.programmeId))
     .leftJoin(schema.apprSettings, eq(schema.apprSettings.organizationId, e.organizationId))
-    .where(and(isNull(e.gatewayPassedAt), isNull(e.gatewayReadyNotifiedAt), isNull(e.achievedAt)))
-    .orderBy(e.createdAt)
+    .where(
+      and(
+        isNull(e.gatewayPassedAt),
+        isNull(e.gatewayReadyNotifiedAt),
+        isNull(e.achievedAt),
+        afterId ? gt(e.id, afterId) : undefined
+      )
+    )
+    .orderBy(e.id)
     .limit(limit);
 }

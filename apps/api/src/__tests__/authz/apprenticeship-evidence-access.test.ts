@@ -30,6 +30,7 @@ vi.mock('@cio/db/queries/apprenticeship', () => ({
   insertApprEvidence: vi.fn(),
   insertApprReview: vi.fn(async () => ({ id: 'rev-1' })),
   insertApprUploads: vi.fn(async () => undefined),
+  lockApprEnrolment: vi.fn(async () => null),
   sumGlhLogMinutes: vi.fn(async () => 0),
   filterUploadKeysInOrg: vi.fn(async (_o: string, keys: string[]) => keys),
   markUploadsAttached: vi.fn(async () => undefined),
@@ -244,6 +245,7 @@ beforeEach(() => {
   vi.mocked(q.getApprEnrolmentByProgrammeLearner).mockResolvedValue(ENROLMENT as never);
   vi.mocked(q.filterCriterionIdsInProgramme).mockImplementation(async (_p, ids) => ids);
   vi.mocked(isTutorAllocatedToLearner).mockResolvedValue(false);
+  vi.mocked(q.lockApprEnrolment).mockResolvedValue(null as never);
 });
 
 // Phase B: enrolling a learner and the programme dates / hours stay admin-only; everything else is open to the
@@ -717,6 +719,28 @@ describe('at end-point assessment (gateway confirmed) the apprentice can no long
     expect((await callAs(EVIDENCE_ROUTES[7], selfActor)).status).toBe(403);
     expect(q.insertApprEvidence).not.toHaveBeenCalled();
     expect(q.updateApprEvidence).not.toHaveBeenCalled();
+  });
+
+  it('the apprentice cannot add a note to their evidence either', async () => {
+    expect((await callAs(EVIDENCE_ROUTES[9], selfActor)).status).toBe(403);
+    expect(q.insertEvidenceNote).not.toHaveBeenCalled();
+    expect((await call(EVIDENCE_ROUTES[9], 'admin')).status).toBe(201);
+  });
+
+  it('re-checks the lock INSIDE the transaction: a gateway confirmed after the first read still refuses the write', async () => {
+    // first read says open, but under the row lock the enrolment is already at gateway
+    vi.mocked(q.getApprEnrolment).mockResolvedValue(ENROLMENT as never);
+    vi.mocked(q.getApprEnrolmentByProgrammeLearner).mockResolvedValue(ENROLMENT as never);
+    vi.mocked(q.lockApprEnrolment).mockResolvedValue(atGateway as never);
+    expect((await callAs(EVIDENCE_ROUTES[1], selfActor)).status).toBe(403);
+    expect((await callAs(EVIDENCE_ROUTES[7], selfActor)).status).toBe(403);
+    expect(q.insertApprEvidence).not.toHaveBeenCalled();
+    expect(q.updateApprEvidence).not.toHaveBeenCalled();
+    expect(q.lockApprEnrolment).toHaveBeenCalled();
+    // staff never take the lock path
+    vi.mocked(q.lockApprEnrolment).mockClear();
+    expect((await call(EVIDENCE_ROUTES[1], 'admin')).status).toBe(201);
+    expect(q.lockApprEnrolment).not.toHaveBeenCalled();
   });
 
   it('staff are unaffected (admin and allocated tutor can still add evidence)', async () => {

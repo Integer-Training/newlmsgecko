@@ -9,7 +9,7 @@ import {
   requireAuthed
 } from '@api/services/apprenticeship/access';
 import {
-  notifyGatewayReady,
+  notifyGatewayReadyOrRelease,
   notifyEvidenceReviewed,
   notifyEvidenceSubmitted,
   notifySafely
@@ -28,6 +28,7 @@ import {
   getApprEvidence,
   insertApprEvidence,
   insertApprUploads,
+  lockApprEnrolment,
   insertEvidenceNote,
   listApprEvidenceTypes,
   listEvidenceCriteriaDetail,
@@ -173,13 +174,25 @@ async function notifyIfGatewayReady(
   enrolment: { id: string; learnerId: string; organizationId: string } | null | undefined
 ) {
   if (!detail?.gatewayReadyClaimed || !enrolment) return;
-  await notifySafely('gateway ready', () =>
-    notifyGatewayReady({
-      enrolmentId: enrolment.id,
-      learnerId: enrolment.learnerId,
-      organizationId: enrolment.organizationId
-    })
-  );
+  await notifyGatewayReadyOrRelease({
+    enrolmentId: enrolment.id,
+    learnerId: enrolment.learnerId,
+    organizationId: enrolment.organizationId
+  });
+}
+
+/**
+ * Re-check the end-point-assessment lock UNDER A ROW LOCK on the enrolment, inside the evidence transaction: a gateway
+ * confirmed between the first check and this write wins, and the apprentice's write is refused.
+ */
+async function assertGatewayStillOpenForLearner(
+  tx: Parameters<Parameters<typeof runInTransaction>[0]>[0],
+  actor: Actor,
+  enrolmentId: string | null | undefined
+) {
+  if (isStaff(actor) || !enrolmentId) return;
+  const row = await lockApprEnrolment(tx, enrolmentId);
+  assertLearnerMayAddEvidence(actor, row);
 }
 
 function noteKindFor(actor: Actor, requested: ApprNoteKind | undefined): ApprNoteKind {
@@ -353,6 +366,7 @@ export async function createEvidence(actor: Actor, enrolmentId: string, input: E
   let result: { evidence: ApprEvidenceRow; detail: Awaited<ReturnType<typeof recomputeEnrolment>> };
   try {
     result = await runInTransaction(async (tx) => {
+      await assertGatewayStillOpenForLearner(tx, actor, enrolment.id);
       const evidence = await insertApprEvidence(tx, {
         id: evidenceId,
         organizationId: enrolment.organizationId,
@@ -459,6 +473,7 @@ export async function updateEvidence(actor: Actor, evidenceId: string, input: Ev
   const keptKeys = files?.map((f) => f.key) ?? [];
   const droppedKeys = files ? evidence.files.map((f) => f.key).filter((k) => !keptKeys.includes(k)) : [];
   const result = await runInTransaction(async (tx) => {
+    await assertGatewayStillOpenForLearner(tx, actor, enrolment?.id);
     // Conditional on the status we read: a concurrent review makes this a 409 instead of a silent overwrite.
     const updated = await updateApprEvidence(tx, evidenceId, patch, evidence.status);
     if (!updated)
@@ -580,6 +595,11 @@ export async function reviewEvidence(actor: Actor, evidenceId: string, input: Ev
 export async function addEvidenceNote(actor: Actor, evidenceId: string, input: EvidenceNoteCreateInput) {
   const a = requireAuthed(actor);
   const evidence = await loadEvidenceForActor(actor, evidenceId);
+  // Once at end-point assessment the apprentice can no longer add notes to their evidence either.
+  assertLearnerMayAddEvidence(
+    actor,
+    await getApprEnrolmentByProgrammeLearner(evidence.programmeId, evidence.learnerId)
+  );
   // A note changes no progress value, so there is no recompute — the transaction is just the client handle.
   const note = await runInTransaction((tx) =>
     insertEvidenceNote(tx, {

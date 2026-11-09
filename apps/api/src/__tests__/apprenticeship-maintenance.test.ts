@@ -16,7 +16,8 @@ vi.mock('@cio/db/queries/apprenticeship', () => ({
   insertFirstReviewIfNone: vi.fn(async () => true),
   listGatewayReadyCandidates: vi.fn(async () => []),
   claimGatewayReadyNow: vi.fn(async () => true),
-  listOrgAdminIds: vi.fn(async () => [])
+  listOrgAdminIds: vi.fn(async () => []),
+  releaseGatewayReady: vi.fn(async () => undefined)
 }));
 vi.mock('@cio/db/queries/allocation', () => ({ listTutorsForLearnerInOrg: vi.fn(async () => []) }));
 vi.mock('@cio/db/queries/comms', () => ({ insertNotification: vi.fn(async () => ({ id: 'n' })) }));
@@ -279,6 +280,31 @@ describe('runApprGatewayReadyScan (safety net for a non-claiming recompute)', ()
       entityType: 'appr_enrolment',
       entityId: 'enr-1'
     });
+  });
+
+  it('pages through the WHOLE candidate set by id (keyset), never stopping at the first page', async () => {
+    vi.mocked(q.listGatewayReadyCandidates)
+      .mockResolvedValueOnce([cand({ id: 'a', unitsComplete: 0 }), cand({ id: 'b', unitsComplete: 0 })] as never)
+      .mockResolvedValueOnce([cand({ id: 'c', unitsComplete: 0 }), cand({ id: 'd' })] as never)
+      .mockResolvedValueOnce([cand({ id: 'e', unitsComplete: 0 })] as never);
+    vi.mocked(listTutorsForLearnerInOrg).mockResolvedValue([] as never);
+    vi.mocked(q.listOrgAdminIds).mockResolvedValue(['adm']);
+    const res = await runApprGatewayReadyScan({ batchSize: 2 });
+    expect(res).toEqual({ candidates: 5, flagged: 1, notifications: 1 });
+    expect(vi.mocked(q.listGatewayReadyCandidates).mock.calls.map((c) => [c[0], c[1]])).toEqual([
+      [2, undefined],
+      [2, 'b'],
+      [2, 'd']
+    ]);
+    expect(q.claimGatewayReadyNow).toHaveBeenCalledWith('d');
+  });
+
+  it('releases the claim when the alert cannot be sent, so tomorrow retries it', async () => {
+    vi.mocked(q.listGatewayReadyCandidates).mockResolvedValueOnce([cand()] as never);
+    vi.mocked(listTutorsForLearnerInOrg).mockRejectedValueOnce(new Error('db blip'));
+    const res = await runApprGatewayReadyScan();
+    expect(q.releaseGatewayReady).toHaveBeenCalledWith('enr-1');
+    expect(res).toEqual({ candidates: 1, flagged: 0, notifications: 0 });
   });
 
   it('does nothing for learners who are not ready (any unit, OTJ or manual item missing)', async () => {
