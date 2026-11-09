@@ -22,6 +22,7 @@ import { recordAudit } from '@cio/db/audit';
 import { runInTransaction } from '@cio/db/drizzle';
 import {
   filterCriterionIdsInProgramme,
+  filterUploadKeysInOrg,
   getApprEnrolmentByProgrammeLearner,
   getApprEvidence,
   insertApprEvidence,
@@ -123,12 +124,26 @@ function canReview(actor: Actor, evidence: ApprEvidenceRow): boolean {
 }
 
 /** Keys must sit under this evidence's own prefix (or already be on the row) — blocks key injection across learners. */
-function assertFileKeys(files: EvidenceFileInput[], prefix: string, existing: ApprEvidenceFile[] = []): void {
+async function assertFileKeys(
+  files: EvidenceFileInput[],
+  prefix: string,
+  scope: { organizationId: string; learnerId: string },
+  existing: ApprEvidenceFile[] = []
+): Promise<void> {
   const owned = new Set(existing.map((f) => f.key));
   for (const f of files) {
     if (!owned.has(f.key) && !f.key.startsWith(prefix))
       throw badRequest('Invalid file reference for this evidence', 'files');
     assertAllowedFile(f);
+  }
+  // NEW keys must still be a live upload issued to this learner (the clean-up job may have collected an old one).
+  const fresh = files.filter((f) => !owned.has(f.key)).map((f) => f.key);
+  if (fresh.length === 0) return;
+  const live = new Set(
+    await filterUploadKeysInOrg(scope.organizationId, fresh, { learnerId: scope.learnerId, notRemoved: true })
+  );
+  if (fresh.some((k) => !live.has(k))) {
+    throw badRequest('This file upload has expired — please upload it again', 'files');
   }
 }
 
@@ -301,7 +316,11 @@ export async function createEvidence(actor: Actor, enrolmentId: string, input: E
 
   if (input.files.length > 0 && !input.evidenceId) throw badRequest('Upload the files before saving', 'files');
   const evidenceId = input.evidenceId ?? randomUUID();
-  assertFileKeys(input.files, apprenticeshipEvidenceKeyPrefix(enrolment.programmeId, enrolment.learnerId, evidenceId));
+  await assertFileKeys(
+    input.files,
+    apprenticeshipEvidenceKeyPrefix(enrolment.programmeId, enrolment.learnerId, evidenceId),
+    enrolment
+  );
 
   if (input.taskId) await assertTaskForEvidence(input.taskId, enrolment);
 
@@ -390,9 +409,10 @@ export async function updateEvidence(actor: Actor, evidenceId: string, input: Ev
     ? await assertCriteriaInProgramme(evidence.programmeId, input.criterionIds)
     : undefined;
   if (input.files) {
-    assertFileKeys(
+    await assertFileKeys(
       input.files,
       apprenticeshipEvidenceKeyPrefix(evidence.programmeId, evidence.learnerId, evidence.id),
+      evidence,
       evidence.files
     );
   }

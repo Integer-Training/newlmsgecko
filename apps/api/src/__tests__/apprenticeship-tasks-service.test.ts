@@ -35,6 +35,12 @@ vi.mock('@cio/db/queries/apprenticeship', () => ({
   deleteApprTask: vi.fn(),
   clearEvidenceTaskId: vi.fn(async () => ['ev-1']),
   listTaskEvidenceStatuses: vi.fn(),
+  lockApprTask: vi.fn(async () => undefined),
+  updateTaskPlan: vi.fn(),
+  getPlanItem: vi.fn(),
+  deletePlannedItemTasks: vi.fn(),
+  deletePlanItem: vi.fn(async () => undefined),
+  isTutorAllocatedToPlanLearner: vi.fn(async () => false),
   setApprTaskStatus: vi.fn(async () => true),
   countPlanTasksWithEvidence: vi.fn(async () => 0),
   deleteAllPlannedPlanTasks: vi.fn(),
@@ -377,7 +383,8 @@ describe('individual tasks + brief files', () => {
       dueDate: '2026-03-01',
       overdueNotifiedAt: null
     });
-    expect(q.markUploadsRemoved).toHaveBeenCalledWith([own], { tx: true });
+    // every dropped key starts its grace period (the job still protects keys the plan lists)
+    expect(q.markUploadsRemoved).toHaveBeenCalledWith([own, brief], { tx: true });
   });
 
   it('deleting a task detaches its evidence (keeps it) and a learner of another enrolment cannot reach it', async () => {
@@ -494,6 +501,90 @@ describe('task status follows the latest linked evidence (same transaction)', ()
     await updateEvidence(admin, EV, { taskId: OTHER_TASK });
     const synced = vi.mocked(q.setApprTaskStatus).mock.calls.map((c) => c[1]);
     expect(new Set(synced)).toEqual(new Set([TASK, OTHER_TASK]));
+  });
+});
+
+describe('row lock before status recompute', () => {
+  it('locks the task row BEFORE reading its evidence, so concurrent writes cannot overwrite COMPLETE', async () => {
+    const order: string[] = [];
+    vi.mocked(q.lockApprTask).mockImplementation((async () => void order.push('lock')) as never);
+    vi.mocked(q.listTaskEvidenceStatuses).mockImplementation((async () => {
+      order.push('read');
+      return [{ id: 'e', status: 'ACCEPTED' }];
+    }) as never);
+    vi.mocked(q.setApprTaskStatus).mockImplementation((async () => void order.push('write')) as never);
+    await syncTaskStatuses({} as never, [TASK]);
+    expect(order).toEqual(['lock', 'read', 'write']);
+  });
+});
+
+describe('plan files: removal + sync keep task-own files', () => {
+  it('plan edit, item edit/delete and plan delete release dropped / removed keys', async () => {
+    const k = (n: string) => `apprenticeship/plans/${PLAN}/${n}.pdf`;
+    vi.mocked(q.getTaskPlan).mockResolvedValue(
+      plan({
+        files: [
+          { key: k('a'), name: 'a' },
+          { key: k('b'), name: 'b' }
+        ]
+      }) as never
+    );
+    vi.mocked(q.updateTaskPlan).mockResolvedValue({ id: PLAN } as never);
+    const {
+      updatePlan,
+      deletePlan: delPlan,
+      deletePlanItemById
+    } = await import('@api/services/apprenticeship/task-plans');
+    await updatePlan(admin, PLAN, { files: [{ key: k('a'), name: 'a' }] });
+    expect(q.markUploadsRemoved).toHaveBeenLastCalledWith([k('b')], { tx: true });
+
+    vi.mocked(q.getPlanItem).mockResolvedValue(item(ITEM1, 0, { files: [{ key: k('i'), name: 'i' }] }) as never);
+    vi.mocked(q.deletePlannedItemTasks).mockResolvedValue(0 as never);
+    await deletePlanItemById(admin, PLAN, ITEM1);
+    expect(q.markUploadsRemoved).toHaveBeenLastCalledWith([k('i')], { tx: true });
+
+    vi.mocked(q.listPlanItems).mockResolvedValue([item(ITEM1, 0, { files: [{ key: k('i'), name: 'i' }] })] as never);
+    await delPlan(admin, PLAN);
+    expect(q.markUploadsRemoved).toHaveBeenLastCalledWith([k('a'), k('b'), k('i')], { tx: true });
+  });
+
+  it('sync replaces plan briefs but keeps files uploaded for the task itself', async () => {
+    const own = `apprenticeship/${PROG}/${LRN}/tasks/${TASK}/own.pdf`;
+    const oldBrief = `apprenticeship/plans/${PLAN}/old.pdf`;
+    const newBrief = `apprenticeship/plans/${PLAN}/new.pdf`;
+    vi.mocked(q.listPlanItems).mockResolvedValue([
+      item(ITEM1, 0, { title: 'Task 1', files: [{ key: newBrief, name: 'new' }] })
+    ] as never);
+    vi.mocked(q.listPlannedPlanTasks).mockResolvedValue([
+      {
+        task: task({
+          files: [
+            { key: oldBrief, name: 'old' },
+            { key: own, name: 'own' }
+          ],
+          dueDate: '2026-01-01'
+        }),
+        startDate: '2026-01-01'
+      }
+    ] as never);
+    vi.mocked(q.updateApprTask).mockResolvedValue({ id: TASK } as never);
+    await syncPlan(admin, PLAN);
+    expect(vi.mocked(q.updateApprTask).mock.calls[0][2].files).toEqual([
+      { key: newBrief, name: 'new' },
+      { key: own, name: 'own' }
+    ]);
+  });
+});
+
+describe('plan brief download access', () => {
+  it('a tutor needs an allocated learner holding a task from the plan (else 404); admin always', async () => {
+    const { signPlanDownloads } = await import('@api/services/apprenticeship/task-plans');
+    const key = `apprenticeship/plans/${PLAN}/brief.pdf`;
+    vi.mocked(q.getTaskPlan).mockResolvedValue(plan({ files: [{ key, name: 'b' }] }) as never);
+    await expect(signPlanDownloads(tutor, PLAN, [key])).rejects.toMatchObject({ statusCode: 404 });
+    vi.mocked(q.isTutorAllocatedToPlanLearner).mockResolvedValueOnce(true);
+    await expect(signPlanDownloads(tutor, PLAN, [key])).resolves.toBeTruthy();
+    await expect(signPlanDownloads(admin, PLAN, [key])).resolves.toBeTruthy();
   });
 });
 

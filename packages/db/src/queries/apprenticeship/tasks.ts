@@ -332,6 +332,26 @@ export async function listPlannedPlanTasks(planId: string, client: DbOrTxClient 
     .where(and(eq(t.planId, planId), eq(t.status, 'PLANNED')));
 }
 
+/** Take a row lock on the task so concurrent evidence writes recompute its status one after the other. */
+export async function lockApprTask(tx: DbOrTxClient, taskId: string) {
+  await tx.select({ id: t.id }).from(t).where(eq(t.id, taskId)).for('update');
+}
+
+/** Is this tutor allocated to any learner holding a task from the plan? (plan-brief download access) */
+export async function isTutorAllocatedToPlanLearner(planId: string, tutorId: string, client: DbOrTxClient = db) {
+  const [row] = await client
+    .select({ n: sql<number>`1` })
+    .from(t)
+    .where(
+      and(
+        eq(t.planId, planId),
+        sql`exists (select 1 from tutor_allocation ta where ta.learner_id = ${sql.raw('"appr_task"."learner_id"')} and ta.tutor_id = ${tutorId})`
+      )
+    )
+    .limit(1);
+  return Boolean(row);
+}
+
 /** Newest-activity-first evidence statuses of one task (input of taskStatusFromEvidence). */
 export async function listTaskEvidenceStatuses(taskId: string, client: DbOrTxClient = db) {
   const ev = schema.apprEvidence;
@@ -427,7 +447,7 @@ export async function claimOverdueTasks(today: string, limit: number, client: Db
         isNull(t.overdueNotifiedAt)
       )
     )
-    .returning({ id: t.id, learnerId: t.learnerId, title: t.title });
+    .returning({ id: t.id, learnerId: t.learnerId, organizationId: t.organizationId, title: t.title });
 }
 
 /** Notification deep links: task id → its enrolment, title and the learner's display name. */

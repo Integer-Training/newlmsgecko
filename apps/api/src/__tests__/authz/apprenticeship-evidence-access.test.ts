@@ -30,6 +30,7 @@ vi.mock('@cio/db/queries/apprenticeship', () => ({
   insertApprEvidence: vi.fn(),
   insertApprReview: vi.fn(async () => ({ id: 'rev-1' })),
   insertApprUploads: vi.fn(async () => undefined),
+  filterUploadKeysInOrg: vi.fn(async (_o: string, keys: string[]) => keys),
   markUploadsAttached: vi.fn(async () => undefined),
   markUploadsRemoved: vi.fn(async () => undefined),
   updateApprEvidence: vi.fn(),
@@ -333,6 +334,20 @@ describe('file keys must be under the learner evidence prefix', () => {
     const res = await create([{ key: OWN_KEY, name: 'a.pdf', type: 'application/pdf' }]);
     expect(res.status).toBe(201);
     expect(q.insertApprEvidence).toHaveBeenCalledTimes(1);
+  });
+  it('a NEW key with no live upload row (expired / collected / another learner) → 400 "upload expired"; kept keys are not re-checked', async () => {
+    vi.mocked(q.filterUploadKeysInOrg).mockResolvedValueOnce([]);
+    const res = await create([{ key: OWN_KEY, name: 'a.pdf', type: 'application/pdf' }]);
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(await res.json())).toContain('expired');
+    expect(q.insertApprEvidence).not.toHaveBeenCalled();
+    // the lookup is scoped to the learner and refuses removed rows
+    await create([{ key: OWN_KEY, name: 'a.pdf', type: 'application/pdf' }]);
+    expect(vi.mocked(q.filterUploadKeysInOrg).mock.calls.at(-1)).toEqual([
+      ORG,
+      [OWN_KEY],
+      { learnerId: LRN, notRemoved: true }
+    ]);
   });
   it('an unaccepted file type → 400', async () => {
     const res = await create([{ key: OWN_KEY, name: 'a.exe', type: 'application/x-msdownload' }]);

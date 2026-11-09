@@ -41,12 +41,24 @@ export async function markUploadsRemoved(keys: string[], client: DbOrTxClient = 
 }
 
 /** Which of these keys were issued to this organization (key-injection guard for plan / task brief files). */
-export async function filterUploadKeysInOrg(organizationId: string, keys: string[], client: DbOrTxClient = db) {
+export async function filterUploadKeysInOrg(
+  organizationId: string,
+  keys: string[],
+  opts: { learnerId?: string; notRemoved?: boolean } = {},
+  client: DbOrTxClient = db
+) {
   if (keys.length === 0) return [];
   const rows = await client
     .select({ key: schema.apprUpload.key })
     .from(schema.apprUpload)
-    .where(and(eq(schema.apprUpload.organizationId, organizationId), inArray(schema.apprUpload.key, keys)));
+    .where(
+      and(
+        eq(schema.apprUpload.organizationId, organizationId),
+        inArray(schema.apprUpload.key, keys),
+        opts.learnerId ? eq(schema.apprUpload.learnerId, opts.learnerId) : undefined,
+        opts.notRemoved ? isNull(schema.apprUpload.removedAt) : undefined
+      )
+    );
   return rows.map((r) => r.key);
 }
 

@@ -14,7 +14,7 @@ import type { Actor } from '@cio/db/actor';
 import { recordAudit } from '@cio/db/audit';
 import { runInTransaction } from '@cio/db/drizzle';
 import {
-  countOpenReviewsFrom,
+  countOpenReviews,
   getApprEnrolment,
   getApprProgramme,
   getApprReview,
@@ -24,7 +24,7 @@ import {
   type ApprReviewRow
 } from '@cio/db/queries/apprenticeship';
 import { APPR_REVIEW_STATUS_LABELS, type ApprReviewStatus } from '@cio/utils/constants/apprenticeship';
-import { isReviewOverdue, nextReviewDate, reviewFullySigned } from '@cio/utils/functions/apprenticeship-progress';
+import { firstReviewDate, isReviewOverdue, reviewFullySigned } from '@cio/utils/functions/apprenticeship-progress';
 import type { ReviewCreateInput, ReviewSignInput, ReviewUpdateInput } from '@cio/utils/validation/apprenticeship';
 
 // Gecko Apprenticeships — progress reviews (every programme.reviewIntervalWeeks). Lifecycle:
@@ -240,7 +240,7 @@ export async function signReview(actor: Actor, reviewId: string, input: ReviewSi
     let next: string | null = null;
     if (complete) {
       const detail = await buildEnrolmentProgress(enrolment.id, tx);
-      next = nextReviewDate(review.heldDate ?? today, programme?.reviewIntervalWeeks ?? 12);
+      next = firstReviewDate(review.heldDate ?? today, programme?.reviewIntervalWeeks ?? 12, today);
       completion = {
         status: 'COMPLETE',
         snapshot: detail
@@ -266,7 +266,7 @@ export async function signReview(actor: Actor, reviewId: string, input: ReviewSi
     );
     if (!updated) return null;
     let scheduledNext = false;
-    if (complete && next && (await countOpenReviewsFrom(tx, enrolment.id, today, review.id)) === 0) {
+    if (complete && next && (await countOpenReviews(tx, enrolment.id, review.id)) === 0) {
       await insertApprReview(tx, {
         organizationId: enrolment.organizationId,
         enrolmentId: enrolment.id,

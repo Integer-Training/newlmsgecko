@@ -23,6 +23,7 @@ import {
   listOverdueTasks,
   listTaskCriteria,
   listTaskEvidenceStatuses,
+  lockApprTask,
   listTasksForEnrolment,
   markUploadsAttached,
   markUploadsRemoved,
@@ -80,6 +81,8 @@ export async function assertTaskForEvidence(taskId: string, owner: TaskOwnerCont
  */
 export async function syncTaskStatuses(tx: DbOrTxClient, taskIds: (string | null | undefined)[]): Promise<void> {
   for (const taskId of new Set(taskIds.filter((id): id is string => Boolean(id)))) {
+    // Lock first: concurrent evidence writes then recompute one after the other and COMPLETE cannot be overwritten.
+    await lockApprTask(tx, taskId);
     const linked = await listTaskEvidenceStatuses(taskId, tx);
     await setApprTaskStatus(tx, taskId, taskStatusFromEvidence(linked));
   }
@@ -312,11 +315,8 @@ export async function updateTask(actor: Actor, taskId: string, input: TaskUpdate
 
   const { criterionIds: _ids, files, ...fields } = input;
   const keptKeys = files?.map((f) => f.key) ?? [];
-  // Only files this task owns (its own prefix) are released for clean-up; plan briefs are shared with the plan.
-  const ownPrefix = apprenticeshipTaskKeyPrefix(task.programmeId, task.learnerId, task.id);
-  const droppedKeys = files
-    ? task.files.map((f) => f.key).filter((k) => k.startsWith(ownPrefix) && !keptKeys.includes(k))
-    : [];
+  // Dropped files start their clean-up grace; a key the plan (or another record) still lists is protected by the job.
+  const droppedKeys = files ? task.files.map((f) => f.key).filter((k) => !keptKeys.includes(k)) : [];
   const dueChanged = input.dueDate !== undefined && input.dueDate !== task.dueDate;
 
   const updated = await runInTransaction(async (tx) => {
@@ -342,12 +342,11 @@ export async function updateTask(actor: Actor, taskId: string, input: TaskUpdate
 export async function deleteTask(actor: Actor, taskId: string) {
   assertStaff(actor);
   const task = await loadTaskForActor(actor, taskId);
-  const ownPrefix = apprenticeshipTaskKeyPrefix(task.programmeId, task.learnerId, task.id);
   const detached = await runInTransaction(async (tx) => {
     const evidenceIds = await clearEvidenceTaskId(tx, taskId);
     await deleteApprTask(tx, taskId);
     await markUploadsRemoved(
-      task.files.map((f) => f.key).filter((k) => k.startsWith(ownPrefix)),
+      task.files.map((f) => f.key),
       tx
     );
     return evidenceIds.length;

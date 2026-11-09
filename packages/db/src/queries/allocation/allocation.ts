@@ -201,6 +201,17 @@ export async function listTutorsForLearner(learnerId: string): Promise<Allocated
     .where(eq(schema.tutorAllocation.learnerId, learnerId));
 }
 
+/** As listTutorsForLearner, but only allocations of ONE organization (used where the record's org is known). */
+export async function listTutorsForLearnerInOrg(learnerId: string, organizationId: string): Promise<AllocatedTutor[]> {
+  return db
+    .selectDistinct({ tutorId: schema.tutorAllocation.tutorId, email: schema.profile.email })
+    .from(schema.tutorAllocation)
+    .leftJoin(schema.profile, eq(schema.profile.id, schema.tutorAllocation.tutorId))
+    .where(
+      and(eq(schema.tutorAllocation.learnerId, learnerId), eq(schema.tutorAllocation.organizationId, organizationId))
+    );
+}
+
 /** Distinct STUDENT learners in this org's courses that have at least one course-team TUTOR assigned. */
 async function listCourseTeamLearnersForOrg(organizationId: string): Promise<AllocatedLearner[]> {
   const tut = alias(schema.groupmember, 'tut_member');

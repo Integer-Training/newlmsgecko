@@ -121,11 +121,41 @@ evidence straight as Accepted). Marking clears every tutor's "to mark" alert for
 the portfolio opens that evidence's sheet. Sending lives in `services/apprenticeship/notifications.ts`, called after the
 transaction and never fatal.
 
+## Round 2 — Deploy 1 (2026-11-09): task plans, tasks, progress reviews, upload clean-up
+
+Migration `0029_appr_tasks_reviews.sql` (additive): `appr_upload`, `appr_task_plan`, `appr_task_plan_item`,
+`appr_task_plan_item_criterion`, `appr_task`, `appr_task_criterion`, `appr_review`; columns `appr_evidence.task_id`,
+`appr_programme.review_interval_weeks` (default 12). Rules: `addMonths`, `taskDueDate`, `taskStatusFromEvidence`,
+`isTaskOverdue`, `isWithinWindow`, `nextReviewDate`, `firstReviewDate`, `isReviewOverdue`, `reviewFullySigned`.
+
+- **Task plans** (admin, Apprenticeships › Task plans): template per programme (title, valid from/to, brief files)
+  with tasks (title, details, evidence type, sequence, **month offset**, expected time, brief files, criteria).
+  **Assign** to learners → one task each, due = learner start + month offset (no start date → no due date); idempotent;
+  outside the valid window or archived → refused. **Unassign** removes only still-Planned tasks. **Update assigned
+  learners** pushes edits to Planned tasks (keeps a task's own files). Tutors may create **individual tasks** for their
+  allocated learners. Routes: `/apprenticeship/task-plans/*` (admin), `/apprenticeship/tasks/*`.
+- **Tasks**: portfolio **Tasks** tab in all shells; the learner "Answers" a task = evidence with `task_id`, criteria
+  pre-ticked. Task status (Planned → Submitted / Referred → Complete) is re-synced in the evidence transaction under a
+  row lock; overdue is computed on read. Learners lists + portfolio summary show overdue task counts.
+- **Progress reviews** (portfolio **Reviews** tab): first review auto-scheduled at start + interval (past → today + 7,
+  same rule everywhere: create, daily back-fill, start-date change). Scheduled → In progress → Awaiting signatures
+  (needs held date) → signed by tutor, learner (own view) and employer (recorded by staff on their behalf until employer
+  access exists, see `docs/APPRENTICESHIP-EMPLOYER.md`) → **Complete** (locked, snapshot stored, next review scheduled;
+  never two open reviews). Fields lock after the first signature; concurrent edits → 409.
+- **Notifications** (bell): `appr.task.assigned`, `appr.task.overdue`, `appr.review.sign`, `appr.review.due`; links open
+  the portfolio on `?tab=tasks|reviews`.
+- **Daily maintenance jobs** (`packages/core/src/services/apprenticeship/maintenance.ts`, scheduled in
+  `apps/jobs/src/workers/maintenance.ts`): `apprUploadCleanup` (deletes uploads never saved, or dropped, after 24 h;
+  never a key still referenced; re-checked per key), `apprTaskOverdueScan` and `apprReviewDueScan` (claim-before-notify,
+  once only; review scan also back-fills missing first reviews). Evidence saved with an expired upload → 400.
+- Verified: API 981 pass / 15 known baseline failures; independent security + correctness review (no HIGH; 1 MEDIUM +
+  5 LOW fixed); scripted local E2E 58 pass / 0 fail (plan → assign → answer → refer → resubmit → accept → complete;
+  access blocks; sync/unassign; review with three signatures → next review; notifications; upload clean-up; scans once).
+
 ## Known gaps / next
 
-- Files uploaded to a form that is then abandoned stay in storage (nothing deletes them).
-- Later: tasks, GLH, employer access, progress reviews, gateway/EPA, IQA sampling, PDF portfolio, email notifications
-  (when email is on).
+- Round 2 Deploy 2: GLH, gateway/EPA. Deploy 3: IQA sampling, PDF portfolio, summary dashboard.
+- Employer access: design only (`docs/APPRENTICESHIP-EMPLOYER.md`). Email notifications when email is on.
 
 Closed 2026-11-09: To mark shows the evidence Type and can add files; tutors marking from To mark get the criteria
 tree (programme structure GET is `requireStaff`); Add learner pickers show full names

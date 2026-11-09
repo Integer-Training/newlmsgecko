@@ -15,13 +15,13 @@ vi.mock('@cio/db/queries/apprenticeship', () => ({
   listEnrolmentsNeedingFirstReview: vi.fn(async () => []),
   insertFirstReviewIfNone: vi.fn(async () => true)
 }));
-vi.mock('@cio/db/queries/allocation', () => ({ listTutorsForLearner: vi.fn(async () => []) }));
+vi.mock('@cio/db/queries/allocation', () => ({ listTutorsForLearnerInOrg: vi.fn(async () => []) }));
 vi.mock('@cio/db/queries/comms', () => ({ insertNotification: vi.fn(async () => ({ id: 'n' })) }));
 vi.mock('@cio/core/utils/s3', () => ({ deleteFromS3: vi.fn(async () => ({ success: true })) }));
 vi.mock('@cio/core/config/storage', () => ({ getStorageConfig: () => ({ bucketDocuments: 'docs-bucket' }) }));
 
 import * as q from '@cio/db/queries/apprenticeship';
-import { listTutorsForLearner } from '@cio/db/queries/allocation';
+import { listTutorsForLearnerInOrg } from '@cio/db/queries/allocation';
 import { insertNotification } from '@cio/db/queries/comms';
 import { deleteFromS3 } from '@cio/core/utils/s3';
 import {
@@ -76,6 +76,19 @@ describe('runApprUploadCleanup', () => {
     expect(res).toMatchObject({ deleted: 1, keptReferenced: 1 });
   });
 
+  it('re-checks references immediately before each delete (a record may claim the key mid-run)', async () => {
+    vi.mocked(q.listUploadsForCleanup).mockResolvedValueOnce([row('x')] as never);
+    // batch check: clear; per-key re-check: now referenced
+    vi.mocked(q.listReferencedUploadKeys)
+      .mockResolvedValueOnce(new Set())
+      .mockResolvedValueOnce(new Set([row('x').key]));
+    const res = await runApprUploadCleanup({ now: NOW });
+    expect(deleteFromS3).not.toHaveBeenCalled();
+    expect(q.markUploadsAttached).toHaveBeenCalledWith([row('x').key]);
+    expect(q.deleteUploadRows).toHaveBeenCalledWith([]);
+    expect(res).toMatchObject({ deleted: 0, keptReferenced: 1 });
+  });
+
   it('is idempotent and batched: nothing due → no storage calls; a full batch continues until a short one', async () => {
     vi.mocked(q.listUploadsForCleanup).mockResolvedValueOnce([] as never);
     expect(await runApprUploadCleanup({ now: NOW })).toEqual({ selected: 0, deleted: 0, keptReferenced: 0, failed: 0 });
@@ -92,14 +105,18 @@ describe('runApprUploadCleanup', () => {
 
 describe('runApprTaskOverdueScan', () => {
   it('tells the apprentice and each allocated tutor once per claimed task, and nothing when nothing is claimed', async () => {
-    vi.mocked(q.claimOverdueTasks).mockResolvedValueOnce([{ id: 't1', learnerId: 'lrn', title: 'T' }] as never);
-    vi.mocked(listTutorsForLearner).mockResolvedValue([
+    vi.mocked(q.claimOverdueTasks).mockResolvedValueOnce([
+      { id: 't1', learnerId: 'lrn', organizationId: 'org-1', title: 'T' }
+    ] as never);
+    vi.mocked(listTutorsForLearnerInOrg).mockResolvedValue([
       { tutorId: 'tut1', email: null },
       { tutorId: 'tut2', email: null },
       { tutorId: 'tut1', email: null }
     ] as never);
     const res = await runApprTaskOverdueScan({ today: '2026-06-10' });
     expect(res).toEqual({ tasks: 1, notifications: 3 });
+    // tutors are looked up within the TASK's organization only
+    expect(listTutorsForLearnerInOrg).toHaveBeenCalledWith('lrn', 'org-1');
     const recipients = vi
       .mocked(insertNotification)
       .mock.calls.map((c) => c[0].userId)
@@ -123,7 +140,7 @@ describe('runApprTaskOverdueScan', () => {
       { id: 't1', learnerId: 'a', title: 'T' },
       { id: 't2', learnerId: 'b', title: 'T' }
     ] as never);
-    vi.mocked(listTutorsForLearner).mockResolvedValue([] as never);
+    vi.mocked(listTutorsForLearnerInOrg).mockResolvedValue([] as never);
     vi.mocked(insertNotification).mockRejectedValueOnce(new Error('db blip'));
     const res = await runApprTaskOverdueScan({ today: '2026-06-10' });
     expect(res).toEqual({ tasks: 2, notifications: 1 });
@@ -132,12 +149,15 @@ describe('runApprTaskOverdueScan', () => {
 
 describe('runApprReviewDueScan', () => {
   it('claims reviews due within the 7-day notice window and tells the learner’s allocated tutors once', async () => {
-    vi.mocked(q.claimDueReviews).mockResolvedValueOnce([{ id: 'r1', enrolmentId: 'enr' }] as never);
+    vi.mocked(q.claimDueReviews).mockResolvedValueOnce([
+      { id: 'r1', enrolmentId: 'enr', organizationId: 'org-1' }
+    ] as never);
     vi.mocked(q.getEnrolmentLearnerIds).mockResolvedValue(new Map([['enr', 'lrn']]));
-    vi.mocked(listTutorsForLearner).mockResolvedValue([{ tutorId: 'tut1', email: null }] as never);
+    vi.mocked(listTutorsForLearnerInOrg).mockResolvedValue([{ tutorId: 'tut1', email: null }] as never);
     const res = await runApprReviewDueScan({ today: '2026-06-10' });
     expect(vi.mocked(q.claimDueReviews).mock.calls[0][0]).toBe('2026-06-17');
     expect(res).toEqual({ reviews: 1, notifications: 1, firstReviewsCreated: 0 });
+    expect(listTutorsForLearnerInOrg).toHaveBeenCalledWith('lrn', 'org-1');
     expect(vi.mocked(insertNotification).mock.calls[0][0]).toMatchObject({
       userId: 'tut1',
       type: 'appr.review.due',

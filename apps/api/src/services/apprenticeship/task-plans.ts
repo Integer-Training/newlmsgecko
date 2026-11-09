@@ -11,6 +11,8 @@ import { recordAudit } from '@cio/db/audit';
 import { runInTransaction } from '@cio/db/drizzle';
 import {
   countPlanTasksWithEvidence,
+  isTutorAllocatedToPlanLearner,
+  markUploadsRemoved,
   deleteAllPlannedPlanTasks,
   deletePlanItem,
   deletePlannedItemTasks,
@@ -40,7 +42,11 @@ import {
   updateTaskPlan,
   type ApprTaskPlanRow
 } from '@cio/db/queries/apprenticeship';
-import { apprenticeshipPlanKeyPrefix, generateApprenticeshipPlanFileKey } from '@cio/core/utils/upload';
+import {
+  apprenticeshipPlanKeyPrefix,
+  apprenticeshipTaskKeyPrefix,
+  generateApprenticeshipPlanFileKey
+} from '@cio/core/utils/upload';
 import { generateDocumentDownloadPresignedUrls, generateDocumentUploadPresignedUrl } from '@cio/core/utils/s3';
 import { isWithinWindow, taskDueDate, toDayNumber } from '@cio/utils/functions/apprenticeship-progress';
 import type {
@@ -58,6 +64,12 @@ import type {
 // edits to tasks still PLANNED. Brief files live under apprenticeship/plans/{planId}/ and are shared by the plan, its
 // items and the tasks copied from them, so removing a file from a plan/item never releases it for storage clean-up
 // (tasks may still reference it); orphaned uploads are still collected by the daily job.
+
+/** Keys that were on a record and are no longer in its new file list. */
+const droppedKeys = (before: { key: string }[], after: { key: string }[]) => {
+  const kept = new Set(after.map((f) => f.key));
+  return before.map((f) => f.key).filter((k) => !kept.has(k));
+};
 
 const notFound = (what = 'Task plan') => new AppError(`${what} not found`, ErrorCodes.NOT_FOUND, 404);
 const badRequest = (message: string, field?: string) => new AppError(message, ErrorCodes.VALIDATION_ERROR, 400, field);
@@ -137,7 +149,7 @@ export async function presignPlanUploads(actor: Actor, input: TaskPlanPresignInp
   return { planId, files };
 }
 
-/** Signed download URLs for a plan's brief files (the plan's own or any of its items'). Admin / any staff of the org. */
+/** Signed download URLs for a plan's brief files (the plan's own or any of its items'). Admin, or an allocated tutor. */
 export async function signPlanDownloads(actor: Actor, planId: string, keys: string[]) {
   const a = requireAuthed(actor);
   if (a.role !== 'ADMIN' && a.role !== 'TUTOR') {
@@ -145,6 +157,8 @@ export async function signPlanDownloads(actor: Actor, planId: string, keys: stri
   }
   const plan = await getTaskPlan(planId);
   if (!plan || plan.organizationId !== a.orgId) throw notFound();
+  // A tutor sees a plan brief only through a learner they are allocated to who holds a task from it.
+  if (a.role === 'TUTOR' && !(await isTutorAllocatedToPlanLearner(plan.id, a.userId))) throw notFound();
   const items = await listPlanItems(plan.id);
   const owned = new Set([...plan.files, ...items.flatMap((i) => i.files)].map((f) => f.key));
   if (!keys.every((k) => owned.has(k))) {
@@ -205,11 +219,13 @@ export async function updatePlan(actor: Actor, planId: string, input: TaskPlanUp
       ...(files ? { files: toBriefFiles(files, plan.files, a.userId) } : {})
     });
     if (!row) throw notFound();
-    if (files)
+    if (files) {
       await markUploadsAttached(
         files.map((f) => f.key),
         tx
       );
+      await markUploadsRemoved(droppedKeys(plan.files, files), tx);
+    }
     return row;
   });
   await audit(actor, 'appr.task_plan.updated', plan.id, { fields: Object.keys(input) });
@@ -235,9 +251,14 @@ export async function deletePlan(actor: Actor, planId: string) {
       409
     );
   }
+  const items = await listPlanItems(plan.id);
   await runInTransaction(async (tx) => {
     await deleteAllPlannedPlanTasks(tx, plan.id);
     await deleteTaskPlan(tx, plan.id);
+    await markUploadsRemoved(
+      [...plan.files, ...items.flatMap((i) => i.files)].map((f) => f.key),
+      tx
+    );
   });
   await audit(actor, 'appr.task_plan.deleted', plan.id);
   return { deleted: true };
@@ -307,11 +328,13 @@ export async function updatePlanItemById(actor: Actor, planId: string, itemId: s
     });
     if (!row) throw notFound('Task');
     if (criterionIds) await replacePlanItemCriteria(tx, item.id, criterionIds);
-    if (files)
+    if (files) {
       await markUploadsAttached(
         files.map((f) => f.key),
         tx
       );
+      await markUploadsRemoved(droppedKeys(item.files, files), tx);
+    }
     return row;
   });
   await audit(actor, 'appr.task_plan.item_updated', plan.id, { itemId: item.id, fields: Object.keys(input) });
@@ -325,6 +348,10 @@ export async function deletePlanItemById(actor: Actor, planId: string, itemId: s
   const removedTasks = await runInTransaction(async (tx) => {
     const removed = await deletePlannedItemTasks(tx, item.id);
     await deletePlanItem(tx, item.id);
+    await markUploadsRemoved(
+      item.files.map((f) => f.key),
+      tx
+    );
     return removed;
   });
   await audit(actor, 'appr.task_plan.item_deleted', plan.id, { itemId: item.id, removedTasks });
@@ -459,13 +486,16 @@ export async function syncPlan(actor: Actor, planId: string) {
         .filter((c) => c.taskId === task.id)
         .map((c) => c.criterionId)
         .sort();
+      // The task's own brief files (uploaded for this task alone) survive a sync; only the plan briefs are replaced.
+      const ownPrefix = apprenticeshipTaskKeyPrefix(task.programmeId, task.learnerId, task.id);
+      const files = [...item.files, ...task.files.filter((f) => f.key.startsWith(ownPrefix))];
       const same =
         task.title === item.title &&
         task.details === item.details &&
         task.typeKey === item.typeKey &&
         task.expectedMinutes === item.expectedMinutes &&
         task.dueDate === dueDate &&
-        JSON.stringify(task.files) === JSON.stringify(item.files) &&
+        JSON.stringify(task.files) === JSON.stringify(files) &&
         JSON.stringify(wantCriteria) === JSON.stringify(haveCriteria);
       if (same) continue;
       // Conditional on PLANNED: a task answered meanwhile is left alone.
@@ -477,7 +507,7 @@ export async function syncPlan(actor: Actor, planId: string) {
           details: item.details,
           typeKey: item.typeKey,
           expectedMinutes: item.expectedMinutes,
-          files: item.files,
+          files,
           dueDate,
           ...(dueDate !== task.dueDate ? { overdueNotifiedAt: null } : {})
         },

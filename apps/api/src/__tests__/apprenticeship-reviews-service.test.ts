@@ -11,7 +11,7 @@ vi.mock('@cio/db/queries/apprenticeship', () => ({
   insertApprReview: vi.fn(),
   listReviewsForEnrolment: vi.fn(async () => []),
   updateApprReviewIfUnchanged: vi.fn(),
-  countOpenReviewsFrom: vi.fn(async () => 0),
+  countOpenReviews: vi.fn(async () => 0),
   insertFirstReviewIfNone: vi.fn(async () => true)
 }));
 vi.mock('@cio/db/queries/allocation', () => ({
@@ -342,9 +342,26 @@ describe('signReview', () => {
     expect(res.scheduledNext).toBe(true);
   });
 
+  it('next review uses the first-review rule: a date already past becomes today + 7 days', async () => {
+    // held a long time ago: 2026-01-02 + 12 weeks = 2026-03-27, before NOW (2026-06-10)
+    givenReview(awaiting({ heldDate: '2026-01-02', tutorSignedAt: UPDATED, employerSignedAt: UPDATED }));
+    await signReview(self, REV, { role: 'LEARNER', name: 'Lee' }, NOW);
+    expect(vi.mocked(q.updateApprReviewIfUnchanged).mock.calls[0][3]).toMatchObject({ nextReviewDate: '2026-06-17' });
+    expect(q.insertApprReview).toHaveBeenCalledWith(
+      { tx: true },
+      expect.objectContaining({ scheduledDate: '2026-06-17' })
+    );
+  });
+
+  it('counts ALL other open reviews of the enrolment (any date), never just future ones', async () => {
+    givenReview(awaiting({ tutorSignedAt: UPDATED, employerSignedAt: UPDATED }));
+    await signReview(self, REV, { role: 'LEARNER', name: 'Lee' }, NOW);
+    expect(q.countOpenReviews).toHaveBeenCalledWith({ tx: true }, ENR, REV);
+  });
+
   it('does not double-schedule when an open review already lies ahead; uses the programme interval', async () => {
     vi.mocked(q.getApprProgramme).mockResolvedValue({ id: PROG, reviewIntervalWeeks: 6 } as never);
-    vi.mocked(q.countOpenReviewsFrom).mockResolvedValueOnce(1);
+    vi.mocked(q.countOpenReviews).mockResolvedValueOnce(1);
     givenReview(awaiting({ tutorSignedAt: UPDATED, employerSignedAt: UPDATED }));
     const res = await signReview(self, REV, { role: 'LEARNER', name: 'Lee' }, NOW);
     expect(res.status).toBe('COMPLETE');

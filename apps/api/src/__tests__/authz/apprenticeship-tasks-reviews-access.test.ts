@@ -58,8 +58,10 @@ vi.mock('@cio/db/queries/apprenticeship', () => ({
   insertApprReview: vi.fn(async (_tx: unknown, v: object) => ({ id: 'rev-new', ...v })),
   listReviewsForEnrolment: vi.fn(async () => []),
   updateApprReviewIfUnchanged: vi.fn(),
-  countOpenReviewsFrom: vi.fn(async () => 0),
-  insertFirstReviewIfNone: vi.fn(async () => true)
+  countOpenReviews: vi.fn(async () => 0),
+  insertFirstReviewIfNone: vi.fn(async () => true),
+  isTutorAllocatedToPlanLearner: vi.fn(async () => false),
+  lockApprTask: vi.fn(async () => undefined)
 }));
 vi.mock('@api/services/apprenticeship/notifications', () => ({
   notifyTasksAssigned: vi.fn(async () => undefined),
@@ -388,13 +390,15 @@ describe('task plans — admin only', () => {
     expect(await status(PLAN_ROUTES[10], 'admin')).toBe(404);
   });
 
-  it('a plan brief can be downloaded by staff of the org only for keys on that plan (tutor ok, learner/other org not)', async () => {
+  it('a plan brief can be downloaded by staff of the org only for keys on that plan (tutor only via an allocated learner; learner/other org never)', async () => {
     const ok: Route = {
       method: 'POST',
       path: `${T}/download`,
       body: { planId: PLAN, keys: [`apprenticeship/plans/${PLAN}/brief.pdf`] }
     };
     expect(await status(ok, 'admin')).toBe(200);
+    expect(await status(ok, 'tutor')).toBe(404); // no allocated learner holds a task from the plan
+    vi.mocked(q.isTutorAllocatedToPlanLearner).mockResolvedValueOnce(true);
     expect(await status(ok, 'tutor')).toBe(200);
     expect(await status(ok, 'learner')).toBe(403);
     expect(await status(ok, 'otherAdmin')).toBe(404);

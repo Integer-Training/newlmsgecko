@@ -1,4 +1,4 @@
-import { listTutorsForLearner } from '@cio/db/queries/allocation';
+import { listTutorsForLearnerInOrg } from '@cio/db/queries/allocation';
 import {
   claimDueReviews,
   claimOverdueTasks,
@@ -67,6 +67,12 @@ export async function runApprUploadCleanup(
     const deletedIds: string[] = [];
     for (const row of rows) {
       if (referenced.has(row.key)) continue;
+      // Re-check right before the delete: a record may have claimed the key since the batch check.
+      if ((await listReferencedUploadKeys([row.key])).has(row.key)) {
+        await markUploadsAttached([row.key]);
+        result.keptReferenced += 1;
+        continue;
+      }
       const res = await deleteFromS3({ Bucket: bucket, Key: row.key });
       if (res.success) deletedIds.push(row.id);
       else {
@@ -112,7 +118,7 @@ export async function runApprTaskOverdueScan(opts: { today?: string; batchSize?:
   for (let batch = 0; batch < (opts.maxBatches ?? 25); batch += 1) {
     const claimed = await claimOverdueTasks(today, batchSize);
     for (const task of claimed) {
-      const tutors = await listTutorsForLearner(task.learnerId);
+      const tutors = await listTutorsForLearnerInOrg(task.learnerId, task.organizationId);
       notifications += await notifyAll(
         [task.learnerId, ...tutors.map((tu) => tu.tutorId)],
         'appr.task.overdue',
@@ -144,7 +150,7 @@ export async function runApprReviewDueScan(opts: { today?: string; batchSize?: n
     for (const review of claimed) {
       const learnerId = learners.get(review.enrolmentId);
       if (!learnerId) continue;
-      const tutors = await listTutorsForLearner(learnerId);
+      const tutors = await listTutorsForLearnerInOrg(learnerId, review.organizationId);
       notifications += await notifyAll(
         tutors.map((tu) => tu.tutorId),
         'appr.review.due',

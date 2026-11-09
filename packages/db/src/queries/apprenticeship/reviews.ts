@@ -75,13 +75,8 @@ export async function updateApprReviewIfUnchanged(
   return row ?? null;
 }
 
-/** Future/open reviews of an enrolment other than `exceptId` — used to avoid double-scheduling the next review. */
-export async function countOpenReviewsFrom(
-  tx: DbOrTxClient,
-  enrolmentId: string,
-  fromDate: string,
-  exceptId: string
-): Promise<number> {
+/** ALL open reviews of an enrolment other than `exceptId`, whatever their date — never schedule a second open one. */
+export async function countOpenReviews(tx: DbOrTxClient, enrolmentId: string, exceptId: string): Promise<number> {
   const [row] = await tx
     .select({ n: sql<number>`count(*)::int` })
     .from(r)
@@ -89,8 +84,7 @@ export async function countOpenReviewsFrom(
       and(
         eq(r.enrolmentId, enrolmentId),
         ne(r.id, exceptId),
-        inArray(r.status, ['SCHEDULED', 'DRAFT', 'AWAITING_SIGNATURES']),
-        sql`${r.scheduledDate} >= ${fromDate}`
+        inArray(r.status, ['SCHEDULED', 'DRAFT', 'AWAITING_SIGNATURES'])
       )
     );
   return row?.n ?? 0;
@@ -121,7 +115,7 @@ export async function claimDueReviews(dueOnOrBefore: string, limit: number, clie
         isNull(r.dueNotifiedAt)
       )
     )
-    .returning({ id: r.id, enrolmentId: r.enrolmentId });
+    .returning({ id: r.id, enrolmentId: r.enrolmentId, organizationId: r.organizationId });
 }
 
 /** Notification deep links: review id → its enrolment and the learner's display name. */
