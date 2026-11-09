@@ -18,6 +18,7 @@
 
   let title = $state('');
   let reference = $state('');
+  let awardingBody = $state('');
   let level = $state('');
   let description = $state('');
   let saving = $state(false);
@@ -31,6 +32,7 @@
       programme.id,
       programme.title,
       programme.reference,
+      programme.awardingBody,
       programme.level,
       programme.description
     ]);
@@ -38,6 +40,7 @@
     seeded = key;
     title = programme.title;
     reference = programme.reference ?? '';
+    awardingBody = programme.awardingBody ?? '';
     level = programme.level ?? '';
     description = programme.description ?? '';
   });
@@ -45,6 +48,7 @@
   const dirty = $derived(
     title.trim() !== programme.title ||
       reference.trim() !== (programme.reference ?? '') ||
+      awardingBody.trim() !== (programme.awardingBody ?? '') ||
       level.trim() !== (programme.level ?? '') ||
       description.trim() !== (programme.description ?? '')
   );
@@ -56,6 +60,7 @@
     const ok = await programmesApi.updateProgramme(programme.id, {
       title: title.trim(),
       reference: reference.trim() || null,
+      awardingBody: awardingBody.trim() || null,
       level: level.trim() || null,
       description: description.trim() || null
     });
@@ -89,7 +94,7 @@
     </Button>
   </div>
 
-  <div class="grid grid-cols-1 gap-3 md:grid-cols-[1fr_12rem_8rem]">
+  <div class="grid grid-cols-1 gap-3 md:grid-cols-[1fr_10rem_10rem_6rem]">
     <div class="space-y-1">
       <label for="pd-title" class="text-sm font-medium">Title <span class="text-red-500">*</span></label>
       <Input id="pd-title" bind:value={title} maxlength={200} required />
@@ -97,6 +102,10 @@
     <div class="space-y-1">
       <label for="pd-ref" class="text-sm font-medium">Reference</label>
       <Input id="pd-ref" bind:value={reference} maxlength={100} />
+    </div>
+    <div class="space-y-1">
+      <label for="pd-body" class="text-sm font-medium">Awarding body</label>
+      <Input id="pd-body" bind:value={awardingBody} maxlength={200} placeholder="NCFE" />
     </div>
     <div class="space-y-1">
       <label for="pd-level" class="text-sm font-medium">Level</label>

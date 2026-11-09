@@ -3,24 +3,20 @@
   import { page } from '$app/state';
   import * as Page from '@cio/ui/base/page';
   import { Button } from '@cio/ui/base/button';
-  import { Input } from '@cio/ui/base/input';
   import { Spinner } from '@cio/ui/base/spinner';
   import UploadIcon from '@lucide/svelte/icons/upload';
   import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
-  import PlusIcon from '@lucide/svelte/icons/plus';
   import { currentOrg } from '$lib/utils/store/org';
   import { programmesApi } from '$features/apprenticeship/api/programmes.svelte';
   import ProgrammeHeader from '$features/apprenticeship/components/programme/programme-header.svelte';
   import QualificationSection from '$features/apprenticeship/components/programme/qualification-section.svelte';
   import ImportDialog from '$features/apprenticeship/components/programme/import-dialog.svelte';
 
-  // Programme setup: details + structure editor (qualification -> units -> criteria) + CSV import, on one page.
+  // Programme setup: details + units -> criteria editor + CSV import. One programme = one course (qualification);
+  // older programmes holding several qualifications still list each one so nothing is hidden.
   const programmeId = $derived(page.params.programmeId ?? '');
 
   let showImport = $state(false);
-  let addingQual = $state(false);
-  let qualTitle = $state('');
-  let savingQual = $state(false);
 
   onMount(() => {
     // Drop a previously opened programme so its content never flashes before this one loads.
@@ -33,18 +29,6 @@
   });
 
   const tree = $derived(programmesApi.tree && programmesApi.tree.id === programmeId ? programmesApi.tree : null);
-
-  async function addQualification(e: Event) {
-    e.preventDefault();
-    if (!qualTitle.trim() || savingQual) return;
-    savingQual = true;
-    const ok = await programmesApi.createQualification(programmeId, { title: qualTitle.trim() });
-    savingQual = false;
-    if (ok) {
-      qualTitle = '';
-      addingQual = false;
-    }
-  }
 </script>
 
 <svelte:head><title>{tree?.title ?? 'Programme'} — Gecko Apprenticeships</title></svelte:head>
@@ -89,23 +73,6 @@
               onimport={() => (showImport = true)}
             />
           {/each}
-
-          {#if addingQual}
-            <form onsubmit={addQualification} class="bg-card flex flex-wrap items-end gap-2 rounded-xl border p-4">
-              <div class="min-w-48 flex-1 space-y-1">
-                <label for="nq-title" class="text-sm font-medium">Qualification title</label>
-                <Input id="nq-title" bind:value={qualTitle} maxlength={200} required />
-              </div>
-              <Button type="submit" disabled={!qualTitle.trim()} loading={savingQual}>Add qualification</Button>
-              <Button type="button" variant="ghost" onclick={() => (addingQual = false)}>Cancel</Button>
-            </form>
-          {:else}
-            <div>
-              <Button variant="ghost" size="sm" onclick={() => (addingQual = true)}>
-                <PlusIcon class="size-4" /> Add another qualification
-              </Button>
-            </div>
-          {/if}
         </div>
       {/if}
     {/snippet}

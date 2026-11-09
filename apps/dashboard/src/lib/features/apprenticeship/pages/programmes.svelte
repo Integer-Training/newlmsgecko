@@ -20,9 +20,13 @@
   } from '$features/apprenticeship/api/programmes.svelte';
   import NewProgrammeDialog from '$features/apprenticeship/components/programme/new-programme-dialog.svelte';
 
-  // Admin programme catalogue. Loads every programme once; the status filter and search are client-side.
+  // Admin programme catalogue (one programme per course). Loads every programme once; status / level / awarding body
+  // filters and search are client-side.
+  const ANY = '__any__';
   let search = $state('');
   let statusFilter = $state<ProgrammeStatus>('ACTIVE');
+  let levelFilter = $state(ANY);
+  let bodyFilter = $state(ANY);
   let showCreate = $state(false);
   let busyId = $state<string | null>(null);
 
@@ -33,12 +37,29 @@
   });
 
   const rows = $derived(programmesApi.programmes);
+
+  // Filter choices come from the programmes themselves (case-insensitive, trimmed), so there is nothing to maintain.
+  const norm = (v: string | null) => (v ?? '').trim().toLowerCase();
+  function distinct(values: (string | null)[]) {
+    const seen = new Map<string, string>();
+    for (const v of values) if (v?.trim() && !seen.has(norm(v))) seen.set(norm(v), v.trim());
+    return [...seen.entries()]
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }));
+  }
+  const levelOptions = $derived(distinct((rows ?? []).map((p) => p.level)));
+  const bodyOptions = $derived(distinct((rows ?? []).map((p) => p.awardingBody)));
+  const levelLabel = $derived(levelOptions.find((o) => o.value === levelFilter)?.label ?? 'All levels');
+  const bodyLabel = $derived(bodyOptions.find((o) => o.value === bodyFilter)?.label ?? 'All awarding bodies');
+
   const filtered = $derived.by(() => {
     const q = search.trim().toLowerCase();
     return (rows ?? []).filter((p) => {
       if (p.status !== statusFilter) return false;
+      if (levelFilter !== ANY && norm(p.level) !== levelFilter) return false;
+      if (bodyFilter !== ANY && norm(p.awardingBody) !== bodyFilter) return false;
       if (!q) return true;
-      return [p.title, p.reference ?? '', p.level ?? ''].some((v) => v.toLowerCase().includes(q));
+      return [p.title, p.reference ?? '', p.level ?? '', p.awardingBody ?? ''].some((v) => v.toLowerCase().includes(q));
     });
   });
 
@@ -83,6 +104,34 @@
           </Select.Root>
         </div>
         <div class="flex flex-col gap-1">
+          <span class="text-muted-foreground text-xs">Level</span>
+          <Select.Root type="single" bind:value={levelFilter}>
+            <Select.Trigger class="min-w-[130px]" aria-label="Filter by level">
+              <p>{levelLabel}</p>
+            </Select.Trigger>
+            <Select.Content>
+              <Select.Item value={ANY}>All levels</Select.Item>
+              {#each levelOptions as o (o.value)}
+                <Select.Item value={o.value}>{o.label}</Select.Item>
+              {/each}
+            </Select.Content>
+          </Select.Root>
+        </div>
+        <div class="flex flex-col gap-1">
+          <span class="text-muted-foreground text-xs">Awarding body</span>
+          <Select.Root type="single" bind:value={bodyFilter}>
+            <Select.Trigger class="min-w-[170px]" aria-label="Filter by awarding body">
+              <p>{bodyLabel}</p>
+            </Select.Trigger>
+            <Select.Content>
+              <Select.Item value={ANY}>All awarding bodies</Select.Item>
+              {#each bodyOptions as o (o.value)}
+                <Select.Item value={o.value}>{o.label}</Select.Item>
+              {/each}
+            </Select.Content>
+          </Select.Root>
+        </div>
+        <div class="flex flex-col gap-1">
           <span class="text-muted-foreground text-xs">Search</span>
           <Search placeholder="Search programmes" bind:value={search} />
         </div>
@@ -115,6 +164,7 @@
               <Table.Row>
                 <Table.Head>Programme</Table.Head>
                 <Table.Head>Reference</Table.Head>
+                <Table.Head>Awarding body</Table.Head>
                 <Table.Head>Level</Table.Head>
                 <Table.Head>Status</Table.Head>
                 <Table.Head class="text-right">Units</Table.Head>
@@ -130,6 +180,7 @@
                     <a href="{base}/{p.id}" class="hover:underline">{p.title}</a>
                   </Table.Cell>
                   <Table.Cell>{p.reference ?? '—'}</Table.Cell>
+                  <Table.Cell>{p.awardingBody ?? '—'}</Table.Cell>
                   <Table.Cell>{p.level ?? '—'}</Table.Cell>
                   <Table.Cell>
                     <Badge variant={p.status === 'ACTIVE' ? 'success' : 'secondary'}>{STATUS_LABELS[p.status]}</Badge>

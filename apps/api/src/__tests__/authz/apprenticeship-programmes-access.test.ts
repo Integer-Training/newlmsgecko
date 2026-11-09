@@ -14,6 +14,7 @@ vi.mock('@cio/db/queries/apprenticeship', () => ({
   getApprCriterionInProgramme: vi.fn(async () => null),
   getApprProgrammeStructure: vi.fn(async () => ({ qualifications: [], units: [], criteria: [] })),
   listApprProgrammesWithCounts: vi.fn(async () => []),
+  listApprQualificationIds: vi.fn(async () => []),
   insertApprProgrammeWithQualification: vi.fn(),
   insertApprQualification: vi.fn(),
   insertApprUnit: vi.fn(),
@@ -207,6 +208,39 @@ describe('admin happy paths', () => {
       'admin'
     );
     expect(res.status).toBe(404);
+  });
+  it('editing the details of a one-course programme mirrors them onto its only qualification', async () => {
+    vi.mocked(q.updateApprProgramme).mockResolvedValueOnce(PROGRAMME as never);
+    vi.mocked(q.listApprQualificationIds).mockResolvedValueOnce([QID]);
+    const body = { title: 'L5 Adult Care', awardingBody: 'NCFE', level: '5', description: 'x' };
+    expect((await call({ method: 'PATCH', path: base, body }, 'admin')).status).toBe(200);
+    expect(q.updateApprProgramme).toHaveBeenCalledWith(P, body, expect.anything());
+    expect(q.updateApprQualification).toHaveBeenCalledWith(
+      QID,
+      { title: 'L5 Adult Care', awardingBody: 'NCFE', level: '5' },
+      expect.anything()
+    );
+  });
+  it('a programme with several qualifications, or a status-only change, leaves qualifications alone', async () => {
+    vi.mocked(q.updateApprProgramme).mockResolvedValue(PROGRAMME as never);
+    vi.mocked(q.listApprQualificationIds).mockResolvedValueOnce([QID, 'q-2']);
+    expect((await call({ method: 'PATCH', path: base, body: { title: 'New' } }, 'admin')).status).toBe(200);
+    expect((await call({ method: 'PATCH', path: base, body: { status: 'ARCHIVED' } }, 'admin')).status).toBe(200);
+    expect(q.updateApprQualification).not.toHaveBeenCalled();
+  });
+  it('awarding body is saved on create', async () => {
+    vi.mocked(q.insertApprProgrammeWithQualification).mockResolvedValueOnce({
+      programme: PROGRAMME,
+      qualification: { id: QID }
+    } as never);
+    const body = { title: 'L3 Adult Care', awardingBody: 'NCFE' };
+    expect((await call({ method: 'POST', path: '/apprenticeship/programmes', body }, 'admin')).status).toBeLessThan(
+      300
+    );
+    expect(q.insertApprProgrammeWithQualification).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ organizationId: ORG, title: 'L3 Adult Care', awardingBody: 'NCFE' })
+    );
   });
   it('settings validation: out-of-range values → 400', async () => {
     const res = await call(

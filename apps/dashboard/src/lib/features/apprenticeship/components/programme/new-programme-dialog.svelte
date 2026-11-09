@@ -16,6 +16,7 @@
 
   let title = $state('');
   let reference = $state('');
+  let awardingBody = $state('');
   let level = $state('');
   let description = $state('');
   let saving = $state(false);
@@ -25,6 +26,7 @@
   function reset() {
     title = '';
     reference = '';
+    awardingBody = '';
     level = '';
     description = '';
   }
@@ -36,6 +38,7 @@
     const created = await programmesApi.create({
       title: title.trim(),
       reference: reference.trim() || null,
+      awardingBody: awardingBody.trim() || null,
       level: level.trim() || null,
       description: description.trim() || null
     });
@@ -52,7 +55,8 @@
     <Dialog.Header>
       <Dialog.Title>New programme</Dialog.Title>
       <Dialog.Description>
-        A programme is the qualification learners work towards. You add its units and criteria on the next screen.
+        One programme per course: the qualification learners work towards. You add its units and criteria on the next
+        screen.
       </Dialog.Description>
     </Dialog.Header>
 
@@ -70,6 +74,10 @@
           <label for="np-level" class="text-sm font-medium">Level</label>
           <Input id="np-level" bind:value={level} maxlength={50} placeholder="3" />
         </div>
+      </div>
+      <div class="space-y-1">
+        <label for="np-body" class="text-sm font-medium">Awarding body</label>
+        <Input id="np-body" bind:value={awardingBody} maxlength={200} placeholder="NCFE" />
       </div>
       <div class="space-y-1">
         <label for="np-desc" class="text-sm font-medium">Description</label>

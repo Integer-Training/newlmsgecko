@@ -197,6 +197,13 @@
       "when": 1793968610822,
       "tag": "0027_apprenticeships",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1794218658844,
+      "tag": "0028_soft_randall_flagg",
+      "breakpoints": true
     }
   ]
 }

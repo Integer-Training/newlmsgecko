@@ -24,6 +24,7 @@ export async function listApprProgrammesWithCounts(organizationId: string, statu
       title: p.title,
       description: p.description,
       reference: p.reference,
+      awardingBody: p.awardingBody,
       level: p.level,
       status: p.status,
       createdAt: p.createdAt,
@@ -51,6 +52,7 @@ export async function insertApprProgrammeWithQualification(
     title: string;
     description?: string | null;
     reference?: string | null;
+    awardingBody?: string | null;
     level?: string | null;
   }
 ) {
@@ -62,6 +64,7 @@ export async function insertApprProgrammeWithQualification(
       title: input.title,
       description: input.description ?? null,
       reference: input.reference ?? null,
+      awardingBody: input.awardingBody ?? null,
       level: input.level ?? null
     })
     .returning();
@@ -72,6 +75,7 @@ export async function insertApprProgrammeWithQualification(
       programmeId: programme.id,
       title: input.title,
       reference: input.reference ?? null,
+      awardingBody: input.awardingBody ?? null,
       level: input.level ?? null,
       sort: 0
     })
@@ -85,6 +89,7 @@ export async function updateApprProgramme(
     title: string;
     description: string | null;
     reference: string | null;
+    awardingBody: string | null;
     level: string | null;
     status: string;
   }>,
@@ -96,6 +101,14 @@ export async function updateApprProgramme(
     .where(eq(schema.apprProgramme.id, programmeId))
     .returning();
   return row ?? null;
+}
+
+export async function listApprQualificationIds(programmeId: string, client: DbOrTxClient = db) {
+  const rows = await client
+    .select({ id: schema.apprQualification.id })
+    .from(schema.apprQualification)
+    .where(eq(schema.apprQualification.programmeId, programmeId));
+  return rows.map((r) => r.id);
 }
 
 /** The whole structure of a programme as flat, display-ordered lists (3 queries; the service nests them in JS). */

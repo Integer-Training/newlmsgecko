@@ -1,0 +1,1 @@
+ALTER TABLE "appr_programme" ADD COLUMN "awarding_body" varchar;

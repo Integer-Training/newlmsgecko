@@ -59,6 +59,12 @@ Tables (migration `0027_apprenticeships.sql`): `appr_programme`, `appr_qualifica
 `appr_enrolment`, `appr_enrolment_unit`, `appr_evidence`, `appr_evidence_criterion`, `appr_evidence_note`,
 `appr_evidence_type`, `appr_settings`. Statuses are varchar validated against the constants (no Postgres enums).
 
+**One programme = one course** (owner, 2026-11-09). Each course (e.g. NCFE L3 Adult Care, NCFE L5 Adult Care) is its
+own programme with exactly one qualification; the UI no longer adds a second one. Editing the programme's title /
+reference / level / awarding body mirrors them onto that single qualification. The schema still allows several (older
+programmes that have more keep a per-qualification header with edit / move / delete). `appr_programme.awarding_body`
+(migration `0028`) drives the Programmes list column + filter.
+
 ## Import
 
 Programme › Import accepts our CSV (`unit_code, unit_title, criterion_code, criterion_text, group, required,
@@ -72,7 +78,8 @@ no unit title, so import "All Units" first.
 Apprenticeships › **Learners** (table with qualification + OTJ bars, status, tutor, to-mark; filters; Add learner) ·
 learner **portfolio** (summary strip; tabs Units with inline criteria, Criteria map, Evidence, Off-the-job, Achieved;
 Edit dates & hours; Spread unit dates; Export CSV; evidence side panel for add/edit/review/notes/files) · **To mark**
-queue · **Programmes** (list + setup editor + import) · **Settings**.
+queue · **Programmes** (list with status / level / awarding body filters + search; setup page = details, then units
+collapsed with their criteria inside, + import) · **Settings**.
 
 ## Verified
 

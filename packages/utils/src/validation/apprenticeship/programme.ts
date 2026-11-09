@@ -21,6 +21,7 @@ export const ZProgrammeCreate = z.object({
   title: trimmed(200),
   description: optionalText(5000),
   reference: optionalText(100),
+  awardingBody: optionalText(200),
   level: optionalText(50)
 });
 export type ProgrammeCreateInput = z.infer<typeof ZProgrammeCreate>;
@@ -30,6 +31,7 @@ export const ZProgrammeUpdate = z
     title: trimmed(200),
     description: optionalText(5000),
     reference: optionalText(100),
+    awardingBody: optionalText(200),
     level: optionalText(50),
     status: z.enum(APPR_PROGRAMME_STATUSES)
   })

@@ -21,6 +21,7 @@ import {
   insertApprUnit,
   insertApprUnits,
   listApprProgrammesWithCounts,
+  listApprQualificationIds,
   listChildIds,
   listCriterionIdsForQualification,
   listCriterionIdsForUnit,
@@ -80,6 +81,7 @@ export async function createProgramme(actor: Actor, input: ProgrammeCreateInput)
       title: input.title,
       description: input.description,
       reference: input.reference,
+      awardingBody: input.awardingBody,
       level: input.level
     })
   );
@@ -112,7 +114,19 @@ export async function getProgrammeTree(actor: Actor, programmeId: string) {
 
 export async function updateProgramme(actor: Actor, programmeId: string, patch: ProgrammeUpdateInput) {
   await getProgrammeForActor(actor, programmeId);
-  const row = await updateApprProgramme(programmeId, patch);
+  const row = await runInTransaction(async (tx) => {
+    const updated = await updateApprProgramme(programmeId, patch, tx);
+    // One programme = one course: a programme's only qualification mirrors its title / reference / level / awarding body.
+    const { title, reference, awardingBody, level } = patch;
+    const qualificationPatch = Object.fromEntries(
+      Object.entries({ title, reference, awardingBody, level }).filter(([, v]) => v !== undefined)
+    );
+    if (updated && Object.keys(qualificationPatch).length > 0) {
+      const qualificationIds = await listApprQualificationIds(programmeId, tx);
+      if (qualificationIds.length === 1) await updateApprQualification(qualificationIds[0], qualificationPatch, tx);
+    }
+    return updated;
+  });
   if (!row) throw notFound('Programme');
   await audit(actor, 'appr.programme.updated', 'appr_programme', programmeId, { fields: Object.keys(patch) });
   return row;

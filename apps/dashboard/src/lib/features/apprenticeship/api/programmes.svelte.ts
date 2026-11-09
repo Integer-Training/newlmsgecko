@@ -11,6 +11,7 @@ export interface ProgrammeRow {
   title: string;
   description: string | null;
   reference: string | null;
+  awardingBody: string | null;
   level: string | null;
   status: ProgrammeStatus;
   qualificationCount: number;
@@ -51,6 +52,7 @@ export interface ProgrammeTree {
   title: string;
   description: string | null;
   reference: string | null;
+  awardingBody: string | null;
   level: string | null;
   status: ProgrammeStatus;
   qualifications: Qualification[];
@@ -120,6 +122,7 @@ class ProgrammesApi extends BaseApi {
     title: string;
     description?: string | null;
     reference?: string | null;
+    awardingBody?: string | null;
     level?: string | null;
   }) {
     const res = await this.execute<typeof classroomio.apprenticeship.programmes.$post>({
@@ -147,7 +150,13 @@ class ProgrammesApi extends BaseApi {
 
   async updateProgramme(
     id: string,
-    patch: Partial<{ title: string; description: string | null; reference: string | null; level: string | null }> & {
+    patch: Partial<{
+      title: string;
+      description: string | null;
+      reference: string | null;
+      awardingBody: string | null;
+      level: string | null;
+    }> & {
       status?: ProgrammeStatus;
     }
   ) {

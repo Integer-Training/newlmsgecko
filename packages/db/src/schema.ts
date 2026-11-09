@@ -4509,6 +4509,7 @@ export const apprProgramme = pgTable(
     title: varchar().notNull(),
     description: text(),
     reference: varchar(),
+    awardingBody: varchar('awarding_body'),
     level: varchar(),
     status: varchar().default('ACTIVE').notNull(),
     createdBy: uuid('created_by'),

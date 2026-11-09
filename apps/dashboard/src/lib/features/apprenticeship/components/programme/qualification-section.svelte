@@ -13,8 +13,9 @@
   import UnitCard from './unit-card.svelte';
   import ConfirmDeleteDialog from './confirm-delete-dialog.svelte';
 
-  // One qualification: its title/reference, its units (collapsible rows) and an inline "add unit" form.
-  // The UI normally shows a single qualification but supports several (move / delete appear when there is more than one).
+  // One qualification: its units (collapsible rows) and an inline "add unit" form. A programme is one course, so a
+  // lone qualification just shows "Units" (its title / reference follow the programme details). Older programmes
+  // with several keep the per-qualification title, edit, move and delete.
   interface Props {
     programmeId: string;
     qualification: Qualification;
@@ -101,7 +102,17 @@
 
 <section class="bg-card rounded-xl border p-4" aria-label="Qualification {qualification.title}">
   <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-    {#if editing}
+    {#if total === 1}
+      <div class="min-w-0">
+        <h2 class="text-lg font-semibold tracking-tight">Units</h2>
+        <p class="text-muted-foreground text-xs">
+          {qualification.units.length} unit{qualification.units.length === 1 ? '' : 's'} · {criteriaTotal} criteri{criteriaTotal ===
+          1
+            ? 'on'
+            : 'a'} · click a unit to see its criteria
+        </p>
+      </div>
+    {:else if editing}
       <form onsubmit={save} class="flex flex-1 flex-wrap items-center gap-2">
         <Input
           aria-label="Qualification title"
