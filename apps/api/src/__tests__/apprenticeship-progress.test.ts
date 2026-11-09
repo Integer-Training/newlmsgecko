@@ -10,7 +10,16 @@ import {
   otjTargetMinutes,
   progressStatus,
   spreadUnitDates,
-  toDayNumber
+  toDayNumber,
+  addMonths,
+  addDays,
+  taskDueDate,
+  taskStatusFromEvidence,
+  isTaskOverdue,
+  isWithinWindow,
+  nextReviewDate,
+  isReviewOverdue,
+  reviewFullySigned
 } from '@cio/utils/functions/apprenticeship-progress';
 
 // Gecko Apprenticeships rules module. Every screen, the cache recompute and the CSV export read these functions,
@@ -207,5 +216,62 @@ describe('spreadUnitDates', () => {
   it('invalid window gives no dates', () => {
     expect(spreadUnitDates('2026-02-01', '2026-01-01', [{ unitId: 'a', weight: 1 }])).toEqual([]);
     expect(spreadUnitDates('2026-01-01', '2026-02-01', [])).toEqual([]);
+  });
+});
+
+describe('round 2: dates', () => {
+  it('addMonths clamps to the end of shorter months and handles year roll-over', () => {
+    expect(addMonths('2026-01-31', 1)).toBe('2026-02-28');
+    expect(addMonths('2028-01-31', 1)).toBe('2028-02-29');
+    expect(addMonths('2026-11-15', 3)).toBe('2027-02-15');
+    expect(addMonths('2026-03-31', 0)).toBe('2026-03-31');
+    expect(addMonths(null, 2)).toBeNull();
+  });
+  it('addDays and nextReviewDate', () => {
+    expect(addDays('2026-12-30', 3)).toBe('2027-01-02');
+    expect(nextReviewDate('2026-01-01', 12)).toBe('2026-03-26');
+    expect(nextReviewDate('2026-01-01', 0)).toBe('2026-01-08'); // interval floor is one week
+    expect(nextReviewDate(null, 12)).toBeNull();
+  });
+  it('taskDueDate = start + month offset; no start → no due date; negative offset treated as 0', () => {
+    expect(taskDueDate('2026-08-01', 2)).toBe('2026-10-01');
+    expect(taskDueDate(null, 2)).toBeNull();
+    expect(taskDueDate('2026-08-01', -3)).toBe('2026-08-01');
+  });
+});
+
+describe('round 2: task status', () => {
+  it('latest evidence decides; any accepted completes', () => {
+    expect(taskStatusFromEvidence([])).toBe('PLANNED');
+    expect(taskStatusFromEvidence([{ status: 'SUBMITTED' }])).toBe('SUBMITTED');
+    expect(taskStatusFromEvidence([{ status: 'REFERRED' }])).toBe('REFERRED');
+    expect(taskStatusFromEvidence([{ status: 'SUBMITTED' }, { status: 'REFERRED' }])).toBe('SUBMITTED');
+    expect(taskStatusFromEvidence([{ status: 'REFERRED' }, { status: 'ACCEPTED' }])).toBe('COMPLETE');
+  });
+  it('overdue only when due date passed and not complete', () => {
+    expect(isTaskOverdue({ dueDate: '2026-11-01', status: 'PLANNED' }, '2026-11-02')).toBe(true);
+    expect(isTaskOverdue({ dueDate: '2026-11-01', status: 'PLANNED' }, '2026-11-01')).toBe(false);
+    expect(isTaskOverdue({ dueDate: '2026-11-01', status: 'COMPLETE' }, '2026-12-01')).toBe(false);
+    expect(isTaskOverdue({ dueDate: null, status: 'PLANNED' }, '2026-12-01')).toBe(false);
+  });
+  it('plan valid window, open ends allowed', () => {
+    expect(isWithinWindow(null, null, '2026-11-09')).toBe(true);
+    expect(isWithinWindow('2026-11-10', null, '2026-11-09')).toBe(false);
+    expect(isWithinWindow(null, '2026-11-08', '2026-11-09')).toBe(false);
+    expect(isWithinWindow('2026-11-09', '2026-11-09', '2026-11-09')).toBe(true);
+  });
+});
+
+describe('round 2: reviews', () => {
+  it('overdue unless complete or cancelled', () => {
+    expect(isReviewOverdue({ scheduledDate: '2026-11-01', status: 'SCHEDULED' }, '2026-11-02')).toBe(true);
+    expect(isReviewOverdue({ scheduledDate: '2026-11-01', status: 'AWAITING_SIGNATURES' }, '2026-11-02')).toBe(true);
+    expect(isReviewOverdue({ scheduledDate: '2026-11-01', status: 'COMPLETE' }, '2026-11-02')).toBe(false);
+    expect(isReviewOverdue({ scheduledDate: '2026-11-01', status: 'CANCELLED' }, '2026-11-02')).toBe(false);
+  });
+  it('fully signed needs tutor, learner and employer', () => {
+    const t = '2026-11-09T10:00:00Z';
+    expect(reviewFullySigned({ tutorSignedAt: t, learnerSignedAt: t, employerSignedAt: t })).toBe(true);
+    expect(reviewFullySigned({ tutorSignedAt: t, learnerSignedAt: null, employerSignedAt: t })).toBe(false);
   });
 });

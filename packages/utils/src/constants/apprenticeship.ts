@@ -84,3 +84,38 @@ export const APPR_DEFAULT_SETTINGS: ApprSettings = {
   otjFactor: 0.2,
   otjWeeklyCapHours: 30
 };
+
+// ── Round 2: task plans, tasks, progress reviews, upload clean-up ──
+
+/** Task status cache, kept in step with the task's latest linked evidence. "Overdue" is computed on read. */
+export const APPR_TASK_STATUSES = ['PLANNED', 'SUBMITTED', 'REFERRED', 'COMPLETE'] as const;
+export type ApprTaskStatus = (typeof APPR_TASK_STATUSES)[number];
+export const APPR_TASK_STATUS_LABELS: Record<ApprTaskStatus, string> = {
+  PLANNED: 'Planned',
+  SUBMITTED: 'Submitted',
+  REFERRED: 'Referred',
+  COMPLETE: 'Complete'
+};
+
+export const APPR_TASK_PLAN_STATUSES = ['ACTIVE', 'ARCHIVED'] as const;
+export type ApprTaskPlanStatus = (typeof APPR_TASK_PLAN_STATUSES)[number];
+export const APPR_TASK_TITLE_MAX = 256;
+export const APPR_TASK_MONTH_OFFSET_MAX = 120;
+
+/** Review lifecycle. COMPLETE is locked and schedules the next review; CANCELLED is kept for the record. */
+export const APPR_REVIEW_STATUSES = ['SCHEDULED', 'DRAFT', 'AWAITING_SIGNATURES', 'COMPLETE', 'CANCELLED'] as const;
+export type ApprReviewStatus = (typeof APPR_REVIEW_STATUSES)[number];
+export const APPR_REVIEW_STATUS_LABELS: Record<ApprReviewStatus, string> = {
+  SCHEDULED: 'Scheduled',
+  DRAFT: 'In progress',
+  AWAITING_SIGNATURES: 'Awaiting signatures',
+  COMPLETE: 'Complete',
+  CANCELLED: 'Cancelled'
+};
+export const APPR_REVIEW_INTERVAL_WEEKS_DEFAULT = 12;
+/** Tutors are reminded this many days before a review is due (once). */
+export const APPR_REVIEW_DUE_NOTICE_DAYS = 7;
+export const APPR_REVIEW_TARGETS_MAX = 20;
+
+/** Uploads not saved on a record (or later removed from one) are deleted from storage after this long. */
+export const APPR_UPLOAD_GRACE_HOURS = 24;

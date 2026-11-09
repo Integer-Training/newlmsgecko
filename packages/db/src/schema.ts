@@ -4512,6 +4512,8 @@ export const apprProgramme = pgTable(
     awardingBody: varchar('awarding_body'),
     level: varchar(),
     status: varchar().default('ACTIVE').notNull(),
+    // Weeks between progress reviews (first review = learner start + interval).
+    reviewIntervalWeeks: integer('review_interval_weeks').default(12).notNull(),
     createdBy: uuid('created_by'),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull()
@@ -4710,7 +4712,10 @@ export const apprEvidence = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
     reviewedBy: uuid('reviewed_by'),
-    reviewedAt: timestamp('reviewed_at', { withTimezone: true, mode: 'string' })
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true, mode: 'string' }),
+    // The task this evidence answers (appr_task.id), if any. No FK (appr_task is declared later); the task service
+    // nulls it when a task is deleted and validates it belongs to the same learner + programme on write.
+    taskId: uuid('task_id')
   },
   (table) => [
     foreignKey({
@@ -4739,6 +4744,7 @@ export const apprEvidence = pgTable(
       name: 'appr_evidence_reviewed_by_fkey'
     }).onDelete('set null'),
     index('idx_appr_evidence_learner_programme_status').on(table.learnerId, table.programmeId, table.status),
+    index('idx_appr_evidence_task').on(table.taskId),
     index('idx_appr_evidence_org_status_created').on(table.organizationId, table.status, table.createdAt)
   ]
 );
@@ -4833,5 +4839,250 @@ export const apprSettings = pgTable(
       foreignColumns: [organization.id],
       name: 'appr_settings_organization_id_fkey'
     }).onDelete('cascade')
+  ]
+);
+
+// ── Gecko Apprenticeships round 2 (docs/APPRENTICESHIP.md): upload tracking, task plans + tasks, progress reviews ──
+
+type ApprFile = { key: string; name: string; size?: number; type?: string; uploadedBy?: string; uploadedAt?: string };
+
+// One row per presigned evidence/task upload key, so files from abandoned forms (or dropped from an evidence) can be
+// deleted from storage by the daily maintenance job. attached_at = saved on a record; removed_at = dropped later.
+export const apprUpload = pgTable(
+  'appr_upload',
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    organizationId: uuid('organization_id').notNull(),
+    learnerId: uuid('learner_id'),
+    ownerId: uuid('owner_id'),
+    key: varchar().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+    attachedAt: timestamp('attached_at', { withTimezone: true, mode: 'string' }),
+    removedAt: timestamp('removed_at', { withTimezone: true, mode: 'string' })
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId],
+      foreignColumns: [organization.id],
+      name: 'appr_upload_organization_id_fkey'
+    }).onDelete('cascade'),
+    unique('appr_upload_key_unique').on(table.key),
+    index('idx_appr_upload_pending').on(table.attachedAt, table.createdAt),
+    index('idx_appr_upload_removed').on(table.removedAt)
+  ]
+);
+
+// A reusable task plan for a programme (template). Items become learner tasks when the plan is assigned; due date =
+// learner start date + month_offset months. Assignable only between valid_from and valid_to (either may be open).
+export const apprTaskPlan = pgTable(
+  'appr_task_plan',
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    organizationId: uuid('organization_id').notNull(),
+    programmeId: uuid('programme_id').notNull(),
+    title: varchar({ length: 256 }).notNull(),
+    validFrom: date('valid_from', { mode: 'string' }),
+    validTo: date('valid_to', { mode: 'string' }),
+    files: jsonb().default([]).$type<ApprFile[]>().notNull(),
+    status: varchar().default('ACTIVE').notNull(),
+    createdBy: uuid('created_by'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId],
+      foreignColumns: [organization.id],
+      name: 'appr_task_plan_organization_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.programmeId],
+      foreignColumns: [apprProgramme.id],
+      name: 'appr_task_plan_programme_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.createdBy],
+      foreignColumns: [profile.id],
+      name: 'appr_task_plan_created_by_fkey'
+    }).onDelete('set null'),
+    index('idx_appr_task_plan_programme').on(table.programmeId)
+  ]
+);
+
+export const apprTaskPlanItem = pgTable(
+  'appr_task_plan_item',
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    planId: uuid('plan_id').notNull(),
+    title: varchar({ length: 256 }).notNull(),
+    details: text().default('').notNull(),
+    typeKey: varchar('type_key').notNull(),
+    sequence: integer().default(0).notNull(),
+    monthOffset: integer('month_offset').default(0).notNull(),
+    expectedMinutes: integer('expected_minutes').default(0).notNull(),
+    files: jsonb().default([]).$type<ApprFile[]>().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.planId],
+      foreignColumns: [apprTaskPlan.id],
+      name: 'appr_task_plan_item_plan_id_fkey'
+    }).onDelete('cascade'),
+    index('idx_appr_task_plan_item_plan').on(table.planId)
+  ]
+);
+
+export const apprTaskPlanItemCriterion = pgTable(
+  'appr_task_plan_item_criterion',
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    itemId: uuid('item_id').notNull(),
+    criterionId: uuid('criterion_id').notNull()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.itemId],
+      foreignColumns: [apprTaskPlanItem.id],
+      name: 'appr_task_plan_item_criterion_item_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.criterionId],
+      foreignColumns: [apprCriterion.id],
+      name: 'appr_task_plan_item_criterion_criterion_id_fkey'
+    }).onDelete('cascade'),
+    unique('appr_task_plan_item_criterion_unique').on(table.itemId, table.criterionId)
+  ]
+);
+
+// A learner's task — from a plan item (plan_id + plan_item_id set) or individual (both null). status is a cache kept
+// in step with the latest linked evidence (PLANNED → SUBMITTED / REFERRED → COMPLETE); "overdue" is computed on read.
+export const apprTask = pgTable(
+  'appr_task',
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    organizationId: uuid('organization_id').notNull(),
+    programmeId: uuid('programme_id').notNull(),
+    enrolmentId: uuid('enrolment_id').notNull(),
+    learnerId: uuid('learner_id').notNull(),
+    planId: uuid('plan_id'),
+    planItemId: uuid('plan_item_id'),
+    title: varchar({ length: 256 }).notNull(),
+    details: text().default('').notNull(),
+    typeKey: varchar('type_key').notNull(),
+    dueDate: date('due_date', { mode: 'string' }),
+    expectedMinutes: integer('expected_minutes').default(0).notNull(),
+    files: jsonb().default([]).$type<ApprFile[]>().notNull(),
+    status: varchar().default('PLANNED').notNull(),
+    overdueNotifiedAt: timestamp('overdue_notified_at', { withTimezone: true, mode: 'string' }),
+    createdBy: uuid('created_by'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId],
+      foreignColumns: [organization.id],
+      name: 'appr_task_organization_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.enrolmentId],
+      foreignColumns: [apprEnrolment.id],
+      name: 'appr_task_enrolment_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.planId],
+      foreignColumns: [apprTaskPlan.id],
+      name: 'appr_task_plan_id_fkey'
+    }).onDelete('set null'),
+    foreignKey({
+      columns: [table.planItemId],
+      foreignColumns: [apprTaskPlanItem.id],
+      name: 'appr_task_plan_item_id_fkey'
+    }).onDelete('set null'),
+    foreignKey({
+      columns: [table.createdBy],
+      foreignColumns: [profile.id],
+      name: 'appr_task_created_by_fkey'
+    }).onDelete('set null'),
+    unique('appr_task_enrolment_plan_item_unique').on(table.enrolmentId, table.planItemId),
+    index('idx_appr_task_enrolment').on(table.enrolmentId),
+    index('idx_appr_task_org_due').on(table.organizationId, table.status, table.dueDate),
+    index('idx_appr_task_plan').on(table.planId)
+  ]
+);
+
+export const apprTaskCriterion = pgTable(
+  'appr_task_criterion',
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    taskId: uuid('task_id').notNull(),
+    criterionId: uuid('criterion_id').notNull()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.taskId],
+      foreignColumns: [apprTask.id],
+      name: 'appr_task_criterion_task_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.criterionId],
+      foreignColumns: [apprCriterion.id],
+      name: 'appr_task_criterion_criterion_id_fkey'
+    }).onDelete('cascade'),
+    unique('appr_task_criterion_unique').on(table.taskId, table.criterionId)
+  ]
+);
+
+// A progress review (every programme.review_interval_weeks). status: SCHEDULED → DRAFT → AWAITING_SIGNATURES →
+// COMPLETE (locked; next review scheduled) or CANCELLED. snapshot = progress at completion. The employer signature is
+// recorded by staff (name + time) until employer access exists (docs/APPRENTICESHIP-EMPLOYER.md).
+export const apprReview = pgTable(
+  'appr_review',
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    organizationId: uuid('organization_id').notNull(),
+    enrolmentId: uuid('enrolment_id').notNull(),
+    scheduledDate: date('scheduled_date', { mode: 'string' }).notNull(),
+    heldDate: date('held_date', { mode: 'string' }),
+    status: varchar().default('SCHEDULED').notNull(),
+    snapshot: jsonb().$type<Record<string, unknown>>(),
+    progressSummary: text('progress_summary'),
+    targets: jsonb().default([]).$type<{ text: string; due?: string | null }[]>().notNull(),
+    tutorComment: text('tutor_comment'),
+    learnerComment: text('learner_comment'),
+    employerComment: text('employer_comment'),
+    tutorSignedName: varchar('tutor_signed_name'),
+    tutorSignedAt: timestamp('tutor_signed_at', { withTimezone: true, mode: 'string' }),
+    tutorSignedBy: uuid('tutor_signed_by'),
+    learnerSignedName: varchar('learner_signed_name'),
+    learnerSignedAt: timestamp('learner_signed_at', { withTimezone: true, mode: 'string' }),
+    employerSignedName: varchar('employer_signed_name'),
+    employerSignedAt: timestamp('employer_signed_at', { withTimezone: true, mode: 'string' }),
+    employerRecordedBy: uuid('employer_recorded_by'),
+    nextReviewDate: date('next_review_date', { mode: 'string' }),
+    dueNotifiedAt: timestamp('due_notified_at', { withTimezone: true, mode: 'string' }),
+    createdBy: uuid('created_by'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId],
+      foreignColumns: [organization.id],
+      name: 'appr_review_organization_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.enrolmentId],
+      foreignColumns: [apprEnrolment.id],
+      name: 'appr_review_enrolment_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.createdBy],
+      foreignColumns: [profile.id],
+      name: 'appr_review_created_by_fkey'
+    }).onDelete('set null'),
+    index('idx_appr_review_enrolment').on(table.enrolmentId),
+    index('idx_appr_review_org_status_date').on(table.organizationId, table.status, table.scheduledDate)
   ]
 );

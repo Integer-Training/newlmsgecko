@@ -217,3 +217,83 @@ export function spreadUnitDates(
     return range;
   });
 }
+
+// ── Round 2: tasks and progress reviews ──
+
+const fmtDay = (day: number) => new Date(day * DAY_MS).toISOString().slice(0, 10);
+
+/**
+ * Add whole months to a calendar date, clamping to the last day of the target month (31 Jan + 1 month = 28/29 Feb).
+ * Null when the date is invalid. Used for task due dates (learner start + month offset).
+ */
+export function addMonths(date: string | null | undefined, months: number): string | null {
+  const day = toDayNumber(date);
+  if (day === null) return null;
+  const d = new Date(day * DAY_MS);
+  const total = d.getUTCFullYear() * 12 + d.getUTCMonth() + Math.trunc(months);
+  const y = Math.floor(total / 12);
+  const m = total - y * 12;
+  const lastDay = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  return fmtDay(Math.floor(Date.UTC(y, m, Math.min(d.getUTCDate(), lastDay)) / DAY_MS));
+}
+
+/** Add whole days to a calendar date. */
+export function addDays(date: string | null | undefined, days: number): string | null {
+  const day = toDayNumber(date);
+  return day === null ? null : fmtDay(day + Math.trunc(days));
+}
+
+/** A task's due date: learner start + the plan item's month offset. No start date → no due date. */
+export function taskDueDate(startDate: string | null | undefined, monthOffset: number): string | null {
+  return addMonths(startDate, Math.max(0, monthOffset));
+}
+
+/**
+ * A task's status from its linked evidence, newest first. The latest piece decides (a resubmission after a referral
+ * makes it SUBMITTED again); any ACCEPTED piece completes the task for good.
+ */
+export function taskStatusFromEvidence(
+  evidenceNewestFirst: readonly { status: string }[]
+): 'PLANNED' | 'SUBMITTED' | 'REFERRED' | 'COMPLETE' {
+  if (evidenceNewestFirst.some((e) => e.status === 'ACCEPTED')) return 'COMPLETE';
+  const latest = evidenceNewestFirst[0];
+  if (!latest) return 'PLANNED';
+  return latest.status === 'REFERRED' ? 'REFERRED' : 'SUBMITTED';
+}
+
+/** Overdue = has a due date, it has passed, and the task is not complete. */
+export function isTaskOverdue(task: { dueDate: string | null; status: string }, today: string): boolean {
+  const due = toDayNumber(task.dueDate);
+  const now = toDayNumber(today);
+  return due !== null && now !== null && now > due && task.status !== 'COMPLETE';
+}
+
+/** Valid-window check for assigning a task plan (either end may be open). */
+export function isWithinWindow(validFrom: string | null, validTo: string | null, today: string): boolean {
+  const now = toDayNumber(today);
+  if (now === null) return false;
+  const from = toDayNumber(validFrom);
+  const to = toDayNumber(validTo);
+  return (from === null || now >= from) && (to === null || now <= to);
+}
+
+/** First / next review date: from a base date (learner start, or the date the last review was held) + interval. */
+export function nextReviewDate(base: string | null | undefined, intervalWeeks: number): string | null {
+  return addDays(base, Math.max(1, Math.trunc(intervalWeeks)) * 7);
+}
+
+/** Review overdue = scheduled date passed and not COMPLETE/CANCELLED. */
+export function isReviewOverdue(review: { scheduledDate: string; status: string }, today: string): boolean {
+  const due = toDayNumber(review.scheduledDate);
+  const now = toDayNumber(today);
+  return due !== null && now !== null && now > due && review.status !== 'COMPLETE' && review.status !== 'CANCELLED';
+}
+
+/** A review can complete only when every required signature is present. */
+export function reviewFullySigned(r: {
+  tutorSignedAt: string | null;
+  learnerSignedAt: string | null;
+  employerSignedAt: string | null;
+}): boolean {
+  return Boolean(r.tutorSignedAt && r.learnerSignedAt && r.employerSignedAt);
+}
