@@ -28,16 +28,20 @@ import {
 import { Hono } from '@api/utils/hono';
 import type { Actor } from '@cio/db/actor';
 import { handleError } from '@api/utils/errors';
-import { requireAdmin } from '@api/middlewares/guards';
+import { requireRole, requireStaff } from '@api/middlewares/guards';
 import { zValidator } from '@hono/zod-validator';
 
-// Gecko Apprenticeships — evidence, review and the marking queue. ADMIN only for now (requireAdmin); the services
+// Gecko Apprenticeships — evidence, review and the marking queue. Phase B: ADMIN + TUTOR (requireStaff); the services
 // scope every call through access.ts and hold the state machine + the learner edit rules, so the tutor and learner
 // phases only open routes. Static paths are registered before '/:id'. Mounted at /apprenticeship/evidence.
+// Phase C: the apprentice themselves may use the routes guarded by this; the services scope them to their own
+// enrolment and evidence (anything else 404s). Managers have no apprenticeship access.
+const requireApprMember = requireRole('ADMIN', 'TUTOR', 'LEARNER');
+
 export const evidenceRouter = new Hono()
   .get(
     '/enrolments/:id/evidence',
-    requireAdmin,
+    requireApprMember,
     zValidator('param', ZEnrolmentIdParam),
     zValidator('query', ZEvidenceListQuery),
     async (c) => {
@@ -51,7 +55,7 @@ export const evidenceRouter = new Hono()
   )
   .post(
     '/enrolments/:id/evidence',
-    requireAdmin,
+    requireApprMember,
     zValidator('param', ZEnrolmentIdParam),
     zValidator('json', ZEvidenceCreate),
     async (c) => {
@@ -63,7 +67,7 @@ export const evidenceRouter = new Hono()
       }
     }
   )
-  .post('/presign', requireAdmin, zValidator('json', ZEvidencePresign), async (c) => {
+  .post('/presign', requireApprMember, zValidator('json', ZEvidencePresign), async (c) => {
     try {
       const data = await presignEvidenceUploads(c.get('actor') as Actor, c.req.valid('json'));
       return c.json({ success: true, data }, 200);
@@ -71,7 +75,7 @@ export const evidenceRouter = new Hono()
       return handleError(c, error, 'Failed to prepare uploads');
     }
   })
-  .post('/download', requireAdmin, zValidator('json', ZEvidenceDownload), async (c) => {
+  .post('/download', requireApprMember, zValidator('json', ZEvidenceDownload), async (c) => {
     try {
       const { evidenceId, keys } = c.req.valid('json');
       const data = await signEvidenceDownloads(c.get('actor') as Actor, evidenceId, keys);
@@ -80,7 +84,7 @@ export const evidenceRouter = new Hono()
       return handleError(c, error, 'Failed to prepare downloads');
     }
   })
-  .get('/to-mark', requireAdmin, zValidator('query', ZToMarkQuery), async (c) => {
+  .get('/to-mark', requireStaff, zValidator('query', ZToMarkQuery), async (c) => {
     try {
       const data = await listToMarkQueue(c.get('actor') as Actor, c.req.valid('query'));
       return c.json({ success: true, data }, 200);
@@ -90,7 +94,7 @@ export const evidenceRouter = new Hono()
   })
   .get(
     '/criteria/:criterionId/evidence',
-    requireAdmin,
+    requireApprMember,
     zValidator('param', ZCriterionIdParam),
     zValidator('query', ZCriterionEvidenceQuery),
     async (c) => {
@@ -106,7 +110,7 @@ export const evidenceRouter = new Hono()
       }
     }
   )
-  .get('/:id', requireAdmin, zValidator('param', ZEvidenceIdParam), async (c) => {
+  .get('/:id', requireApprMember, zValidator('param', ZEvidenceIdParam), async (c) => {
     try {
       const data = await getEvidenceDetail(c.get('actor') as Actor, c.req.valid('param').id);
       return c.json({ success: true, data }, 200);
@@ -116,7 +120,7 @@ export const evidenceRouter = new Hono()
   })
   .patch(
     '/:id',
-    requireAdmin,
+    requireApprMember,
     zValidator('param', ZEvidenceIdParam),
     zValidator('json', ZEvidenceUpdate),
     async (c) => {
@@ -130,7 +134,7 @@ export const evidenceRouter = new Hono()
   )
   .post(
     '/:id/review',
-    requireAdmin,
+    requireStaff,
     zValidator('param', ZEvidenceIdParam),
     zValidator('json', ZEvidenceReview),
     async (c) => {
@@ -144,7 +148,7 @@ export const evidenceRouter = new Hono()
   )
   .post(
     '/:id/notes',
-    requireAdmin,
+    requireApprMember,
     zValidator('param', ZEvidenceIdParam),
     zValidator('json', ZEvidenceNoteCreate),
     async (c) => {

@@ -92,16 +92,16 @@
         Show unmet only
       </label>
     {/if}
-    <span class="text-muted-foreground ml-auto text-sm" aria-live="polite">{selected.length} selected</span>
+    <span class="ml-auto text-sm text-(--muted-foreground)" aria-live="polite">{selected.length} selected</span>
   </div>
 
   <div class="max-h-[22rem] overflow-y-auto rounded-md border">
     {#if visible.length === 0}
-      <p class="text-muted-foreground p-3 text-sm">No criteria match.</p>
+      <p class="p-3 text-sm text-(--muted-foreground)">No criteria match.</p>
     {/if}
     {#each visible as qual (qual.id)}
       {#if tree.length > 1}
-        <p class="bg-muted/50 text-muted-foreground px-3 py-1.5 text-xs font-medium tracking-wide uppercase">
+        <p class="bg-(--muted)/50 px-3 py-1.5 text-xs font-medium tracking-wide text-(--muted-foreground) uppercase">
           {qual.title}
         </p>
       {/if}
@@ -131,13 +131,13 @@
                 />{/if}
               <span class="truncate">{unit.code ? `${unit.code} · ` : ''}{unit.title}</span>
             </button>
-            <span class="text-muted-foreground text-xs">{ticked}/{ids.length}</span>
+            <span class="text-xs text-(--muted-foreground)">{ticked}/{ids.length}</span>
           </div>
           {#if isOpen}
             <ul id="{idPrefix}-{unit.id}" class="pb-1">
               {#each unit.criteria as c (c.id)}
                 <li>
-                  <label class="hover:bg-muted/40 flex cursor-pointer items-start gap-2 px-3 py-1.5 pl-9 text-sm">
+                  <label class="flex cursor-pointer items-start gap-2 px-3 py-1.5 pl-9 text-sm hover:bg-(--muted)/40">
                     <Checkbox
                       class="mt-0.5"
                       checked={chosen.has(c.id)}
@@ -146,7 +146,7 @@
                     />
                     <span class="min-w-0">
                       <span class="font-medium">{c.code}</span>
-                      <span class="text-muted-foreground"> {c.text}</span>
+                      <span class="text-(--muted-foreground)"> {c.text}</span>
                       {#if metIds?.has(c.id)}<span class="ml-1 text-xs text-emerald-600">met</span>{/if}
                     </span>
                   </label>

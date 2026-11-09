@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { isOrgTeamMember } from '$lib/utils/store/org';
   import { onMount } from 'svelte';
   import { Button } from '@cio/ui/base/button';
   import { Checkbox } from '@cio/ui/base/checkbox';
@@ -144,14 +145,14 @@
   <div class="space-y-1">
     <div class="flex items-baseline justify-between">
       <label for="ev-title" class="text-sm font-medium">Title <span class="text-red-500">*</span></label>
-      <span class="text-muted-foreground text-xs" aria-live="polite">{title.length}/{APPR_EVIDENCE_TITLE_MAX}</span>
+      <span class="text-xs text-(--muted-foreground)" aria-live="polite">{title.length}/{APPR_EVIDENCE_TITLE_MAX}</span>
     </div>
     <Input id="ev-title" bind:value={title} maxlength={APPR_EVIDENCE_TITLE_MAX} required />
   </div>
 
   <div class="space-y-1">
     <label for="ev-details" class="text-sm font-medium">Details</label>
-    <Textarea id="ev-details" class="ui:min-h-[96px]" bind:value={details} maxlength={APPR_EVIDENCE_DETAILS_MAX} />
+    <Textarea id="ev-details" class="min-h-[96px]!" bind:value={details} maxlength={APPR_EVIDENCE_DETAILS_MAX} />
   </div>
 
   <div class="grid grid-cols-2 items-end gap-3 sm:grid-cols-4">
@@ -177,15 +178,15 @@
           type="button"
           aria-pressed={typeKey === t.key}
           class="rounded-full border px-2.5 py-1 text-xs transition-colors {typeKey === t.key
-            ? 'bg-primary text-primary-foreground border-primary'
-            : 'hover:bg-muted'}"
+            ? 'border-(--primary) bg-(--primary) text-(--primary-foreground)'
+            : 'hover:bg-(--muted)'}"
           onclick={() => (typeKey = t.key)}
         >
           {t.label}
         </button>
       {/each}
       {#if activeTypes.length === 0}
-        <p class="text-muted-foreground text-sm">Loading types…</p>
+        <p class="text-sm text-(--muted-foreground)">Loading types…</p>
       {/if}
     </div>
   </fieldset>
@@ -216,7 +217,7 @@
       <UploadIcon size={16} class="mr-1" /> Add files
     </Button>
     {#if !enrolmentId}
-      <p class="text-muted-foreground text-xs">Open this learner's portfolio to add more files.</p>
+      <p class="text-xs text-(--muted-foreground)">Open this learner's portfolio to add more files.</p>
     {/if}
     {#if files.length > 0}
       <ul class="space-y-1">
@@ -225,11 +226,11 @@
             <span class="inline-flex min-w-0 items-center gap-1.5">
               <FileIcon size={14} class="shrink-0" />
               <span class="truncate">{f.name}</span>
-              <span class="text-muted-foreground shrink-0 text-xs">{fmtBytes(f.size)}</span>
+              <span class="shrink-0 text-xs text-(--muted-foreground)">{fmtBytes(f.size)}</span>
             </span>
             <button
               type="button"
-              class="text-muted-foreground hover:text-foreground"
+              class="text-(--muted-foreground) hover:text-(--foreground)"
               aria-label="Remove {f.name}"
               onclick={() => removeFile(f.key)}
             >
@@ -241,7 +242,8 @@
     {/if}
   </div>
 
-  {#if !initial}
+  <!-- Staff only: an apprentice's own evidence is always Submitted (the API forces it too). -->
+  {#if !initial && $isOrgTeamMember}
     <div class="space-y-1">
       <label for="ev-status" class="text-sm font-medium">Status</label>
       <Select.Root type="single" bind:value={status}>
@@ -253,13 +255,13 @@
           <Select.Item value="ACCEPTED">Accepted</Select.Item>
         </Select.Content>
       </Select.Root>
-      <p class="text-muted-foreground text-xs">Accepted evidence counts towards progress straight away.</p>
+      <p class="text-xs text-(--muted-foreground)">Accepted evidence counts towards progress straight away.</p>
     </div>
   {/if}
 
   <div class="space-y-1">
     <label for="ev-note" class="text-sm font-medium">Note (optional)</label>
-    <Textarea id="ev-note" class="ui:min-h-[64px]" bind:value={note} maxlength={APPR_NOTE_MAX} />
+    <Textarea id="ev-note" class="min-h-[64px]!" bind:value={note} maxlength={APPR_NOTE_MAX} />
     <label class="flex items-center gap-2 text-sm">
       <Checkbox bind:checked={auditNote} />
       Audit note
@@ -280,6 +282,6 @@
     <Button type="submit" loading={saving} disabled={!canSave}>{initial ? 'Save changes' : 'Add evidence'}</Button>
   </div>
   {#if !canSave && !saving}
-    <p class="text-muted-foreground text-right text-xs">A title, a type and at least one criterion are required.</p>
+    <p class="text-right text-xs text-(--muted-foreground)">A title, a type and at least one criterion are required.</p>
   {/if}
 </form>

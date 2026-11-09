@@ -13,8 +13,11 @@
   const e = $derived(expected === null ? null : Math.max(0, Math.min(100, expected)));
 </script>
 
+<!-- Colours via the theme variables: the dashboard's own Tailwind build has no unprefixed theme colour utilities
+     (muted / primary / foreground), so those classes rendered nothing (an invisible bar). -->
 <div
-  class="bg-muted relative h-2 w-full rounded-full {className}"
+  class="relative h-2 w-full rounded-full {className}"
+  style="background-color: var(--muted)"
   role="progressbar"
   aria-label={label}
   aria-valuemin={0}
@@ -22,11 +25,11 @@
   aria-valuenow={actual ?? 0}
   aria-valuetext={`${actual ?? 0}%${e !== null ? `, expected ${e}%` : ''}`}
 >
-  <div class="bg-primary h-full rounded-full transition-all" style="width: {a}%"></div>
+  <div class="h-full rounded-full transition-all" style="width: {a}%; background-color: var(--primary)"></div>
   {#if e !== null}
     <div
-      class="bg-foreground absolute -top-0.5 h-3 w-0.5 rounded"
-      style="left: calc({e}% - 1px)"
+      class="absolute -top-0.5 h-3 w-0.5 rounded"
+      style="left: calc({e}% - 1px); background-color: var(--foreground)"
       title="Expected {e}%"
     ></div>
   {/if}

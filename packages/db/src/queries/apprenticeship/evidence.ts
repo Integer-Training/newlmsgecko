@@ -233,6 +233,8 @@ export async function listToMark(
     .select({
       id: ev.id,
       title: ev.title,
+      typeKey: ev.typeKey,
+      typeLabel: schema.apprEvidenceType.label,
       createdAt: ev.createdAt,
       learnerId: ev.learnerId,
       learnerName: profileDisplayName,
@@ -244,8 +246,33 @@ export async function listToMark(
     .from(ev)
     .innerJoin(schema.profile, eq(schema.profile.id, ev.learnerId))
     .innerJoin(schema.apprProgramme, eq(schema.apprProgramme.id, ev.programmeId))
+    .leftJoin(
+      schema.apprEvidenceType,
+      and(eq(schema.apprEvidenceType.organizationId, ev.organizationId), eq(schema.apprEvidenceType.key, ev.typeKey))
+    )
     .where(and(...conditions))
     .orderBy(asc(ev.createdAt), asc(ev.id))
     .limit(page.limit)
     .offset(page.offset);
+}
+
+/**
+ * Notification deep links (one statement for a whole bell page): evidence id → its enrolment, title and the learner's
+ * display name. Evidence whose enrolment is gone is simply absent (the bell falls back to the home page).
+ */
+export async function getEvidenceLinkTargets(evidenceIds: string[], client: DbOrTxClient = db) {
+  const out = new Map<string, { enrolmentId: string; title: string; learnerName: string | null }>();
+  if (evidenceIds.length === 0) return out;
+  const ev = schema.apprEvidence;
+  const rows = await client
+    .select({ id: ev.id, title: ev.title, enrolmentId: schema.apprEnrolment.id, learnerName: profileDisplayName })
+    .from(ev)
+    .innerJoin(
+      schema.apprEnrolment,
+      and(eq(schema.apprEnrolment.programmeId, ev.programmeId), eq(schema.apprEnrolment.learnerId, ev.learnerId))
+    )
+    .leftJoin(schema.profile, eq(schema.profile.id, ev.learnerId))
+    .where(inArray(ev.id, evidenceIds));
+  for (const r of rows) out.set(r.id, { enrolmentId: r.enrolmentId, title: r.title, learnerName: r.learnerName });
+  return out;
 }

@@ -87,6 +87,33 @@ export async function markAllNotificationsRead(userId: string, client: DbOrTxCli
 }
 
 /**
+ * Mark every recipient's unread notifications of the given types about ONE subject read — e.g. once evidence has
+ * been marked, the "new evidence to mark" alert is done for every tutor who got it, not just the one who marked it.
+ * Server-side only (never driven by a user-supplied id list).
+ */
+export async function markNotificationsReadForEntity(
+  entityType: string,
+  entityId: string,
+  types: string[],
+  client: DbOrTxClient = db
+): Promise<number> {
+  if (types.length === 0) return 0;
+  const rows = await client
+    .update(schema.notification)
+    .set({ readAt: sql`now()` })
+    .where(
+      and(
+        eq(schema.notification.entityType, entityType),
+        eq(schema.notification.entityId, entityId),
+        inArray(schema.notification.type, types),
+        isNull(schema.notification.readAt)
+      )
+    )
+    .returning({ id: schema.notification.id });
+  return rows.length;
+}
+
+/**
  * Coalescing check (docs/COMMS-MODEL.md D3): does the user already have ANOTHER unread notification for the
  * same subject (entity_type, entity_id), newer than the backstop window? If so, a further email is suppressed
  * (the in-app row still fires). `excludeId` is the just-written row so it never coalesces against itself.

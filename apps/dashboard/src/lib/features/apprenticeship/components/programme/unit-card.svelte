@@ -160,9 +160,9 @@
 </script>
 
 {#snippet draftRow()}
-  <Table.Row class="bg-muted/30">
+  <Table.Row class="bg-(--muted)/30">
     <Table.Cell>
-      <Input aria-label="Criterion code" bind:value={draft.code} maxlength={100} placeholder="1.1" class="h-8 w-20" />
+      <Input aria-label="Criterion code" bind:value={draft.code} maxlength={100} placeholder="1.1" class="h-8 w-full" />
     </Table.Cell>
     <Table.Cell>
       <Input
@@ -170,11 +170,11 @@
         bind:value={draft.text}
         maxlength={5000}
         placeholder="What the learner must show"
-        class="h-8 min-w-48"
+        class="h-8 w-full"
       />
     </Table.Cell>
     <Table.Cell>
-      <Input aria-label="Group" bind:value={draft.groupLabel} maxlength={200} placeholder="Group" class="h-8 w-32" />
+      <Input aria-label="Group" bind:value={draft.groupLabel} maxlength={200} placeholder="Group" class="h-8 w-full" />
     </Table.Cell>
     <Table.Cell>
       <Input
@@ -199,11 +199,11 @@
   </Table.Row>
 {/snippet}
 
-<div class="bg-background rounded-md border">
+<div class="rounded-md border bg-(--background)">
   <div class="flex flex-wrap items-center gap-2 p-2">
     <button
       type="button"
-      class="hover:bg-muted flex size-7 items-center justify-center rounded"
+      class="flex size-7 items-center justify-center rounded hover:bg-(--muted)"
       aria-expanded={expanded}
       aria-label="{expanded ? 'Collapse' : 'Expand'} unit {unit.code ?? unit.title}"
       onclick={() => (expanded = !expanded)}
@@ -237,8 +237,8 @@
         tabindex="-1"
       >
         {#if unit.code}<Badge variant="outline" class="shrink-0">{unit.code}</Badge>{/if}
-        <span class="truncate font-medium">{unit.title}</span>
-        <span class="text-muted-foreground shrink-0 text-xs">
+        <span class="line-clamp-2 font-medium break-words">{unit.title}</span>
+        <span class="shrink-0 text-xs text-(--muted-foreground)">
           {unit.criteria.length} criteri{unit.criteria.length === 1 ? 'on' : 'a'}
         </span>
       </button>
@@ -276,15 +276,16 @@
 
   {#if expanded}
     <form onsubmit={saveDraft} class="border-t">
-      <div class="overflow-x-auto">
-        <Table.Root>
+      <!-- Fixed layout: the criterion column takes the leftover width and wraps, so the actions always fit. -->
+      <div>
+        <Table.Root class="table-fixed">
           <Table.Header>
             <Table.Row>
-              <Table.Head class="w-24">Code</Table.Head>
+              <Table.Head class="w-16">Code</Table.Head>
               <Table.Head>Criterion</Table.Head>
-              <Table.Head class="w-36">Group</Table.Head>
+              <Table.Head class="w-28">Group</Table.Head>
               <Table.Head class="w-20">Required</Table.Head>
-              <Table.Head class="w-40 text-right"><span class="sr-only">Actions</span></Table.Head>
+              <Table.Head class="w-36 text-right"><span class="sr-only">Actions</span></Table.Head>
             </Table.Row>
           </Table.Header>
           <Table.Body>
@@ -293,9 +294,11 @@
                 {@render draftRow()}
               {:else}
                 <Table.Row>
-                  <Table.Cell class="font-mono text-xs">{c.code}</Table.Cell>
-                  <Table.Cell class="text-sm whitespace-normal">{c.text}</Table.Cell>
-                  <Table.Cell class="text-muted-foreground text-sm">{c.groupLabel ?? '—'}</Table.Cell>
+                  <Table.Cell class="font-mono text-xs break-all whitespace-normal!">{c.code}</Table.Cell>
+                  <Table.Cell class="text-sm break-words whitespace-normal!">{c.text}</Table.Cell>
+                  <Table.Cell class="text-sm break-words whitespace-normal! text-(--muted-foreground)">
+                    {c.groupLabel ?? '—'}
+                  </Table.Cell>
                   <Table.Cell class="tabular-nums">{c.requiredCount}</Table.Cell>
                   <Table.Cell class="text-right">
                     <div class="flex justify-end gap-1">
@@ -344,7 +347,7 @@
             {:else}
               {#if !adding}
                 <Table.Row>
-                  <Table.Cell colspan={5} class="text-muted-foreground py-4 text-center text-sm">
+                  <Table.Cell colspan={5} class="text-(--muted-foreground) py-4 text-center text-sm">
                     No criteria yet. Add one below, or import them from a spreadsheet.
                   </Table.Cell>
                 </Table.Row>

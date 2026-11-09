@@ -79,6 +79,8 @@ export interface EvidenceDetail {
     }[];
   }[];
   notes: EvidenceNote[];
+  /** The learner's enrolment for this evidence — lets a sheet opened outside a portfolio still upload files. */
+  enrolmentId: string | null;
   permissions: { canEdit: boolean; canReview: boolean };
 }
 
@@ -256,18 +258,27 @@ class EvidenceApi {
     }
   }
 
-  /** Open one evidence file via a short-lived signed URL (the only door to the bytes). */
+  /**
+   * Open one evidence file via a short-lived signed URL (the only door to the bytes). The tab is opened BEFORE the
+   * await — still inside the click — so popup blockers allow it; it is then pointed at the signed URL (or closed).
+   */
   async openFile(evidenceId: string, key: string): Promise<void> {
+    const tab = window.open('', '_blank');
     const res = await call<Record<string, string>>(() =>
       classroomio.apprenticeship.evidence.download.$post({ json: { evidenceId, keys: [key] } })
     );
-    if (!res.ok) {
-      snackbar.error(res.error);
+    const url = res.ok ? res.data[key] : undefined;
+    if (!url) {
+      tab?.close();
+      snackbar.error(res.ok ? 'Could not open the file.' : res.error);
       return;
     }
-    const url = res.data[key];
-    if (url) window.open(url, '_blank', 'noopener');
-    else snackbar.error('Could not open the file.');
+    if (tab) {
+      tab.opener = null;
+      tab.location.href = url;
+    } else {
+      window.open(url, '_blank', 'noopener');
+    }
   }
 }
 

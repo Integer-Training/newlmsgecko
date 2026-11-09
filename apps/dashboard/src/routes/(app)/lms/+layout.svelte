@@ -5,6 +5,7 @@
   import { LMSSidebar } from '$features/ui/sidebar/lms-sidebar';
   import TutorFeedbackDialog from '$features/lms/components/tutor-feedback-dialog.svelte';
   import { tutorFeedbackApi } from '$features/lms/api/tutor-feedback.svelte';
+  import { myApprenticeshipApi } from '$features/apprenticeship/api/my-apprenticeship.svelte';
 
   interface Props {
     children?: import('svelte').Snippet;
@@ -29,6 +30,11 @@
       return {};
     }
   }
+
+  // Decides whether "My apprenticeship" shows in the menu (Phase C); fire-and-forget, a failure just hides it.
+  onMount(() => {
+    void myApprenticeshipApi.load();
+  });
 
   onMount(async () => {
     await tutorFeedbackApi.loadStatus();

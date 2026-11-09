@@ -30,20 +30,20 @@
   <div class="space-y-4">
     <dl class="grid grid-cols-2 gap-3 md:grid-cols-4">
       <div class="rounded-lg border p-3">
-        <dt class="text-muted-foreground text-xs">Target</dt>
+        <dt class="text-xs text-(--muted-foreground)">Target</dt>
         <dd class="text-lg font-semibold">{fmtMinutes(otj.targetMinutes)}</dd>
-        <p class="text-muted-foreground text-xs">{source}</p>
+        <p class="text-xs text-(--muted-foreground)">{source}</p>
       </div>
       <div class="rounded-lg border p-3">
-        <dt class="text-muted-foreground text-xs">Done (accepted)</dt>
+        <dt class="text-xs text-(--muted-foreground)">Done (accepted)</dt>
         <dd class="text-lg font-semibold">{fmtMinutes(otj.minutes)}</dd>
       </div>
       <div class="rounded-lg border p-3">
-        <dt class="text-muted-foreground text-xs">Expected to date</dt>
+        <dt class="text-xs text-(--muted-foreground)">Expected to date</dt>
         <dd class="text-lg font-semibold">{fmtMinutes(otj.expectedMinutes)}</dd>
       </div>
       <div class="rounded-lg border p-3">
-        <dt class="text-muted-foreground text-xs">Status</dt>
+        <dt class="text-xs text-(--muted-foreground)">Status</dt>
         <dd class="mt-1"><StatusChip status={otj.status} /></dd>
       </div>
     </dl>
@@ -80,7 +80,8 @@
                 </Table.Cell>
                 <Table.Cell>
                   <EvidenceStatusChip status={e.status} />
-                  {#if e.status !== 'ACCEPTED'}<span class="text-muted-foreground ml-1 text-xs">not counted yet</span
+                  {#if e.status !== 'ACCEPTED'}<span class="ml-1 text-xs text-(--muted-foreground)"
+                      >not counted yet</span
                     >{/if}
                 </Table.Cell>
                 <Table.Cell class="text-right">{fmtMinutes(e.minutes)}</Table.Cell>

@@ -36,7 +36,7 @@
     <label class="flex items-start gap-2 text-sm">
       <Checkbox class="mt-0.5" bind:checked={onlyEmpty} />
       <span
-        >Only units without dates<br /><span class="text-muted-foreground text-xs"
+        >Only units without dates<br /><span class="text-xs text-(--muted-foreground)"
           >Units that already have dates are left alone.</span
         ></span
       >

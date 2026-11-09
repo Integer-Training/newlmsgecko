@@ -15,7 +15,7 @@
     open: boolean;
     mode: 'add' | 'view';
     evidenceId: string | null;
-    /** Needed to add / attach files; null in the marking queue. */
+    /** Needed to add / attach files; null in the marking queue (the loaded detail then supplies it). */
     enrolmentId: string | null;
     tree?: PickerQualification[] | null;
     metIds?: Set<string> | null;
@@ -49,6 +49,8 @@
 
   const effectiveTree = $derived(tree ?? fetched ?? []);
   const isAdd = $derived(mode === 'add' && !evidenceId);
+  // To mark has no portfolio, so fall back to the enrolment the API returns with the evidence (file uploads need it).
+  const formEnrolmentId = $derived(enrolmentId ?? detail?.enrolmentId ?? null);
 
   async function loadDetail() {
     if (!evidenceId) return;
@@ -104,7 +106,7 @@
 </script>
 
 <Sheet.Root bind:open>
-  <Sheet.Content side="right" class="ui:w-full ui:sm:max-w-2xl ui:overflow-y-auto">
+  <Sheet.Content side="right" class="ui:w-full ui:overflow-y-auto sm:max-w-2xl!">
     <Sheet.Header>
       <Sheet.Title>{title}</Sheet.Title>
       <Sheet.Description>
@@ -142,7 +144,7 @@
           {#if editing}
             <EvidenceForm
               initial={detail}
-              {enrolmentId}
+              enrolmentId={formEnrolmentId}
               tree={effectiveTree}
               {metIds}
               onSaved={saved}

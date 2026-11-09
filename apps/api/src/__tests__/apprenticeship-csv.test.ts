@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseCsv, parseCsvWithHeader } from '@cio/utils/functions/csv';
-import { planStructureImport } from '@api/services/apprenticeship/programme-import';
+import { planStructureImport, splitUnitCode } from '@api/services/apprenticeship/programme-import';
 
 // Gecko Apprenticeships — the pure CSV parser and the structure-import planner (preview and apply share this plan).
 
@@ -187,5 +187,54 @@ describe('Skills Portfolio export format', () => {
     );
     const plan = planStructureImport(empty, single);
     expect(plan.errors.length).toBe(1);
+  });
+});
+
+describe('Skills Portfolio unit codes', () => {
+  it.each([
+    ['U1 Talking', 'U1', 'Talking'],
+    [
+      'AC M6B Support the health and wellbeing of individuals',
+      'AC M6B',
+      'Support the health and wellbeing of individuals'
+    ],
+    ['AC M1 Promote communication in care settings', 'AC M1', 'Promote communication in care settings'],
+    ['Communication skills', '', 'Communication skills'],
+    ['NHS 111 Calls', '', 'NHS 111 Calls'],
+    ['2.1 Something', '', '2.1 Something'],
+    ['U1', '', 'U1']
+  ])('%s → code "%s"', (raw, code, title) => {
+    expect(splitUnitCode(raw)).toEqual({ code, title });
+  });
+
+  it('new units get the code from the title; the title keeps the rest', () => {
+    const csv = [
+      'code,unitTitle,name,description,completedItems,requiredItems',
+      '"X/100/0001/01","U1 Talking","1.1","Say why",1,1'
+    ].join('\n');
+    const plan = planStructureImport(
+      { qualifications: [{ id: 'q1', title: 'Q', sort: 0, externalRef: null }], units: [], criteria: [] } as never,
+      csv
+    );
+    expect(plan.newUnits[0]).toMatchObject({ code: 'U1', title: 'Talking', externalRef: 'X/100/0001' });
+  });
+
+  it('re-import fills an EMPTY code but never overwrites one an admin set', () => {
+    const csv = [
+      'code,unitTitle,name,description,completedItems,requiredItems',
+      '"X/100/0001/01","U1 Talking","1.1","Say why",1,1'
+    ].join('\n');
+    const existing = (code: string | null) =>
+      ({
+        qualifications: [{ id: 'q1', title: 'Q', sort: 0, externalRef: null }],
+        units: [{ id: 'u1', qualificationId: 'q1', code, title: 'U1 Talking', sort: 0, externalRef: 'X/100/0001' }],
+        criteria: []
+      }) as never;
+    expect(planStructureImport(existing(null), csv).unitUpdates[0]).toMatchObject({
+      id: 'u1',
+      patch: { code: 'U1', title: 'Talking' }
+    });
+    const kept = planStructureImport(existing('MY-CODE'), csv).unitUpdates[0];
+    expect(kept).toMatchObject({ id: 'u1', patch: { code: 'MY-CODE', title: 'Talking' } });
   });
 });

@@ -5,7 +5,10 @@
   import { Button } from '@cio/ui/base/button';
   import { Skeleton } from '@cio/ui/base/skeleton';
   import { BackButton } from '@cio/ui/custom/back-button';
-  import { currentOrg } from '$lib/utils/store/org';
+  import { page as appPage } from '$app/state';
+  import { replaceState } from '$app/navigation';
+  import { currentOrg, isOrgTeamMember } from '$lib/utils/store/org';
+  import { apprenticeshipsBase } from '../utils/paths';
   import { PortfolioStore } from '../stores/portfolio.svelte';
   import SummaryStrip from '../components/portfolio/summary-strip.svelte';
   import UnitsTab from '../components/portfolio/units-tab.svelte';
@@ -20,10 +23,14 @@
   // Gecko Apprenticeships — one learner's portfolio on a single page. Everything opens in place (units expand,
   // evidence opens in a side sheet); one store owns the data so every part of the page agrees after any change.
 
+  // Shared by admins, the allocated tutor and (Phase C) the apprentice themselves; staff-only controls hide for the
+  // apprentice and the API refuses them anyway. showBack=false when the learner's only portfolio IS their landing page.
   interface Props {
     enrolmentId: string;
+    showBack?: boolean;
   }
-  let { enrolmentId }: Props = $props();
+  let { enrolmentId, showBack = true }: Props = $props();
+  const isStaffViewer = $derived($isOrgTeamMember === true);
 
   // svelte-ignore state_referenced_locally
   const store = new PortfolioStore(enrolmentId);
@@ -35,6 +42,20 @@
     store.load();
   });
 
+  // A notification links here with ?evidence={id}: open that piece once the portfolio has loaded, then drop the
+  // parameter so a refresh or Back doesn't keep re-opening it.
+  let openedFromLink = false;
+  $effect(() => {
+    if (openedFromLink || !store.data) return;
+    const id = appPage.url.searchParams.get('evidence');
+    if (!id) return;
+    openedFromLink = true;
+    store.openEvidence(id);
+    const url = new URL(appPage.url);
+    url.searchParams.delete('evidence');
+    replaceState(url, appPage.state);
+  });
+
   const metIds = $derived(
     new Set(
       (store.data?.qualifications ?? []).flatMap((q) =>
@@ -42,7 +63,7 @@
       )
     )
   );
-  const backHref = $derived(`/org/${$currentOrg.siteName}/apprenticeships`);
+  const backHref = $derived(apprenticeshipsBase(appPage.url.pathname, $currentOrg.siteName));
 </script>
 
 <svelte:head>
@@ -52,8 +73,10 @@
 <Page.Root class="w-full">
   <Page.Header>
     <Page.HeaderContent>
-      <BackButton href={backHref} label="All learners" />
-      <Page.Title>Portfolio</Page.Title>
+      {#if showBack}
+        <BackButton href={backHref} label={isStaffViewer ? 'All learners' : 'My apprenticeships'} />
+      {/if}
+      <Page.Title>{isStaffViewer ? 'Portfolio' : 'My apprenticeship'}</Page.Title>
     </Page.HeaderContent>
   </Page.Header>
 
@@ -80,7 +103,7 @@
               <Tabs.Trigger value="map">Criteria map</Tabs.Trigger>
               <Tabs.Trigger value="evidence">
                 Evidence
-                <span class="text-muted-foreground text-xs">({store.evidence.length})</span>
+                <span class="text-xs text-(--muted-foreground)">({store.evidence.length})</span>
               </Tabs.Trigger>
               <Tabs.Trigger value="otj">Off-the-job</Tabs.Trigger>
               <Tabs.Trigger value="achieved">Achieved</Tabs.Trigger>
@@ -95,8 +118,10 @@
           </Tabs.Root>
         </div>
 
-        <DatesDialog bind:open={datesOpen} {store} />
-        <SpreadDialog bind:open={spreadOpen} {store} />
+        {#if isStaffViewer}
+          <DatesDialog bind:open={datesOpen} {store} />
+          <SpreadDialog bind:open={spreadOpen} {store} />
+        {/if}
         <EvidenceSheet
           bind:open={store.sheet.open}
           mode={store.sheet.mode}

@@ -38,7 +38,7 @@
 <div class="space-y-3">
   <div class="flex flex-wrap items-end gap-3">
     <div class="flex flex-col gap-1">
-      <span class="text-muted-foreground text-xs" id="ev-f-status">Status</span>
+      <span class="text-xs text-(--muted-foreground)" id="ev-f-status">Status</span>
       <Select.Root type="single" bind:value={status}>
         <Select.Trigger class="min-w-[140px]" aria-labelledby="ev-f-status">
           {status === 'all'
@@ -54,7 +54,7 @@
       </Select.Root>
     </div>
     <div class="flex flex-col gap-1">
-      <span class="text-muted-foreground text-xs" id="ev-f-type">Type</span>
+      <span class="text-xs text-(--muted-foreground)" id="ev-f-type">Type</span>
       <Select.Root type="single" bind:value={type}>
         <Select.Trigger class="min-w-[180px]" aria-labelledby="ev-f-type">
           {type === 'all' ? 'All types' : (typeOptions.find((t) => t.key === type)?.label ?? type)}

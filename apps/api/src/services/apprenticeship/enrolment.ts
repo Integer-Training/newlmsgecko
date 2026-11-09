@@ -23,6 +23,7 @@ import {
   insertApprEnrolment,
   insertEnrolmentUnits,
   listAcceptedEvidenceTitles,
+  listApprPickerPeople,
   listEnrolmentRows,
   listEnrolmentUnitRows,
   updateApprEnrolment,
@@ -208,6 +209,13 @@ export async function listEnrolments(actor: Actor, query: EnrolmentListQuery, no
 }
 
 // ── Create ──
+
+/** Add-learner pickers (admin only): tutors + learners with their full names and emails. */
+export async function getEnrolmentPickerOptions(actor: Actor) {
+  const a = assertStaff(actor);
+  if (a.role !== 'ADMIN') throw new AppError('Only an admin can enrol a learner', ErrorCodes.FORBIDDEN, 403);
+  return listApprPickerPeople(a.orgId);
+}
 
 export async function createEnrolment(actor: Actor, input: EnrolmentCreateInput) {
   const a = requireAuthed(actor);
@@ -422,7 +430,10 @@ export async function getPortfolio(actor: Actor, enrolmentId: string) {
 // ── Edit ──
 
 export async function updateEnrolment(actor: Actor, enrolmentId: string, patch: EnrolmentUpdateInput) {
-  assertStaff(actor);
+  const a = assertStaff(actor);
+  // Programme dates / contracted hours / OTJ override set the learner's targets — admin only (the route says so too).
+  if (a.role !== 'ADMIN')
+    throw new AppError('Only an admin can change programme dates and hours', ErrorCodes.FORBIDDEN, 403);
   const enrolment = await getEnrolmentForActor(actor, enrolmentId);
   const start = patch.startDate ?? enrolment.startDate;
   const end = patch.plannedEndDate ?? enrolment.plannedEndDate;

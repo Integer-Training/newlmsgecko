@@ -100,12 +100,12 @@
   const criteriaTotal = $derived(qualification.units.reduce((n, u) => n + u.criteria.length, 0));
 </script>
 
-<section class="bg-card rounded-xl border p-4" aria-label="Qualification {qualification.title}">
+<section class="rounded-xl border bg-(--card) p-4" aria-label="Qualification {qualification.title}">
   <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
     {#if total === 1}
       <div class="min-w-0">
         <h2 class="text-lg font-semibold tracking-tight">Units</h2>
-        <p class="text-muted-foreground text-xs">
+        <p class="text-xs text-(--muted-foreground)">
           {qualification.units.length} unit{qualification.units.length === 1 ? '' : 's'} · {criteriaTotal} criteri{criteriaTotal ===
           1
             ? 'on'
@@ -138,7 +138,7 @@
     {:else}
       <div class="min-w-0">
         <h2 class="truncate text-lg font-semibold tracking-tight">{qualification.title}</h2>
-        <p class="text-muted-foreground text-xs">
+        <p class="text-xs text-(--muted-foreground)">
           {#if qualification.reference}{qualification.reference} ·
           {/if}{qualification.units.length} unit{qualification.units.length === 1 ? '' : 's'} · {criteriaTotal} criteri{criteriaTotal ===
           1
@@ -181,7 +181,7 @@
 
   {#if qualification.units.length === 0}
     <div
-      class="text-muted-foreground flex flex-col items-center gap-3 rounded-md border border-dashed py-8 text-center text-sm"
+      class="flex flex-col items-center gap-3 rounded-md border border-dashed py-8 text-center text-sm text-(--muted-foreground)"
     >
       <p>Add a unit below, or import units and criteria from a spreadsheet.</p>
       <Button variant="outline" size="sm" onclick={onimport}>Import from a spreadsheet</Button>

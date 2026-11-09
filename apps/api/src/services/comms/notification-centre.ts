@@ -8,6 +8,7 @@ import {
   markNotificationRead,
   type NotificationRow
 } from '@cio/db/queries/comms';
+import { getEvidenceLinkTargets } from '@cio/db/queries/apprenticeship';
 
 // PearlLMS Phase 6 Step 3 — the in-app notification centre service. STRICTLY self-only: every read/mutation
 // uses the ACTOR's own id (taken from the resolved session, never from the URL) — there is no way to name
@@ -32,10 +33,22 @@ function assertAuthed(actor: Actor): asserts actor is Extract<Actor, { authentic
   if (!actor.authenticated) throw new AppError('Unauthorized', ErrorCodes.UNAUTHORIZED, 401);
 }
 
+type EvidenceTargets = Awaited<ReturnType<typeof getEvidenceLinkTargets>>;
+
+/** Gecko Apprenticeships: open the portfolio with that evidence's sheet — in the reader's own shell. */
+function evidenceLink(row: NotificationRow, evidence: EvidenceTargets, isStaff: boolean): string {
+  const target = row.entityType === 'appr_evidence' && row.entityId ? evidence.get(row.entityId) : undefined;
+  if (!target) return isStaff ? '/caseload/apprenticeships' : '/lms/apprenticeship';
+  const base = isStaff ? '/caseload/apprenticeships/learners' : '/lms/apprenticeship';
+  return `${base}/${target.enrolmentId}?evidence=${row.entityId}`;
+}
+
 function enrich(
   row: NotificationRow,
   lessons: Map<string, { courseId: string; title: string | null }>,
-  homePath: string
+  homePath: string,
+  evidence: EvidenceTargets = new Map(),
+  isStaff = false
 ): NotificationItem {
   const base = { id: row.id, type: row.type, createdAt: row.createdAt, read: row.readAt != null };
   const lesson = row.entityType === 'lesson' && row.entityId ? lessons.get(row.entityId) : undefined;
@@ -57,6 +70,25 @@ function enrich(
       // Deep-link straight to the thread (entityId is the message_thread id) — the /messages/:threadId route
       // is role-agnostic (participant/Admin enforced server-side), so it works for the tutor and the learner.
       return { ...base, subject: 'New message', link: row.entityId ? `/messages/${row.entityId}` : homePath };
+    case 'appr.evidence.submitted': {
+      const ev = row.entityId ? evidence.get(row.entityId) : undefined;
+      const who = ev?.learnerName ? `${ev.learnerName}: ` : '';
+      return {
+        ...base,
+        subject: `New evidence to mark — ${who}${ev?.title ?? 'apprenticeship evidence'}`,
+        link: evidenceLink(row, evidence, isStaff)
+      };
+    }
+    case 'appr.evidence.accepted':
+    case 'appr.evidence.referred': {
+      const ev = row.entityId ? evidence.get(row.entityId) : undefined;
+      const verb = row.type === 'appr.evidence.accepted' ? 'Evidence accepted' : 'Evidence referred back to you';
+      return {
+        ...base,
+        subject: `${verb} — ${ev?.title ?? 'your apprenticeship evidence'}`,
+        link: evidenceLink(row, evidence, isStaff)
+      };
+    }
     default:
       return { ...base, subject: 'Notification', link: homePath };
   }
@@ -78,11 +110,17 @@ export async function getNotificationCentre(
     ...new Set(rows.filter((r) => r.entityType === 'lesson' && r.entityId).map((r) => r.entityId as string))
   ];
   const lessons = await getLessonLinkTargets(lessonIds);
+  const evidenceIds = [
+    ...new Set(rows.filter((r) => r.entityType === 'appr_evidence' && r.entityId).map((r) => r.entityId as string))
+  ];
+  const evidence = await getEvidenceLinkTargets(evidenceIds);
 
   // The recipient's home dashboard — where their broadcast banner + feed live (tutor → /caseload, else /lms).
   const homePath = actor.role === 'TUTOR' ? '/caseload' : '/lms';
 
-  return { items: rows.map((r) => enrich(r, lessons, homePath)), unreadCount };
+  // Admins and tutors open apprenticeship links in the caseload shell (requireStaff); learners in /lms.
+  const isStaff = actor.role === 'TUTOR' || actor.role === 'ADMIN';
+  return { items: rows.map((r) => enrich(r, lessons, homePath, evidence, isStaff)), unreadCount };
 }
 
 /** Mark ONE of the actor's own notifications read — scoped to actor.userId (a foreign id affects nothing). */

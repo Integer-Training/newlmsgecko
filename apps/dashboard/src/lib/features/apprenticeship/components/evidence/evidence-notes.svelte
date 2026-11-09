@@ -49,8 +49,8 @@
           type="button"
           aria-pressed={filter === f}
           class="rounded-full border px-2.5 py-0.5 text-xs {filter === f
-            ? 'bg-primary text-primary-foreground border-primary'
-            : 'hover:bg-muted'}"
+            ? 'border-(--primary) bg-(--primary) text-(--primary-foreground)'
+            : 'hover:bg-(--muted)'}"
           onclick={() => (filter = f)}
         >
           {f === 'ALL' ? 'All' : f === 'AUDIT' ? 'Audit' : 'General'}
@@ -60,15 +60,15 @@
   </div>
 
   {#if shown.length === 0}
-    <p class="text-muted-foreground text-sm">No notes yet.</p>
+    <p class="text-sm text-(--muted-foreground)">No notes yet.</p>
   {:else}
     <ol class="space-y-2">
       {#each shown as n (n.id)}
-        <li class="rounded-md border p-2.5 text-sm {n.kind === 'AUDIT' ? 'bg-muted/40' : ''}">
-          <div class="text-muted-foreground mb-1 flex flex-wrap items-center gap-2 text-xs">
+        <li class="rounded-md border p-2.5 text-sm {n.kind === 'AUDIT' ? 'bg-(--muted)/40' : ''}">
+          <div class="mb-1 flex flex-wrap items-center gap-2 text-xs text-(--muted-foreground)">
             <span class="font-medium">{n.authorName ?? 'System'}</span>
             <span>{fmtDate(n.createdAt)}</span>
-            <span class="bg-muted rounded px-1.5 py-0.5">{n.kind === 'AUDIT' ? 'Audit' : 'General'}</span>
+            <span class="rounded bg-(--muted) px-1.5 py-0.5">{n.kind === 'AUDIT' ? 'Audit' : 'General'}</span>
           </div>
           <p class="whitespace-pre-wrap">{n.body}</p>
         </li>
@@ -80,7 +80,7 @@
     <label for="note-body-{evidenceId}" class="sr-only">Add a note</label>
     <Textarea
       id="note-body-{evidenceId}"
-      class="ui:min-h-[64px]"
+      class="min-h-[64px]!"
       placeholder="Add a note…"
       maxlength={APPR_NOTE_MAX}
       bind:value={body}

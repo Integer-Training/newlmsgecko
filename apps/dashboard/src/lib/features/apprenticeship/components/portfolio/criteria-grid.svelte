@@ -14,12 +14,12 @@
     met: 'bg-emerald-100 text-emerald-900 border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-200 dark:border-emerald-500/40',
     pending:
       'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-500/20 dark:text-amber-200 dark:border-amber-500/40',
-    none: 'bg-muted text-muted-foreground border-transparent'
+    none: 'bg-(--muted) text-(--muted-foreground) border-transparent'
   };
 </script>
 
 <div class="space-y-6">
-  <ul class="text-muted-foreground flex flex-wrap gap-3 text-xs" aria-label="Legend">
+  <ul class="flex flex-wrap gap-3 text-xs text-(--muted-foreground)" aria-label="Legend">
     <li class="flex items-center gap-1.5"><span class="size-3 rounded border {CELL.none}"></span> Not started</li>
     <li class="flex items-center gap-1.5">
       <span class="size-3 rounded border {CELL.pending}"></span> Pending (submitted)
@@ -43,14 +43,14 @@
                   {store}
                   criterionId={c.id}
                   label="{c.code}: {c.met ? 'met' : c.pendingCount > 0 ? 'pending' : 'not started'}"
-                  triggerClass="min-w-10 rounded border px-2 py-1 text-xs font-medium transition-colors hover:ring-2 hover:ring-primary/40 {CELL[
+                  triggerClass="min-w-10 rounded border px-2 py-1 text-xs font-medium transition-colors hover:ring-2 hover:ring-(--primary)/40 {CELL[
                     kind
                   ]}"
                 >
                   {c.code}
                 </CriterionPopover>
               {/each}
-              {#if unit.criteria.length === 0}<span class="text-muted-foreground text-xs">No criteria</span>{/if}
+              {#if unit.criteria.length === 0}<span class="text-xs text-(--muted-foreground)">No criteria</span>{/if}
             </div>
           </div>
         {/each}

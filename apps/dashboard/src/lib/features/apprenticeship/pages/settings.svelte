@@ -126,10 +126,10 @@
       {:else}
         <div class="grid max-w-5xl grid-cols-1 gap-6 lg:grid-cols-2">
           <!-- Thresholds -->
-          <form onsubmit={save} class="bg-card flex flex-col gap-4 rounded-xl border p-4">
+          <form onsubmit={save} class="flex flex-col gap-4 rounded-xl border bg-(--card) p-4">
             <div>
               <h2 class="text-lg font-semibold tracking-tight">Progress rules</h2>
-              <p class="text-muted-foreground text-sm">
+              <p class="text-sm text-(--muted-foreground)">
                 How a learner is flagged compared with where they should be by now.
               </p>
             </div>
@@ -137,7 +137,7 @@
             <div class="space-y-1">
               <label for="s-gap" class="text-sm font-medium">Concern gap (percentage points)</label>
               <Input id="s-gap" type="number" min={0} max={100} step={1} bind:value={concernGapPct} class="max-w-32" />
-              <p class="text-muted-foreground text-xs">
+              <p class="text-xs text-(--muted-foreground)">
                 Behind = below the expected progress by up to {Number.isFinite(concernGapPct) ? concernGapPct : '…'} points.
                 Concern = more than {Number.isFinite(concernGapPct) ? concernGapPct : '…'} points below.
               </p>
@@ -147,7 +147,7 @@
             <div class="space-y-1">
               <label for="s-otj" class="text-sm font-medium">Off-the-job factor (%)</label>
               <Input id="s-otj" type="number" min={0} max={100} step={1} bind:value={otjPercent} class="max-w-32" />
-              <p class="text-muted-foreground text-xs">
+              <p class="text-xs text-(--muted-foreground)">
                 Share of working hours that must be off-the-job training. 20 means a learner on 30 working hours a week
                 needs 6 off-the-job hours a week.
               </p>
@@ -157,7 +157,7 @@
             <div class="space-y-1">
               <label for="s-cap" class="text-sm font-medium">Weekly hours cap</label>
               <Input id="s-cap" type="number" min={1} max={60} step={0.5} bind:value={weeklyCap} class="max-w-32" />
-              <p class="text-muted-foreground text-xs">
+              <p class="text-xs text-(--muted-foreground)">
                 The most working hours counted in one week when working out the off-the-job target.
               </p>
               {#if !capValid}<p class="text-xs text-red-600" role="alert">Enter a number from 1 to 60.</p>{/if}
@@ -171,10 +171,10 @@
           </form>
 
           <!-- Evidence types -->
-          <div class="bg-card flex flex-col gap-4 rounded-xl border p-4">
+          <div class="flex flex-col gap-4 rounded-xl border bg-(--card) p-4">
             <div>
               <h2 class="text-lg font-semibold tracking-tight">Evidence types</h2>
-              <p class="text-muted-foreground text-sm">
+              <p class="text-sm text-(--muted-foreground)">
                 What learners can label their evidence as. Hidden types stay on existing evidence but cannot be chosen
                 for new evidence.
               </p>
@@ -200,7 +200,7 @@
                       disabled={busyId === t.id}
                       onCheckedChange={(v) => toggleActive(t, v)}
                     />
-                    <span class="text-muted-foreground w-12 text-xs">{t.active ? 'Shown' : 'Hidden'}</span>
+                    <span class="w-12 text-xs text-(--muted-foreground)">{t.active ? 'Shown' : 'Hidden'}</span>
                   </div>
                   <Button
                     size="icon-sm"
@@ -222,7 +222,7 @@
                   </Button>
                 </li>
               {:else}
-                <li class="text-muted-foreground text-sm">No evidence types yet.</li>
+                <li class="text-(--muted-foreground) text-sm">No evidence types yet.</li>
               {/each}
             </ul>
 

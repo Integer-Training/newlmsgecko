@@ -8,6 +8,11 @@ import {
   isStaff,
   requireAuthed
 } from '@api/services/apprenticeship/access';
+import {
+  notifyEvidenceReviewed,
+  notifyEvidenceSubmitted,
+  notifySafely
+} from '@api/services/apprenticeship/notifications';
 import { toProgressSummary } from '@api/services/apprenticeship/enrolment';
 import { recomputeEnrolment } from '@api/services/apprenticeship/progress';
 import type { Actor } from '@cio/db/actor';
@@ -188,10 +193,11 @@ export async function listEvidence(actor: Actor, enrolmentId: string, filter: { 
 
 export async function getEvidenceDetail(actor: Actor, evidenceId: string) {
   const evidence = await loadEvidenceForActor(actor, evidenceId);
-  const [criteriaRows, notes, types] = await Promise.all([
+  const [criteriaRows, notes, types, enrolment] = await Promise.all([
     listEvidenceCriteriaDetail(evidenceId),
     listEvidenceNotes(evidenceId),
-    listApprEvidenceTypes(evidence.organizationId)
+    listApprEvidenceTypes(evidence.organizationId),
+    getApprEnrolmentByProgrammeLearner(evidence.programmeId, evidence.learnerId)
   ]);
 
   // qualification → unit → criteria, in programme order (rows arrive ordered).
@@ -222,6 +228,8 @@ export async function getEvidenceDetail(actor: Actor, evidenceId: string) {
     },
     criteria: qualifications,
     notes,
+    // Lets a sheet opened without a portfolio (To mark, a notification) still presign file uploads.
+    enrolmentId: enrolment?.id ?? null,
     permissions: {
       canEdit:
         isStaff(actor) ||
@@ -374,6 +382,16 @@ export async function createEvidence(actor: Actor, enrolmentId: string, input: E
     criteria: criterionIds.length,
     files: input.files.length
   });
+  // The apprentice's own upload goes to their tutor(s) to mark; staff evidence added as Accepted tells the apprentice.
+  if (!staff) {
+    await notifySafely('evidence submitted', () =>
+      notifyEvidenceSubmitted({ evidenceId, learnerId: enrolment.learnerId })
+    );
+  } else if (status === 'ACCEPTED') {
+    await notifySafely('evidence accepted', () =>
+      notifyEvidenceReviewed({ evidenceId, learnerId: enrolment.learnerId, outcome: 'ACCEPTED' })
+    );
+  }
   return { evidence: result.evidence, summary: result.detail ? toProgressSummary(result.detail) : null };
 }
 
@@ -445,6 +463,12 @@ export async function updateEvidence(actor: Actor, evidenceId: string, input: Ev
     fields: Object.keys(input),
     resubmitted
   });
+  // Referred evidence fixed by the apprentice is back in the tutor's queue — tell them.
+  if (resubmitted) {
+    await notifySafely('evidence resubmitted', () =>
+      notifyEvidenceSubmitted({ evidenceId, learnerId: evidence.learnerId })
+    );
+  }
   return { evidence: result.evidence, summary: result.detail ? toProgressSummary(result.detail) : null };
 }
 
@@ -495,6 +519,13 @@ export async function reviewEvidence(actor: Actor, evidenceId: string, input: Ev
     to: next,
     criteria: criterionIds?.length ?? 0
   });
+  await notifySafely('evidence reviewed', () =>
+    notifyEvidenceReviewed({
+      evidenceId,
+      learnerId: evidence.learnerId,
+      outcome: next === 'ACCEPTED' ? 'ACCEPTED' : 'REFERRED'
+    })
+  );
   return { evidence: result.evidence, summary: result.detail ? toProgressSummary(result.detail) : null };
 }
 

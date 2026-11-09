@@ -7,7 +7,9 @@
   import { Skeleton } from '@cio/ui/base/skeleton';
   import { Empty } from '@cio/ui/custom/empty';
   import { BackButton } from '@cio/ui/custom/back-button';
-  import { currentOrg } from '$lib/utils/store/org';
+  import { page as appPage } from '$app/state';
+  import { currentOrg, isOrgAdmin } from '$lib/utils/store/org';
+  import { apprenticeshipsBase } from '../utils/paths';
   import { enrolmentsApi } from '../api/enrolments.svelte';
   import { evidenceApi, type ToMarkPage } from '../api/evidence.svelte';
   import EvidenceSheet from '../components/evidence/evidence-sheet.svelte';
@@ -28,11 +30,11 @@
   let selected = $state<{ id: string; learnerName: string | null } | null>(null);
   let reqId = 0;
 
-  const base = $derived(`/org/${$currentOrg.siteName}/apprenticeships`);
+  const base = $derived(apprenticeshipsBase(appPage.url.pathname, $currentOrg.siteName));
   const totalPages = $derived(data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1);
 
   onMount(() => {
-    enrolmentsApi.loadOptions();
+    enrolmentsApi.loadOptions($isOrgAdmin === true);
   });
 
   $effect(() => {
@@ -93,7 +95,7 @@
   <Page.Body>
     {#snippet child()}
       <div class="mb-4 flex flex-col gap-1">
-        <span class="text-muted-foreground text-xs" id="tm-prog">Programme</span>
+        <span class="text-xs text-(--muted-foreground)" id="tm-prog">Programme</span>
         <Select.Root type="single" value={programmeId} onValueChange={setProgramme}>
           <Select.Trigger class="ui:w-fit min-w-[220px]" aria-labelledby="tm-prog"
             ><p class="truncate">{programmeLabel}</p></Select.Trigger
@@ -126,6 +128,7 @@
                 <Table.Head>Learner</Table.Head>
                 <Table.Head>Programme</Table.Head>
                 <Table.Head>Evidence</Table.Head>
+                <Table.Head>Type</Table.Head>
                 <Table.Head class="text-right">Criteria</Table.Head>
                 <Table.Head>Submitted</Table.Head>
                 <Table.Head><span class="sr-only">Actions</span></Table.Head>
@@ -136,7 +139,8 @@
                 <Table.Row class="cursor-pointer" onclick={() => openRow(row)}>
                   <Table.Cell class="font-medium">{row.learnerName ?? '—'}</Table.Cell>
                   <Table.Cell>{row.programmeTitle}</Table.Cell>
-                  <Table.Cell class="max-w-72 truncate">{row.title}</Table.Cell>
+                  <Table.Cell class="max-w-72 break-words whitespace-normal!">{row.title}</Table.Cell>
+                  <Table.Cell class="text-sm text-(--muted-foreground)">{row.typeLabel ?? '—'}</Table.Cell>
                   <Table.Cell class="text-right">{row.criteriaCount}</Table.Cell>
                   <Table.Cell class="whitespace-nowrap">{fmtDate(row.createdAt)}</Table.Cell>
                   <Table.Cell>

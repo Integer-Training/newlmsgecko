@@ -48,7 +48,7 @@
                 <CircleCheckIcon size={16} class="shrink-0 text-emerald-600" />
                 <span class="truncate">{u.code ? `${u.code} · ` : ''}{u.title}</span>
               </span>
-              <span class="text-muted-foreground whitespace-nowrap">Target {fmtDate(u.targetDate)}</span>
+              <span class="whitespace-nowrap text-(--muted-foreground)">Target {fmtDate(u.targetDate)}</span>
             </li>
           {/each}
         </ul>

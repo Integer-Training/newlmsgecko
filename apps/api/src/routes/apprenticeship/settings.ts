@@ -14,12 +14,13 @@ import {
 import { Hono } from '@api/utils/hono';
 import type { Actor } from '@cio/db/actor';
 import { handleError } from '@api/utils/errors';
-import { requireAdmin } from '@api/middlewares/guards';
+import { requireAdmin, requireRole } from '@api/middlewares/guards';
 import { zValidator } from '@hono/zod-validator';
 
 // Gecko Apprenticeships — org rules + evidence types. ADMIN only. Mounted at /apprenticeship/settings.
 export const settingsRouter = new Hono()
-  .get('/', requireAdmin, async (c) => {
+  // Read by every apprenticeship screen (evidence types for the evidence form) — learners included (Phase C).
+  .get('/', requireRole('ADMIN', 'TUTOR', 'LEARNER'), async (c) => {
     try {
       const data = await getSettingsBundle(c.get('actor') as Actor);
       return c.json({ success: true, data }, 200);

@@ -88,6 +88,17 @@ const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
  * required. `completedItems` is that learner's progress, not structure, so it is ignored. A single-unit export has no
  * unitTitle, so it can only update a unit that already exists (import "All Units" first).
  */
+/**
+ * Skills Portfolio puts the unit code at the start of the title ("U1 Talking", "AC M6B Support the health…"). Split it
+ * off conservatively: one or two leading tokens, the last being capitals + digits (optionally ".n"), with a non-empty
+ * rest. Anything else keeps the title whole and no code.
+ */
+export function splitUnitCode(rawTitle: string): { code: string; title: string } {
+  const title = rawTitle.trim();
+  const m = /^((?:[A-Z]{1,4} )?[A-Z]{1,4}\d+[A-Z]?(?:\.\d+)?)\s+(\S.*)$/.exec(title);
+  return m ? { code: m[1], title: m[2] } : { code: '', title };
+}
+
 export function fromSkillsPortfolioExport(
   parsed: ReturnType<typeof parseCsvWithHeader>
 ): ReturnType<typeof parseCsvWithHeader> {
@@ -97,11 +108,14 @@ export function fromSkillsPortfolioExport(
   const records = parsed.records.map(({ row, values }) => {
     const code = (values['code'] ?? '').trim();
     const cut = code.lastIndexOf('/');
+    const unit = splitUnitCode(values['unittitle'] ?? '');
     return {
       row,
       values: {
         unit_ref: cut > 0 ? code.slice(0, cut) : '',
-        unit_title: values['unittitle'] ?? '',
+        unit_title: unit.title,
+        // A HINT, not unit_code: it fills an empty code but never overwrites one an admin set.
+        unit_code_hint: unit.code,
         criterion_ref: code,
         criterion_code: values['name'] ?? '',
         criterion_text: values['description'] ?? '',
@@ -110,7 +124,15 @@ export function fromSkillsPortfolioExport(
     };
   });
   return {
-    headers: ['unit_ref', 'unit_title', 'criterion_ref', 'criterion_code', 'criterion_text', 'required'],
+    headers: [
+      'unit_ref',
+      'unit_title',
+      'unit_code_hint',
+      'criterion_ref',
+      'criterion_code',
+      'criterion_text',
+      'required'
+    ],
     records
   };
 }
@@ -181,6 +203,7 @@ export function planStructureImport(
   for (const { row, values: v } of records) {
     const qualCell = v['qualification'] ?? '';
     const unitCode = v['unit_code'] ?? '';
+    const unitCodeHint = v['unit_code_hint'] ?? '';
     const unitTitle = v['unit_title'] ?? '';
     const unitRef = v['unit_ref'] ?? '';
     const critCode = v['criterion_code'] ?? '';
@@ -257,7 +280,7 @@ export function planStructureImport(
         id: randomUUID(),
         isNew: true,
         qualificationId: qid,
-        cur: { code: unitCode || null, title, externalRef: unitRef || null },
+        cur: { code: unitCode || unitCodeHint || null, title, externalRef: unitRef || null },
         orig: null,
         sort,
         nextCriterionSort: 0
@@ -266,6 +289,7 @@ export function planStructureImport(
     } else {
       if (unitTitle) unit.cur.title = unitTitle;
       if (unitCode) unit.cur.code = unitCode;
+      else if (unitCodeHint && !unit.cur.code) unit.cur.code = unitCodeHint;
       if (unitRef) unit.cur.externalRef = unitRef;
       indexUnit(unit);
     }

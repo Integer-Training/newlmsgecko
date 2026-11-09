@@ -86,13 +86,13 @@
 
     <details class="rounded-md border p-3 text-sm">
       <summary class="cursor-pointer font-medium">Column format</summary>
-      <p class="text-muted-foreground mt-2">
+      <p class="mt-2 text-(--muted-foreground)">
         First row is the header. One row per criterion, or one row per unit with the criterion columns left blank.
       </p>
       <dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
         {#each COLUMNS as [name, help] (name)}
           <dt class="font-mono text-xs">{name}</dt>
-          <dd class="text-muted-foreground text-xs">{help}</dd>
+          <dd class="text-xs text-(--muted-foreground)">{help}</dd>
         {/each}
       </dl>
     </details>

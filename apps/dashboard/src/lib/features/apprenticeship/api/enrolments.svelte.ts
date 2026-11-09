@@ -196,16 +196,29 @@ class EnrolmentsApi extends BaseApi {
     }
   }
 
-  /** Pickers for the Add-learner dialog and the filters (programmes, tutors, existing learners). */
-  async loadOptions() {
-    const [p, o, l] = await Promise.all([
+  /**
+   * Pickers for the Add-learner dialog and the filters (programmes, tutors, existing learners). A tutor (Phase B) only
+   * needs the programme filter — the tutor / learner pickers are admin-only. Names are the account's full name.
+   */
+  async loadOptions(isAdmin = true) {
+    if (!isAdmin) {
+      const p = await call<ProgrammeOption[]>(() =>
+        classroomio.apprenticeship.programmes.$get({ query: { status: 'ACTIVE' } })
+      );
+      if (p.ok) this.programmes = p.data;
+      this.optionsLoaded = true;
+      return;
+    }
+    type Person = { id: string; name: string | null; email: string | null };
+    const [p, o] = await Promise.all([
       call<ProgrammeOption[]>(() => classroomio.apprenticeship.programmes.$get({ query: { status: 'ACTIVE' } })),
-      call<{ tutors: TutorOption[] }>(() => classroomio.organization.management.options.$get()),
-      call<{ rows: LearnerOption[] }>(() => classroomio.organization.management.learners.$get())
+      call<{ tutors: Person[]; learners: Person[] }>(() => classroomio.apprenticeship.enrolments.options.$get())
     ]);
     if (p.ok) this.programmes = p.data;
-    if (o.ok) this.tutors = o.data.tutors;
-    if (l.ok) this.learners = l.data.rows;
+    if (o.ok) {
+      this.tutors = o.data.tutors;
+      this.learners = o.data.learners.map((l) => ({ userId: l.id, name: l.name, email: l.email }));
+    }
     this.optionsLoaded = true;
   }
 

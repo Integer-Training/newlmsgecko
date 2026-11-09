@@ -91,7 +91,7 @@
           bind:value={otjHours}
           placeholder="Calculated from contract"
         />
-        <p class="text-muted-foreground text-xs">Leave blank to calculate the target from the contracted hours.</p>
+        <p class="text-xs text-(--muted-foreground)">Leave blank to calculate the target from the contracted hours.</p>
       </div>
       {#if error}<p role="alert" class="text-sm text-rose-600">{error}</p>{/if}
       <Dialog.Footer class="mt-4">

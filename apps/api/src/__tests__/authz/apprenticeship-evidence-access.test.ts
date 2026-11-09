@@ -3,8 +3,9 @@ import { Hono } from 'hono';
 import type { Actor } from '@cio/db/actor';
 import type { AuthSession } from '@api/types/auth';
 
-// Gecko Apprenticeships Phase A2 — enrolment + evidence API access. Real routers + real services, DB reads mocked.
-// Proves: non-admins are stopped at the route now (401/403, no query runs); an admin of ANOTHER org gets 404 on every
+// Gecko Apprenticeships Phase A2 + B — enrolment + evidence API access. Real routers + real services, DB reads mocked.
+// Proves: learners/managers are stopped at the route (401/403, no query runs); tutors reach only allocated learners
+// and never the admin-only enrol / programme-dates routes; an admin of ANOTHER org gets 404 on every
 // enrolment/evidence id; file keys must sit under the learner's own evidence prefix; criteria/units from another
 // programme are rejected; and the services themselves scope a TUTOR (allocated only) and a LEARNER (self) so the
 // later phases only have to open routes.
@@ -36,7 +37,20 @@ vi.mock('@cio/db/queries/apprenticeship', () => ({
   listEvidenceCriteriaDetail: vi.fn(async () => []),
   listEvidenceNotes: vi.fn(async () => []),
   listEvidenceForCriterion: vi.fn(async () => []),
-  listToMark: vi.fn(async () => [])
+  listToMark: vi.fn(async () => []),
+  listApprPickerPeople: vi.fn(async () => ({ tutors: [], learners: [] }))
+}));
+// Evidence notifications: spies, with the REAL non-fatal wrapper semantics (a failure is logged, never thrown).
+vi.mock('@api/services/apprenticeship/notifications', () => ({
+  notifyEvidenceSubmitted: vi.fn(async () => undefined),
+  notifyEvidenceReviewed: vi.fn(async () => undefined),
+  notifySafely: async (_label: string, fn: () => Promise<void>) => {
+    try {
+      await fn();
+    } catch {
+      /* non-fatal */
+    }
+  }
 }));
 vi.mock('@cio/db/queries/allocation', () => ({
   isTutorAllocatedToLearner: vi.fn(async () => false),
@@ -74,6 +88,7 @@ vi.mock('@cio/core/config/upload-limits', () => ({
 import * as q from '@cio/db/queries/apprenticeship';
 import { isTutorAllocatedToLearner } from '@cio/db/queries/allocation';
 import { apprenticeshipRouter } from '@api/routes/apprenticeship';
+import { notifyEvidenceReviewed, notifyEvidenceSubmitted } from '@api/services/apprenticeship/notifications';
 import { getPortfolio } from '@api/services/apprenticeship/enrolment';
 import { createEvidence, getEvidenceDetail, updateEvidence } from '@api/services/apprenticeship/evidence';
 
@@ -225,11 +240,25 @@ beforeEach(() => {
   vi.mocked(isTutorAllocatedToLearner).mockResolvedValue(false);
 });
 
-describe('apprenticeship enrolment + evidence API — ADMIN only for now', () => {
+// Phase B: enrolling a learner and the programme dates / hours stay admin-only; everything else is open to the
+// allocated tutor too (the services 404 any learner who is not allocated to them).
+const ADMIN_ONLY_ROUTES = [ENROLMENT_ROUTES[1], ENROLMENT_ROUTES[2]];
+const STAFF_ROUTES = ALL_ROUTES.filter((r) => !ADMIN_ONLY_ROUTES.includes(r));
+// Phase C: staff-only even then — unit dates, spread, the marking queue and reviewing. Every other route is open to
+// the apprentice themselves (the services scope them to their own enrolment).
+const STAFF_ONLY_ROUTES = [ENROLMENT_ROUTES[3], ENROLMENT_ROUTES[4], EVIDENCE_ROUTES[4], EVIDENCE_ROUTES[8]];
+const LEARNER_ROUTES = STAFF_ROUTES.filter((r) => !STAFF_ONLY_ROUTES.includes(r));
+
+describe('apprenticeship enrolment + evidence API — role guard', () => {
   for (const r of ALL_ROUTES) {
-    it(`${r.method} ${r.path.replace('/apprenticeship', '').slice(0, 60)}: anon 401, LEARNER/TUTOR/MANAGER 403, no query runs`, async () => {
+    const blocked = ADMIN_ONLY_ROUTES.includes(r)
+      ? ['learner', 'tutor', 'manager']
+      : STAFF_ONLY_ROUTES.includes(r)
+        ? ['learner', 'manager']
+        : ['manager'];
+    it(`${r.method} ${r.path.replace('/apprenticeship', '').slice(0, 60)}: anon 401, ${blocked.join('/').toUpperCase()} 403, no query runs`, async () => {
       expect((await call(r, 'anon')).status).toBe(401);
-      for (const who of ['learner', 'tutor', 'manager']) expect((await call(r, who)).status).toBe(403);
+      for (const who of blocked) expect((await call(r, who)).status).toBe(403);
       expect(q.getApprEnrolment).not.toHaveBeenCalled();
       expect(q.getEnrolmentOverview).not.toHaveBeenCalled();
       expect(q.getApprEvidence).not.toHaveBeenCalled();
@@ -412,6 +441,111 @@ describe('criteria and units must belong to the programme', () => {
   });
 });
 
+describe('Phase B — tutors reach only their allocated learners', () => {
+  // ID routes that a tutor may call; a non-allocated tutor must get 404 on each, with nothing written.
+  const TUTOR_ID_ROUTES = ID_ROUTES.filter((r) => STAFF_ROUTES.includes(r));
+  for (const r of TUTOR_ID_ROUTES) {
+    it(`${r.method} ${r.path.replace('/apprenticeship', '').slice(0, 60)}: non-allocated tutor → 404, nothing written`, async () => {
+      expect((await call(r, 'tutor')).status).toBe(404);
+      expect(q.insertApprEvidence).not.toHaveBeenCalled();
+      expect(q.updateApprEvidence).not.toHaveBeenCalled();
+      expect(q.insertEvidenceNote).not.toHaveBeenCalled();
+      expect(q.upsertEnrolmentUnitDates).not.toHaveBeenCalled();
+    });
+  }
+  it('the learners table and marking queue are limited to the tutor allocations', async () => {
+    expect((await call(ENROLMENT_ROUTES[0], 'tutor')).status).toBe(200);
+    expect(vi.mocked(q.listEnrolmentRows).mock.calls[0][0]).toMatchObject({
+      organizationId: ORG,
+      restrictToTutorId: 'u-tutor'
+    });
+    expect((await call({ method: 'GET', path: '/apprenticeship/evidence/to-mark' }, 'tutor')).status).toBe(200);
+    expect(vi.mocked(q.listToMark).mock.calls[0][0]).toMatchObject({
+      organizationId: ORG,
+      restrictToTutorId: 'u-tutor'
+    });
+  });
+  it('an allocated tutor opens the portfolio, adds a note and marks submitted evidence', async () => {
+    vi.mocked(isTutorAllocatedToLearner).mockResolvedValue(true);
+    expect((await call({ method: 'GET', path: `/apprenticeship/enrolments/${ENR}/portfolio` }, 'tutor')).status).toBe(
+      200
+    );
+    expect((await call(EVIDENCE_ROUTES[9], 'tutor')).status).toBe(201);
+    expect((await call(EVIDENCE_ROUTES[8], 'tutor')).status).toBe(200);
+    expect(vi.mocked(q.updateApprEvidence).mock.calls[0][2]).toMatchObject({
+      status: 'ACCEPTED',
+      reviewedBy: 'u-tutor'
+    });
+  });
+  it('an allocated tutor cannot reopen accepted evidence (admin only)', async () => {
+    vi.mocked(isTutorAllocatedToLearner).mockResolvedValue(true);
+    vi.mocked(q.getApprEvidence).mockResolvedValue({ ...EVIDENCE, status: 'ACCEPTED' } as never);
+    const refer = {
+      method: 'POST',
+      path: `/apprenticeship/evidence/${EV}/review`,
+      body: { decision: 'REFER', criterionIds: [] }
+    };
+    expect((await call(refer, 'tutor')).status).toBe(403);
+    expect(q.updateApprEvidence).not.toHaveBeenCalled();
+  });
+  it('an allocated tutor still cannot change programme dates / hours or enrol a learner', async () => {
+    vi.mocked(isTutorAllocatedToLearner).mockResolvedValue(true);
+    for (const r of ADMIN_ONLY_ROUTES) expect((await call(r, 'tutor')).status).toBe(403);
+    expect(q.updateApprEnrolment).not.toHaveBeenCalled();
+    expect(q.insertApprEnrolment).not.toHaveBeenCalled();
+  });
+});
+
+describe('Phase C — an apprentice reaches only their own portfolio', () => {
+  const self = 'self';
+  const selfActor = { ...ACTORS.learner, userId: LRN } as Actor;
+  function callAs(r: Route, actor: Actor) {
+    ACTORS[self] = actor;
+    return call(r, self);
+  }
+  // Every learner-open ID route on SOMEONE ELSE's enrolment/evidence → 404, nothing written.
+  const LEARNER_ID_ROUTES = ID_ROUTES.filter((r) => LEARNER_ROUTES.includes(r));
+  for (const r of LEARNER_ID_ROUTES) {
+    it(`${r.method} ${r.path.replace('/apprenticeship', '').slice(0, 60)}: another learner → 404, nothing written`, async () => {
+      expect((await call(r, 'learner')).status).toBe(404);
+      expect(q.insertApprEvidence).not.toHaveBeenCalled();
+      expect(q.updateApprEvidence).not.toHaveBeenCalled();
+      expect(q.insertEvidenceNote).not.toHaveBeenCalled();
+    });
+  }
+  it('the learners list is limited to the apprentice themselves', async () => {
+    expect((await call(ENROLMENT_ROUTES[0], 'learner')).status).toBe(200);
+    expect(vi.mocked(q.listEnrolmentRows).mock.calls[0][0]).toMatchObject({
+      organizationId: ORG,
+      restrictToLearnerId: 'u-learner'
+    });
+  });
+  it('the apprentice opens their portfolio and adds evidence — always SUBMITTED, even if they ask for ACCEPTED', async () => {
+    expect(
+      (await callAs({ method: 'GET', path: `/apprenticeship/enrolments/${ENR}/portfolio` }, selfActor)).status
+    ).toBe(200);
+    const body = { ...CREATE_BODY, status: 'ACCEPTED' };
+    expect((await callAs({ ...EVIDENCE_ROUTES[1], body }, selfActor)).status).toBe(201);
+    expect(vi.mocked(q.insertApprEvidence).mock.calls[0][1]).toMatchObject({ status: 'SUBMITTED', reviewedBy: null });
+  });
+  it('the apprentice cannot review, see the marking queue or set unit dates', async () => {
+    for (const r of STAFF_ONLY_ROUTES) expect((await callAs(r, selfActor)).status).toBe(403);
+    expect(q.updateApprEvidence).not.toHaveBeenCalled();
+    expect(q.upsertEnrolmentUnitDates).not.toHaveBeenCalled();
+  });
+  it('the apprentice cannot edit ACCEPTED evidence but resubmits REFERRED evidence', async () => {
+    vi.mocked(q.getApprEvidence).mockResolvedValue({ ...EVIDENCE, status: 'ACCEPTED' } as never);
+    expect((await callAs(EVIDENCE_ROUTES[7], selfActor)).status).toBe(403);
+    vi.mocked(q.getApprEvidence).mockResolvedValue({ ...EVIDENCE, status: 'REFERRED' } as never);
+    expect((await callAs(EVIDENCE_ROUTES[7], selfActor)).status).toBe(200);
+    expect(vi.mocked(q.updateApprEvidence).mock.calls[0][2]).toMatchObject({ status: 'SUBMITTED' });
+  });
+  it("an apprentice's note is always a GENERAL comment", async () => {
+    expect((await callAs({ ...EVIDENCE_ROUTES[9], body: { kind: 'AUDIT', body: 'x' } }, selfActor)).status).toBe(201);
+    expect(vi.mocked(q.insertEvidenceNote).mock.calls[0][1]).toMatchObject({ kind: 'GENERAL' });
+  });
+});
+
 describe('services scope TUTOR (allocated only) and LEARNER (self) for the later phases', () => {
   it('a non-allocated tutor gets 404 on a portfolio and on evidence', async () => {
     await expect(getPortfolio(ACTORS.tutor, ENR)).rejects.toMatchObject({ statusCode: 404 });
@@ -448,5 +582,82 @@ describe('services scope TUTOR (allocated only) and LEARNER (self) for the later
     vi.mocked(q.getApprEvidence).mockResolvedValue({ ...EVIDENCE, status: 'REFERRED' } as never);
     await updateEvidence(self, EV, { title: 'x' });
     expect(vi.mocked(q.updateApprEvidence).mock.calls[0][2]).toMatchObject({ status: 'SUBMITTED' });
+  });
+});
+
+describe('evidence notifications fire at each step of the loop (and never break it)', () => {
+  const selfActor = { ...ACTORS.learner, userId: LRN } as Actor;
+  function callAs(r: Route, actor: Actor) {
+    ACTORS.self = actor;
+    return call(r, 'self');
+  }
+  it("the apprentice's new evidence → their tutors are told", async () => {
+    expect((await callAs(EVIDENCE_ROUTES[1], selfActor)).status).toBe(201);
+    expect(notifyEvidenceSubmitted).toHaveBeenCalledWith({ evidenceId: expect.any(String), learnerId: LRN });
+    expect(notifyEvidenceReviewed).not.toHaveBeenCalled();
+  });
+  it('staff evidence added as Submitted tells nobody; added as Accepted tells the apprentice', async () => {
+    expect((await call(EVIDENCE_ROUTES[1], 'admin')).status).toBe(201);
+    expect(notifyEvidenceSubmitted).not.toHaveBeenCalled();
+    expect(notifyEvidenceReviewed).not.toHaveBeenCalled();
+    vi.mocked(q.insertApprEvidence).mockResolvedValue({ ...EVIDENCE, status: 'ACCEPTED' } as never);
+    expect((await call({ ...EVIDENCE_ROUTES[1], body: { ...CREATE_BODY, status: 'ACCEPTED' } }, 'admin')).status).toBe(
+      201
+    );
+    expect(notifyEvidenceReviewed).toHaveBeenCalledWith(
+      expect.objectContaining({ learnerId: LRN, outcome: 'ACCEPTED' })
+    );
+  });
+  it('a review tells the apprentice (accepted / referred)', async () => {
+    expect((await call(EVIDENCE_ROUTES[8], 'admin')).status).toBe(200);
+    expect(notifyEvidenceReviewed).toHaveBeenCalledWith({ evidenceId: EV, learnerId: LRN, outcome: 'ACCEPTED' });
+    vi.mocked(notifyEvidenceReviewed).mockClear();
+    const refer = {
+      method: 'POST',
+      path: `/apprenticeship/evidence/${EV}/review`,
+      body: { decision: 'REFER', criterionIds: [] }
+    };
+    expect((await call(refer, 'admin')).status).toBe(200);
+    expect(notifyEvidenceReviewed).toHaveBeenCalledWith({ evidenceId: EV, learnerId: LRN, outcome: 'REFERRED' });
+  });
+  it('fixing referred evidence → the tutors are told again; a plain edit tells nobody', async () => {
+    vi.mocked(q.getApprEvidence).mockResolvedValue({ ...EVIDENCE, status: 'REFERRED' } as never);
+    expect((await callAs(EVIDENCE_ROUTES[7], selfActor)).status).toBe(200);
+    expect(notifyEvidenceSubmitted).toHaveBeenCalledWith({ evidenceId: EV, learnerId: LRN });
+    vi.mocked(notifyEvidenceSubmitted).mockClear();
+    vi.mocked(q.getApprEvidence).mockResolvedValue({ ...EVIDENCE, status: 'SUBMITTED' } as never);
+    expect((await callAs(EVIDENCE_ROUTES[7], selfActor)).status).toBe(200);
+    expect(notifyEvidenceSubmitted).not.toHaveBeenCalled();
+  });
+  it('a notification failure never fails the save', async () => {
+    vi.mocked(notifyEvidenceSubmitted).mockRejectedValueOnce(new Error('db down'));
+    expect((await callAs(EVIDENCE_ROUTES[1], selfActor)).status).toBe(201);
+  });
+});
+
+describe('Add-learner pickers (admin only, full names)', () => {
+  const options: Route = { method: 'GET', path: '/apprenticeship/enrolments/options' };
+  it('anon 401; learner / tutor / manager 403; nothing read', async () => {
+    expect((await call(options, 'anon')).status).toBe(401);
+    for (const who of ['learner', 'tutor', 'manager']) expect((await call(options, who)).status).toBe(403);
+    expect(q.listApprPickerPeople).not.toHaveBeenCalled();
+  });
+  it("an admin gets their own org's tutors + learners", async () => {
+    vi.mocked(q.listApprPickerPeople).mockResolvedValueOnce({
+      tutors: [{ id: 't', name: 'Tina Tutor', email: 't@x.test' }],
+      learners: [{ id: 'l', name: 'Amy Apprentice', email: 'a@x.test' }]
+    } as never);
+    const res = await call(options, 'admin');
+    expect(res.status).toBe(200);
+    expect(q.listApprPickerPeople).toHaveBeenCalledWith(ORG);
+    expect((await res.json()).data.learners[0].name).toBe('Amy Apprentice');
+  });
+});
+
+describe('evidence detail carries the enrolment (files can be added outside a portfolio)', () => {
+  it('returns enrolmentId', async () => {
+    const res = await call({ method: 'GET', path: `/apprenticeship/evidence/${EV}` }, 'admin');
+    expect(res.status).toBe(200);
+    expect((await res.json()).data.enrolmentId).toBe(ENR);
   });
 });

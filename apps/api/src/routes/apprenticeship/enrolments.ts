@@ -12,6 +12,7 @@ import {
   exportPortfolioCsv,
   getPortfolio,
   listEnrolments,
+  getEnrolmentPickerOptions,
   setUnitDates,
   spreadEnrolmentUnitDates,
   updateEnrolment
@@ -20,19 +21,32 @@ import {
 import { Hono } from '@api/utils/hono';
 import type { Actor } from '@cio/db/actor';
 import { handleError } from '@api/utils/errors';
-import { requireAdmin } from '@api/middlewares/guards';
+import { requireAdmin, requireRole, requireStaff } from '@api/middlewares/guards';
 import { zValidator } from '@hono/zod-validator';
 
-// Gecko Apprenticeships — learners table, enrolment, portfolio, dates and CSV export. ADMIN only for now
-// (requireAdmin); every service takes the actor and scopes through access.ts, so tutor / learner screens later only
-// open routes. Mounted at /apprenticeship/enrolments.
+// Gecko Apprenticeships — learners table, enrolment, portfolio, dates and CSV export. Phase B: ADMIN + TUTOR
+// (requireStaff) on the learners table, portfolio, unit dates and export — the services scope a tutor to allocated
+// learners (404 otherwise). Enrolling a learner and the programme dates / hours stay admin-only. Mounted at
+// /apprenticeship/enrolments.
+// Phase C: the apprentice themselves may use the routes guarded by this; the services scope them to their own
+// enrolment and evidence (anything else 404s). Managers have no apprenticeship access.
+const requireApprMember = requireRole('ADMIN', 'TUTOR', 'LEARNER');
+
 export const enrolmentsRouter = new Hono()
-  .get('/', requireAdmin, zValidator('query', ZEnrolmentListQuery), async (c) => {
+  .get('/', requireApprMember, zValidator('query', ZEnrolmentListQuery), async (c) => {
     try {
       const data = await listEnrolments(c.get('actor') as Actor, c.req.valid('query'));
       return c.json({ success: true, data }, 200);
     } catch (error) {
       return handleError(c, error, 'Failed to list learners');
+    }
+  })
+  .get('/options', requireAdmin, async (c) => {
+    try {
+      const data = await getEnrolmentPickerOptions(c.get('actor') as Actor);
+      return c.json({ success: true, data }, 200);
+    } catch (error) {
+      return handleError(c, error, 'Failed to load tutors and learners');
     }
   })
   .post('/', requireAdmin, zValidator('json', ZEnrolmentCreate), async (c) => {
@@ -59,7 +73,7 @@ export const enrolmentsRouter = new Hono()
   )
   .put(
     '/:id/unit-dates',
-    requireAdmin,
+    requireStaff,
     zValidator('param', ZEnrolmentIdParam),
     zValidator('json', ZUnitDatesUpdate),
     async (c) => {
@@ -73,7 +87,7 @@ export const enrolmentsRouter = new Hono()
   )
   .post(
     '/:id/unit-dates/spread',
-    requireAdmin,
+    requireStaff,
     zValidator('param', ZEnrolmentIdParam),
     zValidator('json', ZUnitDatesSpread),
     async (c) => {
@@ -89,7 +103,7 @@ export const enrolmentsRouter = new Hono()
       }
     }
   )
-  .get('/:id/portfolio', requireAdmin, zValidator('param', ZEnrolmentIdParam), async (c) => {
+  .get('/:id/portfolio', requireApprMember, zValidator('param', ZEnrolmentIdParam), async (c) => {
     try {
       const data = await getPortfolio(c.get('actor') as Actor, c.req.valid('param').id);
       return c.json({ success: true, data }, 200);
@@ -99,7 +113,7 @@ export const enrolmentsRouter = new Hono()
   })
   .get(
     '/:id/export.csv',
-    requireAdmin,
+    requireApprMember,
     zValidator('param', ZEnrolmentIdParam),
     zValidator('query', ZExportQuery),
     async (c) => {

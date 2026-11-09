@@ -11,6 +11,9 @@ vi.mock('@cio/db/queries/comms', () => ({
   markAllNotificationsRead: vi.fn(async () => 3),
   getLessonLinkTargets: vi.fn(async () => new Map())
 }));
+vi.mock('@cio/db/queries/apprenticeship', () => ({
+  getEvidenceLinkTargets: vi.fn(async () => new Map())
+}));
 
 import {
   listNotificationsForUser,
@@ -19,6 +22,7 @@ import {
   markAllNotificationsRead,
   getLessonLinkTargets
 } from '@cio/db/queries/comms';
+import { getEvidenceLinkTargets } from '@cio/db/queries/apprenticeship';
 import {
   getNotificationCentre,
   markOwnNotificationRead,
@@ -108,6 +112,42 @@ describe('getNotificationCentre — self-scoped + enriched', () => {
 
   it('anon is refused (401)', async () => {
     expect(await code(getNotificationCentre(anon))).toBe(401);
+  });
+
+  describe('Gecko Apprenticeships evidence alerts → the portfolio, in the reader’s own shell', () => {
+    const tutor: Actor = { authenticated: true, userId: 't-1', role: 'TUTOR', status: 'ACTIVE', orgId: 'o1' };
+    const evRow = (type: string) => row({ type, entityType: 'appr_evidence', entityId: 'ev-1' });
+    beforeEach(() => {
+      vi.mocked(getEvidenceLinkTargets).mockResolvedValue(
+        new Map([['ev-1', { enrolmentId: 'enr-1', title: 'Case study', learnerName: 'Amy Apprentice' }]])
+      );
+    });
+
+    it('tutor: "New evidence to mark" → caseload portfolio with the evidence open', async () => {
+      mList.mockResolvedValue([evRow('appr.evidence.submitted')] as never);
+      const res = await getNotificationCentre(tutor);
+      expect(getEvidenceLinkTargets).toHaveBeenCalledWith(['ev-1']);
+      expect(res.items[0]).toMatchObject({
+        subject: 'New evidence to mark — Amy Apprentice: Case study',
+        link: '/caseload/apprenticeships/learners/enr-1?evidence=ev-1'
+      });
+    });
+
+    it('apprentice: accepted / referred → their own portfolio in /lms', async () => {
+      mList.mockResolvedValue([evRow('appr.evidence.accepted'), evRow('appr.evidence.referred')] as never);
+      const res = await getNotificationCentre(learner);
+      expect(res.items[0]).toMatchObject({
+        subject: 'Evidence accepted — Case study',
+        link: '/lms/apprenticeship/enr-1?evidence=ev-1'
+      });
+      expect(res.items[1].subject).toBe('Evidence referred back to you — Case study');
+    });
+
+    it('evidence that no longer exists falls back to the apprenticeship home of that shell', async () => {
+      vi.mocked(getEvidenceLinkTargets).mockResolvedValue(new Map());
+      mList.mockResolvedValue([evRow('appr.evidence.referred')] as never);
+      expect((await getNotificationCentre(learner)).items[0].link).toBe('/lms/apprenticeship');
+    });
   });
 });
 

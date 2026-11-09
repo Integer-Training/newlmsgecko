@@ -55,29 +55,29 @@
   <Popover.Trigger class={triggerClass} aria-label={label}>
     {@render children()}
   </Popover.Trigger>
-  <Popover.Content class="ui:w-80 ui:p-2" align="start">
-    <p class="text-muted-foreground px-2 pb-1 text-xs font-medium">{label}</p>
+  <Popover.Content class="ui:p-2 w-80!" align="start">
+    <p class="px-2 pb-1 text-xs font-medium text-(--muted-foreground)">{label}</p>
     {#if loading}
       <div class="flex justify-center py-4" role="status" aria-label="Loading evidence"><Spinner /></div>
     {:else if error}
       <p role="alert" class="px-2 py-2 text-sm text-rose-600">{error}</p>
     {:else if items.length === 0}
-      <p class="text-muted-foreground px-2 py-2 text-sm">No evidence mapped to this criterion yet.</p>
+      <p class="px-2 py-2 text-sm text-(--muted-foreground)">No evidence mapped to this criterion yet.</p>
     {:else}
       <ul class="max-h-64 overflow-y-auto">
         {#each items as item (item.id)}
           <li>
             <button
               type="button"
-              class="hover:bg-muted w-full rounded-md px-2 py-1.5 text-left"
+              class="w-full rounded-md px-2 py-1.5 text-left hover:bg-(--muted)"
               onclick={() => pick(item.id)}
             >
               <span class="flex items-center justify-between gap-2">
                 <span class="truncate text-sm font-medium">{item.title}</span>
                 <EvidenceStatusChip status={item.status} />
               </span>
-              <span class="text-muted-foreground line-clamp-2 text-xs">{item.snippet || 'No details'}</span>
-              <span class="text-muted-foreground text-xs">
+              <span class="line-clamp-2 text-xs text-(--muted-foreground)">{item.snippet || 'No details'}</span>
+              <span class="text-xs text-(--muted-foreground)">
                 {fmtDate(item.createdAt)} · {item.fileCount} file{item.fileCount === 1 ? '' : 's'}
               </span>
             </button>

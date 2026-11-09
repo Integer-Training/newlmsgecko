@@ -91,7 +91,7 @@
     {#snippet child()}
       <div class="mb-4 flex flex-wrap items-end gap-3">
         <div class="flex flex-col gap-1">
-          <span class="text-muted-foreground text-xs">Status</span>
+          <span class="text-xs text-(--muted-foreground)">Status</span>
           <Select.Root type="single" bind:value={statusFilter}>
             <Select.Trigger class="min-w-[130px]" aria-label="Filter by status">
               <p>{STATUS_LABELS[statusFilter]}</p>
@@ -104,7 +104,7 @@
           </Select.Root>
         </div>
         <div class="flex flex-col gap-1">
-          <span class="text-muted-foreground text-xs">Level</span>
+          <span class="text-xs text-(--muted-foreground)">Level</span>
           <Select.Root type="single" bind:value={levelFilter}>
             <Select.Trigger class="min-w-[130px]" aria-label="Filter by level">
               <p>{levelLabel}</p>
@@ -118,7 +118,7 @@
           </Select.Root>
         </div>
         <div class="flex flex-col gap-1">
-          <span class="text-muted-foreground text-xs">Awarding body</span>
+          <span class="text-xs text-(--muted-foreground)">Awarding body</span>
           <Select.Root type="single" bind:value={bodyFilter}>
             <Select.Trigger class="min-w-[170px]" aria-label="Filter by awarding body">
               <p>{bodyLabel}</p>
@@ -132,7 +132,7 @@
           </Select.Root>
         </div>
         <div class="flex flex-col gap-1">
-          <span class="text-muted-foreground text-xs">Search</span>
+          <span class="text-xs text-(--muted-foreground)">Search</span>
           <Search placeholder="Search programmes" bind:value={search} />
         </div>
       </div>
@@ -176,11 +176,11 @@
             <Table.Body>
               {#each filtered as p (p.id)}
                 <Table.Row>
-                  <Table.Cell class="font-medium">
+                  <Table.Cell class="min-w-56 font-medium break-words whitespace-normal!">
                     <a href="{base}/{p.id}" class="hover:underline">{p.title}</a>
                   </Table.Cell>
                   <Table.Cell>{p.reference ?? '—'}</Table.Cell>
-                  <Table.Cell>{p.awardingBody ?? '—'}</Table.Cell>
+                  <Table.Cell class="break-words whitespace-normal!">{p.awardingBody ?? '—'}</Table.Cell>
                   <Table.Cell>{p.level ?? '—'}</Table.Cell>
                   <Table.Cell>
                     <Badge variant={p.status === 'ACTIVE' ? 'success' : 'secondary'}>{STATUS_LABELS[p.status]}</Badge>

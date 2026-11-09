@@ -13,7 +13,13 @@ import type { AccountOrg } from '$features/app/types';
 import type { Component } from 'svelte';
 import { isActive } from '$lib/utils/functions/app';
 import { PUBLIC_IS_SELFHOSTED } from '$env/static/public';
-import { CERTIFICATES_ENABLED, COHORTS_ENABLED, COMMUNITY_ENABLED, EXPLORE_ENABLED } from '$lib/utils/constants/features';
+import {
+  CERTIFICATES_ENABLED,
+  COHORTS_ENABLED,
+  COMMUNITY_ENABLED,
+  EXPLORE_ENABLED
+} from '$lib/utils/constants/features';
+import { myApprenticeshipApi } from '$features/apprenticeship/api/my-apprenticeship.svelte';
 
 export interface NavItem {
   title: string;
@@ -59,6 +65,15 @@ export const baseNavConfig: NavItemConfig[] = [
     path: '/mylearning',
     icon: CourseIcon,
     matchPattern: '^/lms/mylearning(/.*)?$'
+  },
+  {
+    // Gecko Apprenticeships (Phase C): only for learners who actually have an apprenticeship — the learner shell loads
+    // their enrolments once; reading the rune here keeps the sidebar reactive.
+    titleKey: 'My apprenticeship',
+    path: '/apprenticeship',
+    icon: GoalIcon,
+    matchPattern: '^/lms/apprenticeship(/.*)?$',
+    show: () => myApprenticeshipApi.hasAny
   },
   {
     titleKey: 'lms_navigation.certificates',

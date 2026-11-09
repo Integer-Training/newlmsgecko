@@ -110,7 +110,7 @@
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="ui:max-h-[90vh] ui:overflow-y-auto sm:max-w-xl">
+  <Dialog.Content class="ui:overflow-y-auto max-h-[90vh]! sm:max-w-xl">
     {#if revealed}
       <Dialog.Header><Dialog.Title>Learner enrolled</Dialog.Title></Dialog.Header>
       <RevealPanel name={revealed.name} password={revealed.password} />
@@ -151,8 +151,8 @@
                 type="button"
                 aria-pressed={mode === value}
                 class="rounded-full border px-3 py-1 text-xs {mode === value
-                  ? 'bg-primary text-primary-foreground border-primary'
-                  : 'hover:bg-muted'}"
+                  ? 'border-(--primary) bg-(--primary) text-(--primary-foreground)'
+                  : 'hover:bg-(--muted)'}"
                 onclick={() => (mode = value)}
               >
                 {label}
@@ -172,17 +172,17 @@
                 <li role="option" aria-selected={learnerId === l.userId}>
                   <button
                     type="button"
-                    class="hover:bg-muted flex w-full flex-col px-3 py-1.5 text-left text-sm {learnerId === l.userId
-                      ? 'bg-muted'
+                    class="flex w-full flex-col px-3 py-1.5 text-left text-sm hover:bg-(--muted) {learnerId === l.userId
+                      ? 'bg-(--muted)'
                       : ''}"
                     onclick={() => (learnerId = l.userId)}
                   >
                     <span class="font-medium">{l.name ?? l.email}</span>
-                    {#if l.name && l.email}<span class="text-muted-foreground text-xs">{l.email}</span>{/if}
+                    {#if l.name && l.email}<span class="text-xs text-(--muted-foreground)">{l.email}</span>{/if}
                   </button>
                 </li>
               {:else}
-                <li class="text-muted-foreground px-3 py-2 text-sm">No learners found.</li>
+                <li class="text-(--muted-foreground) px-3 py-2 text-sm">No learners found.</li>
               {/each}
             </ul>
             {#if chosenLearner}<p class="text-xs">

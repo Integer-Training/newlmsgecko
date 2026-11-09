@@ -61,7 +61,7 @@
       {:else if !tree}
         <div class="flex justify-center py-16"><Spinner /></div>
       {:else}
-        <div class="flex max-w-5xl flex-col gap-4">
+        <div class="flex max-w-7xl flex-col gap-4">
           <ProgrammeHeader programme={tree} />
 
           {#each tree.qualifications as qualification, i (qualification.id)}

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
   import { goto } from '$app/navigation';
+  import { page as appPage } from '$app/state';
   import * as Page from '@cio/ui/base/page';
   import * as Select from '@cio/ui/base/select';
   import * as Table from '@cio/ui/base/table';
@@ -10,7 +11,8 @@
   import { Empty } from '@cio/ui/custom/empty';
   import UserPlusIcon from '@lucide/svelte/icons/user-plus';
   import { APPR_PROGRESS_STATUSES, type ApprProgressStatus } from '@cio/utils/constants/apprenticeship';
-  import { currentOrg } from '$lib/utils/store/org';
+  import { currentOrg, isOrgAdmin } from '$lib/utils/store/org';
+  import { apprenticeshipsBase } from '../utils/paths';
   import { enrolmentsApi, tutorNames } from '../api/enrolments.svelte';
   import AddLearnerDialog from '../components/learners/add-learner-dialog.svelte';
   import ProgressBar from '../components/shared/progress-bar.svelte';
@@ -19,7 +21,8 @@
 
   // Gecko Apprenticeships — the learners table. One row per enrolment: qualification progress against where the
   // learner should be, off-the-job hours, RAG status, tutor and how much is waiting to be marked. Filters and the
-  // per-status counts come from the API; paging is server-side.
+  // per-status counts come from the API; paging is server-side. Shared by the admin area and the tutor caseload
+  // (Phase B): the API scopes a tutor to their allocated learners; Add learner + the tutor filter are admin-only.
 
   const PAGE_SIZE = 25;
 
@@ -32,13 +35,13 @@
   let addOpen = $state(false);
   let retry = $state(0);
 
-  const base = $derived(`/org/${$currentOrg.siteName}/apprenticeships`);
+  const base = $derived(apprenticeshipsBase(appPage.url.pathname, $currentOrg.siteName));
   const list = $derived(enrolmentsApi.list);
   const totalPages = $derived(list ? Math.max(1, Math.ceil(list.total / list.pageSize)) : 1);
   const hasFilters = $derived(!!programmeId || !!tutorId || !!status || !!debouncedSearch);
 
   onMount(() => {
-    enrolmentsApi.loadOptions();
+    enrolmentsApi.loadOptions($isOrgAdmin === true);
   });
 
   // Debounce typing so the table doesn't refetch per keystroke.
@@ -106,9 +109,11 @@
     </Page.HeaderContent>
     <Page.Action>
       <Button variant="outline" href="{base}/to-mark">To mark</Button>
-      <Button onclick={() => (addOpen = true)}>
-        <UserPlusIcon size={16} class="mr-1" /> Add learner
-      </Button>
+      {#if $isOrgAdmin}
+        <Button onclick={() => (addOpen = true)}>
+          <UserPlusIcon size={16} class="mr-1" /> Add learner
+        </Button>
+      {/if}
     </Page.Action>
   </Page.Header>
 
@@ -120,8 +125,8 @@
           type="button"
           aria-pressed={status === ''}
           class="rounded-full border px-3 py-1 text-sm {status === ''
-            ? 'bg-primary text-primary-foreground border-primary'
-            : 'hover:bg-muted'}"
+            ? 'border-(--primary) bg-(--primary) text-(--primary-foreground)'
+            : 'hover:bg-(--muted)'}"
           onclick={() => (status = '')}
         >
           All
@@ -131,8 +136,8 @@
             type="button"
             aria-pressed={status === s}
             class="rounded-full border px-3 py-1 text-sm {status === s
-              ? 'bg-primary text-primary-foreground border-primary'
-              : 'hover:bg-muted'}"
+              ? 'border-(--primary) bg-(--primary) text-(--primary-foreground)'
+              : 'hover:bg-(--muted)'}"
             onclick={() => (status = status === s ? '' : s)}
           >
             {STATUS_LABEL(s)}
@@ -143,7 +148,7 @@
 
       <div class="mb-4 flex flex-wrap items-end gap-3">
         <div class="flex flex-col gap-1">
-          <span class="text-muted-foreground text-xs" id="lf-prog">Programme</span>
+          <span class="text-xs text-(--muted-foreground)" id="lf-prog">Programme</span>
           <Select.Root type="single" bind:value={programmeId}>
             <Select.Trigger class="min-w-[200px]" aria-labelledby="lf-prog"
               ><p class="truncate">{programmeLabel}</p></Select.Trigger
@@ -156,22 +161,24 @@
             </Select.Content>
           </Select.Root>
         </div>
+        {#if $isOrgAdmin}
+          <div class="flex flex-col gap-1">
+            <span class="text-xs text-(--muted-foreground)" id="lf-tutor">Tutor</span>
+            <Select.Root type="single" bind:value={tutorId}>
+              <Select.Trigger class="min-w-[180px]" aria-labelledby="lf-tutor"
+                ><p class="truncate">{tutorLabel}</p></Select.Trigger
+              >
+              <Select.Content>
+                <Select.Item value="">All tutors</Select.Item>
+                {#each enrolmentsApi.tutors as t (t.id)}
+                  <Select.Item value={t.id}>{t.name ?? t.email ?? 'Tutor'}</Select.Item>
+                {/each}
+              </Select.Content>
+            </Select.Root>
+          </div>
+        {/if}
         <div class="flex flex-col gap-1">
-          <span class="text-muted-foreground text-xs" id="lf-tutor">Tutor</span>
-          <Select.Root type="single" bind:value={tutorId}>
-            <Select.Trigger class="min-w-[180px]" aria-labelledby="lf-tutor"
-              ><p class="truncate">{tutorLabel}</p></Select.Trigger
-            >
-            <Select.Content>
-              <Select.Item value="">All tutors</Select.Item>
-              {#each enrolmentsApi.tutors as t (t.id)}
-                <Select.Item value={t.id}>{t.name ?? t.email ?? 'Tutor'}</Select.Item>
-              {/each}
-            </Select.Content>
-          </Select.Root>
-        </div>
-        <div class="flex flex-col gap-1">
-          <span class="text-muted-foreground text-xs">Search</span>
+          <span class="text-xs text-(--muted-foreground)">Search</span>
           <Search placeholder="Learner name or email" class="ui:max-w-[260px]" bind:value={searchValue} />
         </div>
         {#if hasFilters}
@@ -191,7 +198,11 @@
       {:else if list.items.length === 0}
         <Empty
           title={hasFilters ? 'No learners match' : 'No apprentices yet'}
-          description={hasFilters ? 'Try different filters.' : 'Add a learner to start tracking their portfolio.'}
+          description={hasFilters
+            ? 'Try different filters.'
+            : $isOrgAdmin
+              ? 'Add a learner to start tracking their portfolio.'
+              : 'Apprentices allocated to you will appear here.'}
         />
       {:else}
         <div
@@ -215,7 +226,7 @@
                 <Table.Row class="cursor-pointer" onclick={() => open(r.id)}>
                   <Table.Cell>
                     <p class="font-medium">{r.learner.name}</p>
-                    <p class="text-muted-foreground text-xs">{r.programmeTitle}</p>
+                    <p class="text-xs text-(--muted-foreground)">{r.programmeTitle}</p>
                   </Table.Cell>
                   <Table.Cell>
                     <ProgressBar
@@ -223,7 +234,7 @@
                       expected={r.expectedPct}
                       label="{r.learner.name} qualification progress"
                     />
-                    <p class="text-muted-foreground mt-1 text-xs">
+                    <p class="mt-1 text-xs text-(--muted-foreground)">
                       {fmtPct(r.actualPct)}{r.expectedPct !== null ? ` · expected ${r.expectedPct}%` : ' · expected —'}
                     </p>
                   </Table.Cell>
@@ -235,7 +246,7 @@
                         : null}
                       label="{r.learner.name} off-the-job hours"
                     />
-                    <p class="text-muted-foreground mt-1 text-xs">
+                    <p class="mt-1 text-xs text-(--muted-foreground)">
                       {fmtMinutes(r.otj.minutes)} done · {fmtMinutes(r.otj.expectedMinutes)} expected · {fmtMinutes(
                         r.otj.targetMinutes
                       )} target
@@ -250,7 +261,7 @@
                         aria-label="{r.toMark} to mark">{r.toMark}</span
                       >
                     {:else}
-                      <span class="text-muted-foreground">0</span>
+                      <span class="text-(--muted-foreground)">0</span>
                     {/if}
                   </Table.Cell>
                   <Table.Cell>
@@ -271,7 +282,7 @@
         </div>
 
         <div class="mt-3 flex items-center justify-between text-sm">
-          <span class="text-muted-foreground">{list.total} learner{list.total === 1 ? '' : 's'}</span>
+          <span class="text-(--muted-foreground)">{list.total} learner{list.total === 1 ? '' : 's'}</span>
           {#if totalPages > 1}
             <div class="flex items-center gap-2">
               <Button variant="outline" size="sm" disabled={page <= 1} onclick={() => (page -= 1)}>Previous</Button>
@@ -286,4 +297,6 @@
   </Page.Body>
 </Page.Root>
 
-<AddLearnerDialog bind:open={addOpen} onCreated={(id) => goto(`${base}/learners/${id}`)} />
+{#if $isOrgAdmin}
+  <AddLearnerDialog bind:open={addOpen} onCreated={(id) => goto(`${base}/learners/${id}`)} />
+{/if}

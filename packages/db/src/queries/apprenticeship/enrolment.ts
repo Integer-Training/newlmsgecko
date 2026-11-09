@@ -181,3 +181,37 @@ export async function listAcceptedEvidenceTitles(programmeId: string, learnerId:
   for (const r of rows) map.set(r.criterionId, [...(map.get(r.criterionId) ?? []), r.title]);
   return map;
 }
+
+/**
+ * Add-learner pickers: the org's tutors (role 2) and learners (role 3) with their FULL name (user.name, falling back to
+ * the profile handle) + email, in one statement. Ordered by role then name. No KPI payload.
+ */
+export async function listApprPickerPeople(organizationId: string, client: DbOrTxClient = db) {
+  const rows = await client
+    .selectDistinct({
+      id: schema.profile.id,
+      name: profileDisplayName,
+      email: schema.profile.email,
+      roleId: schema.organizationmember.roleId
+    })
+    .from(schema.organizationmember)
+    .innerJoin(schema.profile, eq(schema.profile.id, schema.organizationmember.profileId))
+    .where(
+      and(
+        eq(schema.organizationmember.organizationId, organizationId),
+        inArray(schema.organizationmember.roleId, [2, 3])
+      )
+    );
+  const byName = (a: { name: string | null }, b: { name: string | null }) => (a.name ?? '').localeCompare(b.name ?? '');
+  const toOption = (r: (typeof rows)[number]) => ({ id: r.id, name: r.name, email: r.email });
+  return {
+    tutors: rows
+      .filter((r) => Number(r.roleId) === 2)
+      .sort(byName)
+      .map(toOption),
+    learners: rows
+      .filter((r) => Number(r.roleId) === 3)
+      .sort(byName)
+      .map(toOption)
+  };
+}

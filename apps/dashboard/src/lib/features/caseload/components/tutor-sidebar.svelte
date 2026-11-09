@@ -9,6 +9,8 @@
   import BookOpenIcon from '@lucide/svelte/icons/book-open';
   import TrendingUpIcon from '@lucide/svelte/icons/trending-up';
   import MessagesSquareIcon from '@lucide/svelte/icons/messages-square';
+  import GraduationCapIcon from '@lucide/svelte/icons/graduation-cap';
+  import ClipboardCheckIcon from '@lucide/svelte/icons/clipboard-check';
   import { SidebarLogoutButton } from '$features/ui/sidebar/footer';
 
   // Tutor shell nav (PearlLMS Phase 8). Flat items; active state is derived from the current pathname.
@@ -24,6 +26,21 @@
       url: '/caseload/courses',
       icon: BookOpenIcon,
       isActive: page.url.pathname.startsWith('/caseload/courses')
+    },
+    // Gecko Apprenticeships (Phase B): the tutor's allocated apprentices + their marking queue.
+    {
+      title: 'Apprenticeships',
+      url: '/caseload/apprenticeships',
+      icon: GraduationCapIcon,
+      isActive:
+        page.url.pathname.startsWith('/caseload/apprenticeships') &&
+        !page.url.pathname.startsWith('/caseload/apprenticeships/to-mark')
+    },
+    {
+      title: 'To mark',
+      url: '/caseload/apprenticeships/to-mark',
+      icon: ClipboardCheckIcon,
+      isActive: page.url.pathname.startsWith('/caseload/apprenticeships/to-mark')
     },
     {
       title: 'Messages',

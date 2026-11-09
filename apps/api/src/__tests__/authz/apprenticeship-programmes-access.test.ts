@@ -122,11 +122,23 @@ beforeEach(() => {
   vi.mocked(q.getApprProgramme).mockResolvedValue(PROGRAMME as never);
 });
 
-describe('apprenticeship admin API — ADMIN only', () => {
+// Phase B: tutors may READ the programme list (learners-table filter) and the settings bundle (evidence types for the
+// evidence form) and one programme's structure (the criteria picker when marking from To mark); every write stays
+// admin-only.
+const TUTOR_READABLE = [COLLECTION_ROUTES[0], COLLECTION_ROUTES[2], PROGRAMME_ROUTES[0]];
+
+describe('apprenticeship admin API — ADMIN only (tutor read of list + settings)', () => {
   for (const r of ALL_ROUTES) {
-    it(`${r.method} ${r.path.replace('/apprenticeship', '')}: anon 401, LEARNER/TUTOR/MANAGER 403, no query runs`, async () => {
+    // Phase C: the settings bundle (evidence types) is also read by the apprentice's own evidence form.
+    const blocked =
+      r === COLLECTION_ROUTES[2]
+        ? ['manager']
+        : TUTOR_READABLE.includes(r)
+          ? ['learner', 'manager']
+          : ['learner', 'tutor', 'manager'];
+    it(`${r.method} ${r.path.replace('/apprenticeship', '')}: anon 401, ${blocked.join('/').toUpperCase()} 403, no query runs`, async () => {
       expect((await call(r, 'anon')).status).toBe(401);
-      for (const who of ['learner', 'tutor', 'manager']) expect((await call(r, who)).status).toBe(403);
+      for (const who of blocked) expect((await call(r, who)).status).toBe(403);
       expect(q.getApprProgramme).not.toHaveBeenCalled();
       expect(q.listApprProgrammesWithCounts).not.toHaveBeenCalled();
       expect(q.upsertApprSettings).not.toHaveBeenCalled();
@@ -184,6 +196,20 @@ describe('nested ids must chain up to the programme', () => {
     };
     expect((await call(r, 'admin')).status).toBe(404);
     expect(q.writeSortOrder).not.toHaveBeenCalled();
+  });
+});
+
+describe('tutor reads', () => {
+  it("a tutor reads one programme's structure (org-bound: another org's id is a 404)", async () => {
+    expect((await call(PROGRAMME_ROUTES[0], 'tutor')).status).toBe(200);
+    vi.mocked(q.getApprProgramme).mockResolvedValue({ ...PROGRAMME, organizationId: 'org-2' } as never);
+    expect((await call(PROGRAMME_ROUTES[0], 'tutor')).status).toBe(404);
+  });
+  it('a tutor lists programmes and reads the settings bundle for their own org', async () => {
+    expect((await call(COLLECTION_ROUTES[0], 'tutor')).status).toBe(200);
+    expect(q.listApprProgrammesWithCounts).toHaveBeenCalledWith(ORG, 'ACTIVE');
+    expect((await call(COLLECTION_ROUTES[2], 'tutor')).status).toBe(200);
+    expect(q.listApprEvidenceTypes).toHaveBeenCalledWith(ORG);
   });
 });
 

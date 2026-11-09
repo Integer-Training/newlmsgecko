@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { isOrgTeamMember } from '$lib/utils/store/org';
   import { SvelteSet } from 'svelte/reactivity';
   import { Button } from '@cio/ui/base/button';
   import { Input } from '@cio/ui/base/input';
@@ -58,13 +59,15 @@
       <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
         <h3 class="font-semibold">
           {qual.title}
-          {#if qual.reference}<span class="text-muted-foreground text-sm font-normal"> · {qual.reference}</span>{/if}
+          {#if qual.reference}<span class="text-sm font-normal text-(--muted-foreground)">
+              · {qual.reference}</span
+            >{/if}
         </h3>
-        <span class="text-muted-foreground text-sm">{fmtPct(qual.actualPct)} complete</span>
+        <span class="text-sm text-(--muted-foreground)">{fmtPct(qual.actualPct)} complete</span>
       </div>
 
       {#if qual.units.length === 0}
-        <p class="text-muted-foreground rounded-md border border-dashed p-4 text-sm">
+        <p class="rounded-md border border-dashed p-4 text-sm text-(--muted-foreground)">
           This qualification has no units.
         </p>
       {/if}
@@ -74,7 +77,7 @@
           {@const isOpen = open.has(unit.id)}
           <li>
             <div
-              class="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 px-3 py-2.5 md:grid-cols-[minmax(0,1fr)_14rem_8rem_7rem]"
+              class="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 px-3 py-2.5 md:grid-cols-[minmax(0,1fr)_6.5rem_15rem_10rem]"
             >
               <button
                 type="button"
@@ -87,19 +90,26 @@
                     size={16}
                     class="shrink-0"
                   />{/if}
-                <span class="truncate text-sm font-medium">{unit.code ? `${unit.code} · ` : ''}{unit.title}</span>
+                <span class="line-clamp-2 text-sm font-medium break-words"
+                  >{unit.code ? `${unit.code} · ` : ''}{unit.title}</span
+                >
               </button>
 
               <div class="justify-self-end md:justify-self-auto">
                 <StatusChip status={unit.status} />
               </div>
 
-              <div class="col-span-2 flex items-center gap-1 text-sm md:col-span-1">
+              <!-- While editing, the date inputs + buttons take a full row so nothing overlaps. -->
+              <div
+                class="col-span-2 flex items-center gap-1 text-sm {editingUnit === unit.id
+                  ? 'md:col-span-4'
+                  : 'md:col-span-1'}"
+              >
                 {#if editingUnit === unit.id}
                   <div class="flex flex-wrap items-center gap-1.5">
-                    <Input type="date" class="ui:h-8 ui:w-36" aria-label="Unit start date" bind:value={editStart} />
+                    <Input type="date" class="ui:h-8 w-36!" aria-label="Unit start date" bind:value={editStart} />
                     <span aria-hidden="true">→</span>
-                    <Input type="date" class="ui:h-8 ui:w-36" aria-label="Unit target date" bind:value={editTarget} />
+                    <Input type="date" class="ui:h-8 w-36!" aria-label="Unit target date" bind:value={editTarget} />
                     <Button size="sm" loading={store.saving} disabled={store.saving} onclick={() => saveDates(unit.id)}>
                       <CheckIcon size={14} class="mr-1" /> Save
                     </Button>
@@ -109,34 +119,38 @@
                     {#if dateError}<span role="alert" class="w-full text-xs text-rose-600">{dateError}</span>{/if}
                   </div>
                 {:else if unit.startDate || unit.targetDate}
-                  <span class="text-muted-foreground whitespace-nowrap">
+                  <span class="whitespace-nowrap text-(--muted-foreground)">
                     {fmtDate(unit.startDate)} → {fmtDate(unit.targetDate)}
                   </span>
-                  <button
-                    type="button"
-                    class="text-muted-foreground hover:text-foreground p-1"
-                    aria-label="Edit dates for {unit.title}"
-                    onclick={() => beginEdit(unit)}
-                  >
-                    <PencilIcon size={13} />
-                  </button>
-                {:else}
+                  {#if $isOrgTeamMember}
+                    <button
+                      type="button"
+                      class="p-1 text-(--muted-foreground) hover:text-(--foreground)"
+                      aria-label="Edit dates for {unit.title}"
+                      onclick={() => beginEdit(unit)}
+                    >
+                      <PencilIcon size={13} />
+                    </button>
+                  {/if}
+                {:else if $isOrgTeamMember}
                   <Button variant="outline" size="sm" onclick={() => beginEdit(unit)}>Set dates</Button>
+                {:else}
+                  <span class="text-(--muted-foreground)">Dates not set</span>
                 {/if}
               </div>
 
               <div class="col-span-2 md:col-span-1">
                 <ProgressBar actual={unit.actualPct} expected={unit.expectedPct} label="{unit.title} progress" />
-                <p class="text-muted-foreground mt-0.5 text-xs">
+                <p class="mt-0.5 text-xs whitespace-nowrap text-(--muted-foreground)">
                   {fmtPct(unit.actualPct)}{unit.expectedPct !== null ? ` · expected ${unit.expectedPct}%` : ''}
                 </p>
               </div>
             </div>
 
             {#if isOpen}
-              <div id="unit-{unit.id}" class="bg-muted/30 border-t px-3 py-2">
+              <div id="unit-{unit.id}" class="border-t bg-(--muted)/30 px-3 py-2">
                 {#if unit.criteria.length === 0}
-                  <p class="text-muted-foreground py-2 text-sm">No criteria in this unit.</p>
+                  <p class="py-2 text-sm text-(--muted-foreground)">No criteria in this unit.</p>
                 {/if}
                 <ul class="divide-y">
                   {#each unit.criteria as c (c.id)}
@@ -145,10 +159,10 @@
                     >
                       <p class="min-w-0 text-sm">
                         <span class="font-medium">{c.code}</span>
-                        <span class="text-muted-foreground"> {c.text}</span>
+                        <span class="text-(--muted-foreground)"> {c.text}</span>
                       </p>
                       <div class="text-xs">
-                        <span class={c.met ? 'font-medium text-emerald-600' : 'text-muted-foreground'}>
+                        <span class={c.met ? 'font-medium text-emerald-600' : 'text-(--muted-foreground)'}>
                           {c.met ? 'Met' : 'Not met'} · {c.acceptedCount}/{c.requiredCount}
                         </span>
                         <ProgressBar
@@ -162,7 +176,7 @@
                           {store}
                           criterionId={c.id}
                           label="Evidence for {c.code}"
-                          triggerClass="rounded-full border px-2.5 py-0.5 text-xs hover:bg-muted"
+                          triggerClass="rounded-full border px-2.5 py-0.5 text-xs hover:bg-(--muted)"
                         >
                           {c.evidenceCount} evidence{c.pendingCount > 0 ? ` (${c.pendingCount} pending)` : ''}
                         </CriterionPopover>

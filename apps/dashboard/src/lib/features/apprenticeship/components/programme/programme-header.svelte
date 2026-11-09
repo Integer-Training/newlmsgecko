@@ -77,7 +77,7 @@
   }
 </script>
 
-<form onsubmit={save} class="bg-card flex flex-col gap-3 rounded-xl border p-4">
+<form onsubmit={save} class="flex flex-col gap-3 rounded-xl border bg-(--card) p-4">
   <div class="flex flex-wrap items-center justify-between gap-2">
     <div class="flex items-center gap-2">
       <h2 class="text-lg font-semibold tracking-tight">Programme details</h2>

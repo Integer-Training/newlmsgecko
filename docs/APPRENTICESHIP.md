@@ -81,6 +81,28 @@ Edit dates & hours; Spread unit dates; Export CSV; evidence side panel for add/e
 queue · **Programmes** (list with status / level / awarding body filters + search; setup page = details, then units
 collapsed with their criteria inside, + import) · **Settings**.
 
+## Tutor screens (Phase B)
+
+The /org area is admin-only server-side, so tutors get the same screens inside their caseload shell:
+**/caseload/apprenticeships** (learners — only those allocated to them), **…/learners/[enrolmentId]** (portfolio) and
+**…/to-mark**, plus "Apprenticeships" + "To mark" in the tutor sidebar. Links follow the shell
+(`features/apprenticeship/utils/paths.ts`). API: learners table, portfolio, unit dates / spread, CSV export, every
+evidence route, and READ of the programme list + settings bundle are `requireStaff`; the services 404 any learner not
+allocated to the tutor. Admin-only: enrolling a learner, programme dates / hours / OTJ override (route + service),
+programme setup, settings writes, reopening accepted evidence. Hidden for tutors in the UI: Add learner, the tutor
+filter, Edit dates & hours.
+
+## Learner screens (Phase C)
+
+In the learner shell: **/lms/apprenticeship** (one apprenticeship opens straight into its portfolio; several show a
+pick list) and **/lms/apprenticeship/[enrolmentId]**. "My apprenticeship" shows in the learner menu only when the
+learner has an enrolment (`features/apprenticeship/api/my-apprenticeship.svelte.ts`, loaded by the /lms layout). API
+routes open to LEARNER (`requireRole('ADMIN','TUTOR','LEARNER')`): own learners list, portfolio, CSV export, evidence
+list / create / presign / download / detail / edit / notes, criterion evidence, settings read. Staff-only still: unit
+dates + spread, To mark, review. The services force a learner's evidence to SUBMITTED, allow edits only while
+SUBMITTED / REFERRED (editing REFERRED resubmits it) and make their notes GENERAL. Hidden for learners in the UI: the
+status picker, unit-date edit, Spread unit dates (and Edit dates & hours).
+
 ## Verified
 
 API tests 793 pass / 15 known baseline failures. Local end-to-end (local Postgres + MinIO, 2026-11-06): create from
@@ -88,10 +110,26 @@ the course pop-up → import the 18-unit / 388-criterion export → add learner 
 with a file → To mark → accept with edited mapping → refer with a note → header, units, criteria map, pop-up, OTJ,
 CSV and learners list all agree; diploma "Self Paced" creation unchanged.
 
+## Notifications (in-app)
+
+The existing bell (all three shells) carries three types, in-app only (no email template; email is off on Gecko):
+`appr.evidence.submitted` → the learner's allocated tutors when the apprentice adds evidence or resubmits referred
+evidence; `appr.evidence.accepted` / `appr.evidence.referred` → the apprentice when it is marked (and when staff add
+evidence straight as Accepted). Marking clears every tutor's "to mark" alert for that evidence
+(`markNotificationsReadForEntity`). Links are built at read time (`services/comms/notification-centre.ts`): staff →
+`/caseload/apprenticeships/learners/{enrolmentId}?evidence={id}`, apprentice → `/lms/apprenticeship/{enrolmentId}?evidence={id}`;
+the portfolio opens that evidence's sheet. Sending lives in `services/apprenticeship/notifications.ts`, called after the
+transaction and never fatal.
+
 ## Known gaps / next
 
-- "Add learner" tutor/learner pickers use the existing diploma lists (show short handles, as the diploma screens do).
-- To mark has no Type column; adding files from To mark is disabled (review works).
-- Unit codes from Skills Portfolio files are empty (the title starts with the code).
-- Phase B (tutor) and C (learner); later: tasks, GLH, employer access, progress reviews, gateway/EPA, IQA sampling,
-  PDF portfolio, multiple qualifications UI, notifications (when email is on).
+- Files uploaded to a form that is then abandoned stay in storage (nothing deletes them).
+- Later: tasks, GLH, employer access, progress reviews, gateway/EPA, IQA sampling, PDF portfolio, email notifications
+  (when email is on).
+
+Closed 2026-11-09: To mark shows the evidence Type and can add files; tutors marking from To mark get the criteria
+tree (programme structure GET is `requireStaff`); Add learner pickers show full names
+(`GET /apprenticeship/enrolments/options`, admin only); Skills Portfolio imports split the unit code off the title
+(`splitUnitCode`; re-import fills an empty code only); file links open before the await (popup blockers).
+Verified end to end on the local stack (learner upload → tutor alert → refer → resubmit → accept → learner alert,
+every shell page and cross-role block) — API 855 pass / 15 known baseline failures.

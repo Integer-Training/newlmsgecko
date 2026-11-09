@@ -36,14 +36,14 @@ import {
 import { Hono } from '@api/utils/hono';
 import type { Actor } from '@cio/db/actor';
 import { handleError } from '@api/utils/errors';
-import { requireAdmin } from '@api/middlewares/guards';
+import { requireAdmin, requireStaff } from '@api/middlewares/guards';
 import { zValidator } from '@hono/zod-validator';
 
 // Gecko Apprenticeships Phase A1 — programme catalogue + structure + CSV import. ADMIN only on every route
 // (requireAdmin, actor-based). The org comes from the RESOLVED actor inside the service, never a header, and every
 // nested id is verified through the programme chain (404 otherwise). Mounted at /apprenticeship/programmes.
 export const programmesRouter = new Hono()
-  .get('/', requireAdmin, zValidator('query', ZProgrammeListQuery), async (c) => {
+  .get('/', requireStaff, zValidator('query', ZProgrammeListQuery), async (c) => {
     try {
       const data = await listProgrammes(c.get('actor') as Actor, c.req.valid('query').status);
       return c.json({ success: true, data }, 200);
@@ -59,7 +59,8 @@ export const programmesRouter = new Hono()
       return handleError(c, error, 'Failed to create programme');
     }
   })
-  .get('/:id', requireAdmin, zValidator('param', ZProgrammeIdParam), async (c) => {
+  // Read-only structure: tutors need it for the criteria picker when marking from To mark (org-scoped in the service).
+  .get('/:id', requireStaff, zValidator('param', ZProgrammeIdParam), async (c) => {
     try {
       const data = await getProgrammeTree(c.get('actor') as Actor, c.req.valid('param').id);
       return c.json({ success: true, data }, 200);

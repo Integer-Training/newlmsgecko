@@ -76,7 +76,7 @@
         <Table.Head>Time</Table.Head>
         <Table.Cell>
           {fmtMinutes(ev.minutes)}
-          {#if ev.includeOtj}<span class="text-muted-foreground"> · counts towards off-the-job hours</span>{/if}
+          {#if ev.includeOtj}<span class="text-(--muted-foreground)"> · counts towards off-the-job hours</span>{/if}
         </Table.Cell>
       </Table.Row>
       <Table.Row><Table.Head>Added</Table.Head><Table.Cell>{fmtDate(ev.createdAt)}</Table.Cell></Table.Row>
@@ -90,7 +90,7 @@
   <section class="space-y-1.5" aria-label="Files">
     <h3 class="text-sm font-semibold">Files</h3>
     {#if ev.files.length === 0}
-      <p class="text-muted-foreground text-sm">No files attached.</p>
+      <p class="text-sm text-(--muted-foreground)">No files attached.</p>
     {:else}
       <ul class="space-y-1">
         {#each ev.files as f (f.key)}
@@ -102,7 +102,7 @@
             >
               <FileIcon size={14} />
               {f.name}
-              <span class="text-muted-foreground text-xs">{fmtBytes(f.size)}</span>
+              <span class="text-xs text-(--muted-foreground)">{fmtBytes(f.size)}</span>
             </button>
           </li>
         {/each}
@@ -112,14 +112,14 @@
 
   <section class="space-y-2" aria-label="Criteria">
     <h3 class="text-sm font-semibold">
-      Criteria {#if detail.permissions.canReview}<span class="text-muted-foreground font-normal"
+      Criteria {#if detail.permissions.canReview}<span class="font-normal text-(--muted-foreground)"
           >· confirm or edit the learner's selection</span
         >{/if}
     </h3>
     {#if detail.permissions.canReview}
       <CriteriaPicker {tree} bind:selected {metIds} idPrefix="rev-crit" disabled={busy !== null} />
     {:else if detail.criteria.length === 0}
-      <p class="text-muted-foreground text-sm">No criteria mapped.</p>
+      <p class="text-sm text-(--muted-foreground)">No criteria mapped.</p>
     {:else}
       {#each detail.criteria as q (q.id)}
         {#each q.units as u (u.id)}
@@ -127,7 +127,9 @@
             <p class="text-sm font-medium">{u.code ? `${u.code} · ` : ''}{u.title}</p>
             <ul class="mt-1 space-y-0.5 text-sm">
               {#each u.criteria as c (c.id)}
-                <li><span class="font-medium">{c.code}</span> <span class="text-muted-foreground">{c.text}</span></li>
+                <li>
+                  <span class="font-medium">{c.code}</span> <span class="text-(--muted-foreground)">{c.text}</span>
+                </li>
               {/each}
             </ul>
           </div>
@@ -139,7 +141,7 @@
   {#if detail.permissions.canReview}
     <section class="space-y-2" aria-label="Review">
       <label for="review-note" class="text-sm font-semibold">Note to the learner (optional)</label>
-      <Textarea id="review-note" class="ui:min-h-[72px]" maxlength={APPR_NOTE_MAX} bind:value={note} />
+      <Textarea id="review-note" class="min-h-[72px]!" maxlength={APPR_NOTE_MAX} bind:value={note} />
       {#if error}
         <p
           role="alert"
@@ -161,7 +163,7 @@
         </Button>
       </div>
       {#if selected.length === 0}
-        <p class="text-muted-foreground text-right text-xs">Select at least one criterion to accept.</p>
+        <p class="text-right text-xs text-(--muted-foreground)">Select at least one criterion to accept.</p>
       {/if}
     </section>
   {/if}
