@@ -152,9 +152,34 @@ Migration `0029_appr_tasks_reviews.sql` (additive): `appr_upload`, `appr_task_pl
   5 LOW fixed); scripted local E2E 58 pass / 0 fail (plan → assign → answer → refer → resubmit → accept → complete;
   access blocks; sync/unassign; review with three signatures → next review; notifications; upload clean-up; scans once).
 
+## Round 2 — Deploy 2 (2026-11-09): GLH and gateway / EPA
+
+Migration `0030_appr_glh_gateway.sql` (additive): `appr_glh_log`; `appr_enrolment.gateway_items`, `gateway_ready_notified_at`,
+`gateway_passed_at/by`, `epa_booked_date`, `epa_result`, `epa_result_date`, `glh_minutes` (cache);
+`appr_programme.gateway_checklist` (null = default). Rules: `glhTargetMinutes`, `glhDoneMinutes`, `glhExpectedMinutes`,
+`gatewayState`, `apprStage`.
+
+- **GLH**: GLH (hours) per unit in programme setup and the CSV `glh` column. Target = Σ unit GLH; done = GLH of complete
+  units + staff logs (portfolio **Hours** tab; learner read-only); expected = target × programme expected %. Shown in the
+  portfolio, learners lists and CSV; blank when no unit has GLH.
+- **Gateway checklist** per programme (setup page; default: all units complete [auto], OTJ target met [auto], English,
+  Maths, employer sign-off, tutor sign-off [manual]). Portfolio **Gateway** tab: auto items live from progress, manual
+  items ticked by staff with notes; **Ready for gateway** → staff **Confirm gateway** (locks ticks); admin **Reopen**
+  (only before an EPA result). EPA: booked date (≥ gateway date), result Pass/Merit/Distinction/Fail + date (≥ gateway
+  date, not future); an achieving result sets `achieved_at`, Fail clears it; once a result exists only admins change it;
+  concurrent EPA edits → 409. Stage chip (In learning / Ready for gateway / At gateway / EPA booked / Achieved / EPA not
+  passed) in lists and the portfolio.
+- **Learner lock**: after gateway is confirmed the apprentice can no longer add/edit evidence or notes (checked again
+  inside the transaction); staff can. Overdue-task alerts stop for gateway/achieved learners.
+- **`appr.gateway.ready`** → allocated tutors (same org) + org admins, once; cleared if readiness drops; released for
+  retry if sending fails; the daily scan pages through every learner so none is missed.
+- Verified: API 1064 pass / 15 known baseline failures; independent review (no HIGH; 2 MEDIUM + 4 LOW fixed); local
+  E2E 51 pass / 0 fail (GLH, checklist, ticks, ready alert once, confirm, learner lock, EPA rules, reopen, scan) and the
+  Deploy 1 script re-run 58 pass.
+
 ## Known gaps / next
 
-- Round 2 Deploy 2: GLH, gateway/EPA. Deploy 3: IQA sampling, PDF portfolio, summary dashboard.
+- Round 2 Deploy 3: IQA sampling, PDF portfolio, summary dashboard.
 - Employer access: design only (`docs/APPRENTICESHIP-EMPLOYER.md`). Email notifications when email is on.
 
 Closed 2026-11-09: To mark shows the evidence Type and can add files; tutors marking from To mark get the criteria
