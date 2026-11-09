@@ -19,7 +19,12 @@ import {
   isWithinWindow,
   nextReviewDate,
   isReviewOverdue,
-  reviewFullySigned
+  reviewFullySigned,
+  glhTargetMinutes,
+  glhDoneMinutes,
+  glhExpectedMinutes,
+  gatewayState,
+  apprStage
 } from '@cio/utils/functions/apprenticeship-progress';
 
 // Gecko Apprenticeships rules module. Every screen, the cache recompute and the CSV export read these functions,
@@ -273,5 +278,47 @@ describe('round 2: reviews', () => {
     const t = '2026-11-09T10:00:00Z';
     expect(reviewFullySigned({ tutorSignedAt: t, learnerSignedAt: t, employerSignedAt: t })).toBe(true);
     expect(reviewFullySigned({ tutorSignedAt: t, learnerSignedAt: null, employerSignedAt: t })).toBe(false);
+  });
+});
+
+describe('round 2 deploy 2: GLH + gateway', () => {
+  it('GLH target / done / expected', () => {
+    expect(glhTargetMinutes([{ glh: null }, { glh: 0 }])).toBeNull();
+    expect(glhTargetMinutes([{ glh: 10 }, { glh: null }, { glh: 5 }])).toBe(900);
+    expect(
+      glhDoneMinutes(
+        [
+          { glh: 10, complete: true },
+          { glh: 5, complete: false }
+        ],
+        30
+      )
+    ).toBe(630);
+    expect(glhDoneMinutes([{ glh: null, complete: true }], -5)).toBe(0);
+    expect(glhExpectedMinutes(900, 50)).toBe(450);
+    expect(glhExpectedMinutes(null, 50)).toBeNull();
+  });
+  it('gateway auto + manual items, ready only when all done', () => {
+    const checklist = [
+      { key: 'units', label: 'Units', kind: 'AUTO_UNITS' },
+      { key: 'otj', label: 'OTJ', kind: 'AUTO_OTJ' },
+      { key: 'english', label: 'English', kind: 'MANUAL' }
+    ];
+    const base = { checklist, manual: {}, unitsTotal: 3, unitsComplete: 3, otjMinutes: 600, otjTargetMinutes: 600 };
+    expect(gatewayState(base).ready).toBe(false);
+    expect(gatewayState({ ...base, manual: { english: { done: true } } }).ready).toBe(true);
+    expect(gatewayState({ ...base, manual: { english: { done: true } }, unitsComplete: 2 }).ready).toBe(false);
+    expect(gatewayState({ ...base, otjTargetMinutes: null }).items[1]!.done).toBe(false);
+    expect(gatewayState({ ...base, unitsTotal: 0, unitsComplete: 0 }).items[0]!.done).toBe(false);
+    expect(gatewayState({ ...base, checklist: [] }).ready).toBe(false);
+  });
+  it('stage precedence', () => {
+    const s = { ready: false, gatewayPassedAt: null, epaBookedDate: null, epaResult: null };
+    expect(apprStage(s)).toBe('IN_LEARNING');
+    expect(apprStage({ ...s, ready: true })).toBe('READY_FOR_GATEWAY');
+    expect(apprStage({ ...s, gatewayPassedAt: 'x' })).toBe('AT_GATEWAY');
+    expect(apprStage({ ...s, gatewayPassedAt: 'x', epaBookedDate: '2027-01-01' })).toBe('EPA_BOOKED');
+    expect(apprStage({ ...s, epaResult: 'MERIT' })).toBe('ACHIEVED');
+    expect(apprStage({ ...s, epaResult: 'FAIL' })).toBe('EPA_FAILED');
   });
 });

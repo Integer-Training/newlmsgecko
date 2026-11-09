@@ -119,3 +119,56 @@ export const APPR_REVIEW_TARGETS_MAX = 20;
 
 /** Uploads not saved on a record (or later removed from one) are deleted from storage after this long. */
 export const APPR_UPLOAD_GRACE_HOURS = 24;
+
+// ── Round 2 Deploy 2: GLH and gateway / EPA ──
+
+/** Gateway checklist item kinds: AUTO_* are computed from progress on read; MANUAL are ticked by staff. */
+export const APPR_GATEWAY_ITEM_KINDS = ['AUTO_UNITS', 'AUTO_OTJ', 'MANUAL'] as const;
+export type ApprGatewayItemKind = (typeof APPR_GATEWAY_ITEM_KINDS)[number];
+export interface ApprGatewayItem {
+  key: string;
+  label: string;
+  kind: ApprGatewayItemKind;
+}
+/** Used when a programme has no checklist of its own (programme setup can edit labels and manual items). */
+export const APPR_DEFAULT_GATEWAY_CHECKLIST: readonly ApprGatewayItem[] = [
+  { key: 'units', label: 'All units complete', kind: 'AUTO_UNITS' },
+  { key: 'otj', label: 'Off-the-job hours target met', kind: 'AUTO_OTJ' },
+  { key: 'english', label: 'English achieved', kind: 'MANUAL' },
+  { key: 'maths', label: 'Maths achieved', kind: 'MANUAL' },
+  { key: 'employer', label: 'Employer sign-off', kind: 'MANUAL' },
+  { key: 'tutor', label: 'Tutor sign-off', kind: 'MANUAL' }
+];
+export const APPR_GATEWAY_ITEMS_MAX = 20;
+
+export const APPR_EPA_RESULTS = ['PASS', 'MERIT', 'DISTINCTION', 'FAIL'] as const;
+export type ApprEpaResult = (typeof APPR_EPA_RESULTS)[number];
+export const APPR_EPA_RESULT_LABELS: Record<ApprEpaResult, string> = {
+  PASS: 'Pass',
+  MERIT: 'Merit',
+  DISTINCTION: 'Distinction',
+  FAIL: 'Fail'
+};
+/** Results that complete the apprenticeship (sets achieved_at). */
+export const APPR_EPA_ACHIEVING_RESULTS: readonly ApprEpaResult[] = ['PASS', 'MERIT', 'DISTINCTION'];
+
+/** Where a learner is on the road to the end-point assessment (computed on read). */
+export const APPR_STAGES = [
+  'IN_LEARNING',
+  'READY_FOR_GATEWAY',
+  'AT_GATEWAY',
+  'EPA_BOOKED',
+  'ACHIEVED',
+  'EPA_FAILED'
+] as const;
+export type ApprStage = (typeof APPR_STAGES)[number];
+export const APPR_STAGE_LABELS: Record<ApprStage, string> = {
+  IN_LEARNING: 'In learning',
+  READY_FOR_GATEWAY: 'Ready for gateway',
+  AT_GATEWAY: 'At gateway',
+  EPA_BOOKED: 'EPA booked',
+  ACHIEVED: 'Achieved',
+  EPA_FAILED: 'EPA not passed'
+};
+/** One staff GLH log entry is capped at a day. */
+export const APPR_GLH_LOG_MAX_MINUTES = 24 * 60;

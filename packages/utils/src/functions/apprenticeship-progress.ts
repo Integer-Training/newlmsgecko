@@ -313,3 +313,64 @@ export function firstReviewDate(
   const t = toDayNumber(today);
   return n !== null && t !== null && n < t ? addDays(today, 7) : natural;
 }
+
+// ── Round 2 Deploy 2: GLH and gateway / EPA ──
+
+/** GLH target in minutes = sum of unit GLH (hours). Null when no unit has GLH set. */
+export function glhTargetMinutes(units: readonly { glh: number | null }[]): number | null {
+  const withGlh = units.filter((u) => u.glh !== null && u.glh !== undefined && u.glh > 0);
+  if (withGlh.length === 0) return null;
+  return withGlh.reduce((sum, u) => sum + (u.glh as number) * 60, 0);
+}
+
+/** GLH done in minutes = GLH of COMPLETE units + staff-logged minutes. */
+export function glhDoneMinutes(
+  units: readonly { glh: number | null; complete: boolean }[],
+  loggedMinutes: number
+): number {
+  const fromUnits = units.reduce((sum, u) => sum + (u.complete && u.glh && u.glh > 0 ? u.glh * 60 : 0), 0);
+  return fromUnits + Math.max(0, loggedMinutes);
+}
+
+/** GLH expected by today = target x programme expected %. */
+export function glhExpectedMinutes(target: number | null, expected: number | null): number | null {
+  if (target === null || expected === null) return null;
+  return Math.round((target * expected) / 100);
+}
+
+/**
+ * Gateway checklist state. AUTO_UNITS = every unit complete (needs at least one unit); AUTO_OTJ = OTJ minutes reach a
+ * known target; MANUAL = ticked by staff. ready = there is at least one item and every item is done.
+ */
+export function gatewayState(input: {
+  checklist: readonly { key: string; label: string; kind: string }[];
+  manual: Readonly<Record<string, { done: boolean } | undefined>>;
+  unitsTotal: number;
+  unitsComplete: number;
+  otjMinutes: number;
+  otjTargetMinutes: number | null;
+}): { items: { key: string; label: string; kind: string; done: boolean }[]; ready: boolean } {
+  const items = input.checklist.map((item) => {
+    let done = false;
+    if (item.kind === 'AUTO_UNITS') done = input.unitsTotal > 0 && input.unitsComplete >= input.unitsTotal;
+    else if (item.kind === 'AUTO_OTJ')
+      done = input.otjTargetMinutes !== null && input.otjMinutes >= input.otjTargetMinutes;
+    else done = Boolean(input.manual[item.key]?.done);
+    return { key: item.key, label: item.label, kind: item.kind, done };
+  });
+  return { items, ready: items.length > 0 && items.every((i) => i.done) };
+}
+
+/** Stage on the road to EPA (computed on read): EPA result wins, then gateway passed (+ booked), then readiness. */
+export function apprStage(input: {
+  ready: boolean;
+  gatewayPassedAt: string | null;
+  epaBookedDate: string | null;
+  epaResult: string | null;
+}): 'IN_LEARNING' | 'READY_FOR_GATEWAY' | 'AT_GATEWAY' | 'EPA_BOOKED' | 'ACHIEVED' | 'EPA_FAILED' {
+  if (input.epaResult === 'FAIL') return 'EPA_FAILED';
+  if (input.epaResult) return 'ACHIEVED';
+  if (input.gatewayPassedAt && input.epaBookedDate) return 'EPA_BOOKED';
+  if (input.gatewayPassedAt) return 'AT_GATEWAY';
+  return input.ready ? 'READY_FOR_GATEWAY' : 'IN_LEARNING';
+}

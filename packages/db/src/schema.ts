@@ -4514,6 +4514,8 @@ export const apprProgramme = pgTable(
     status: varchar().default('ACTIVE').notNull(),
     // Weeks between progress reviews (first review = learner start + interval).
     reviewIntervalWeeks: integer('review_interval_weeks').default(12).notNull(),
+    // Gateway checklist: [{key, label, kind AUTO_UNITS | AUTO_OTJ | MANUAL}]. Null = APPR_DEFAULT_GATEWAY_CHECKLIST.
+    gatewayChecklist: jsonb('gateway_checklist').$type<{ key: string; label: string; kind: string }[]>(),
     createdBy: uuid('created_by'),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull()
@@ -4625,9 +4627,23 @@ export const apprEnrolment = pgTable(
     achievedAt: timestamp('achieved_at', { withTimezone: true, mode: 'string' }),
     contractedHoursWeek: doublePrecision('contracted_hours_week'),
     otjTargetMinutesOverride: integer('otj_target_minutes_override'),
+    // ── gateway / EPA (round 2). gateway_items = manual checklist ticks {key: {done, by, at, note}}; auto items are
+    // computed on read. gateway_passed_* locks the checklist; epa_result + date set achieved_at. ──
+    gatewayItems: jsonb('gateway_items')
+      .default({})
+      .$type<Record<string, { done: boolean; by?: string | null; at?: string | null; note?: string | null }>>()
+      .notNull(),
+    gatewayReadyNotifiedAt: timestamp('gateway_ready_notified_at', { withTimezone: true, mode: 'string' }),
+    gatewayPassedAt: timestamp('gateway_passed_at', { withTimezone: true, mode: 'string' }),
+    gatewayPassedBy: uuid('gateway_passed_by'),
+    epaBookedDate: date('epa_booked_date', { mode: 'string' }),
+    epaResult: varchar('epa_result'),
+    epaResultDate: date('epa_result_date', { mode: 'string' }),
     // ── cache (recompute service only) ──
     actualPct: integer('actual_pct'),
     otjMinutes: integer('otj_minutes').default(0).notNull(),
+    // GLH done = GLH of completed units + staff-logged minutes (appr_glh_log).
+    glhMinutes: integer('glh_minutes').default(0).notNull(),
     submittedCount: integer('submitted_count').default(0).notNull(),
     acceptedCount: integer('accepted_count').default(0).notNull(),
     referredCount: integer('referred_count').default(0).notNull(),
@@ -5084,5 +5100,39 @@ export const apprReview = pgTable(
     }).onDelete('set null'),
     index('idx_appr_review_enrolment').on(table.enrolmentId),
     index('idx_appr_review_org_status_date').on(table.organizationId, table.status, table.scheduledDate)
+  ]
+);
+
+// Extra guided learning hours logged by staff for an apprentice (workshops, sessions). GLH done = GLH of completed
+// units + these minutes, cached on appr_enrolment.glh_minutes by the recompute service.
+export const apprGlhLog = pgTable(
+  'appr_glh_log',
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    organizationId: uuid('organization_id').notNull(),
+    enrolmentId: uuid('enrolment_id').notNull(),
+    minutes: integer().notNull(),
+    logDate: date('log_date', { mode: 'string' }).notNull(),
+    note: text(),
+    createdBy: uuid('created_by'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId],
+      foreignColumns: [organization.id],
+      name: 'appr_glh_log_organization_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.enrolmentId],
+      foreignColumns: [apprEnrolment.id],
+      name: 'appr_glh_log_enrolment_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.createdBy],
+      foreignColumns: [profile.id],
+      name: 'appr_glh_log_created_by_fkey'
+    }).onDelete('set null'),
+    index('idx_appr_glh_log_enrolment').on(table.enrolmentId)
   ]
 );
