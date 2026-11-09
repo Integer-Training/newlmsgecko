@@ -7,3 +7,5 @@ export * from './names';
 export * from './uploads';
 export * from './tasks';
 export * from './reviews';
+export * from './glh';
+export * from './gateway';

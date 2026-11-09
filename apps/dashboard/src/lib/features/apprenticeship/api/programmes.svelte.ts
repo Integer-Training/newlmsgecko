@@ -1,6 +1,7 @@
 import { classroomio } from '$lib/utils/services/api';
 import { BaseApi } from '$lib/utils/services/api/base.svelte';
 import { snackbar } from '$features/ui/snackbar/store';
+import { call } from './call';
 
 // Gecko Apprenticeships admin client: programme catalogue, structure CRUD, CSV import, org settings + evidence types.
 // Every route is requireAdmin server-side; this client just drives the UI.
@@ -77,6 +78,17 @@ export interface EvidenceType {
   label: string;
   active: boolean;
   sort: number;
+}
+
+export type GatewayItemKind = 'AUTO_UNITS' | 'AUTO_OTJ' | 'MANUAL';
+export interface GatewayChecklistItem {
+  key: string;
+  label: string;
+  kind: GatewayItemKind;
+}
+export interface GatewayChecklist {
+  checklist: GatewayChecklistItem[];
+  isDefault: boolean;
 }
 
 export type ReorderKind = 'qualification' | 'unit' | 'criterion';
@@ -214,7 +226,11 @@ class ProgrammesApi extends BaseApi {
     return res ? ((res.data as { removedMappings?: number } | undefined)?.removedMappings ?? 0) : undefined;
   }
 
-  async createUnit(programmeId: string, qid: string, json: { code?: string | null; title: string }) {
+  async createUnit(
+    programmeId: string,
+    qid: string,
+    json: { code?: string | null; title: string; glh?: number | null }
+  ) {
     const res = await this.execute<
       (typeof classroomio.apprenticeship.programmes)[':id']['qualifications'][':qid']['units']['$post']
     >({
@@ -226,7 +242,12 @@ class ProgrammesApi extends BaseApi {
     return !!res;
   }
 
-  async updateUnit(programmeId: string, qid: string, uid: string, json: { code?: string | null; title?: string }) {
+  async updateUnit(
+    programmeId: string,
+    qid: string,
+    uid: string,
+    json: { code?: string | null; title?: string; glh?: number | null }
+  ) {
     const res = await this.execute<
       (typeof classroomio.apprenticeship.programmes)[':id']['qualifications'][':qid']['units'][':uid']['$patch']
     >({
@@ -330,6 +351,26 @@ class ProgrammesApi extends BaseApi {
     });
     if (res && mode === 'apply') await this.loadTree(programmeId);
     return res ? (res.data as ImportResult) : undefined;
+  }
+
+  // ── Gateway checklist (per programme; null on save resets to the default) ──
+
+  loadGatewayChecklist(programmeId: string) {
+    return call<GatewayChecklist>(
+      () => classroomio.apprenticeship.programmes[':id']['gateway-checklist'].$get({ param: { id: programmeId } }),
+      'Could not load the gateway checklist.'
+    );
+  }
+
+  saveGatewayChecklist(programmeId: string, checklist: GatewayChecklistItem[] | null) {
+    return call<GatewayChecklist>(
+      () =>
+        classroomio.apprenticeship.programmes[':id']['gateway-checklist'].$put({
+          param: { id: programmeId },
+          json: { checklist }
+        }),
+      'Could not save the gateway checklist.'
+    );
   }
 
   // ── Settings + evidence types ──

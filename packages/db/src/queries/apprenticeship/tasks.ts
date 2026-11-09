@@ -429,7 +429,15 @@ export async function claimOverdueTasks(today: string, limit: number, client: Db
   const candidates = await client
     .select({ id: t.id })
     .from(t)
-    .where(and(lt(t.dueDate, today), ne(t.status, 'COMPLETE'), isNull(t.overdueNotifiedAt)))
+    .where(
+      and(
+        lt(t.dueDate, today),
+        ne(t.status, 'COMPLETE'),
+        isNull(t.overdueNotifiedAt),
+        // Learners at gateway / end-point assessment or achieved are no longer chased for tasks.
+        sql`exists (select 1 from appr_enrolment en where en.id = ${sql.raw('"appr_task"."enrolment_id"')} and en.gateway_passed_at is null and en.achieved_at is null)`
+      )
+    )
     .orderBy(asc(t.dueDate), asc(t.id))
     .limit(limit);
   if (candidates.length === 0) return [];

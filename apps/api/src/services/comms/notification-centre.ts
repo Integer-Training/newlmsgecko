@@ -8,7 +8,12 @@ import {
   markNotificationRead,
   type NotificationRow
 } from '@cio/db/queries/comms';
-import { getEvidenceLinkTargets, getReviewLinkTargets, getTaskLinkTargets } from '@cio/db/queries/apprenticeship';
+import {
+  getEnrolmentLinkTargets,
+  getEvidenceLinkTargets,
+  getReviewLinkTargets,
+  getTaskLinkTargets
+} from '@cio/db/queries/apprenticeship';
 
 // PearlLMS Phase 6 Step 3 — the in-app notification centre service. STRICTLY self-only: every read/mutation
 // uses the ACTOR's own id (taken from the resolved session, never from the URL) — there is no way to name
@@ -37,13 +42,20 @@ type EvidenceTargets = Awaited<ReturnType<typeof getEvidenceLinkTargets>>;
 type TaskTargets = Awaited<ReturnType<typeof getTaskLinkTargets>>;
 type ReviewTargets = Awaited<ReturnType<typeof getReviewLinkTargets>>;
 
+type EnrolmentTargets = Awaited<ReturnType<typeof getEnrolmentLinkTargets>>;
+
 interface ApprTargets {
   tasks: TaskTargets;
   reviews: ReviewTargets;
+  enrolments?: EnrolmentTargets;
 }
 
 /** Gecko Apprenticeships: open the portfolio on a tab (tasks / reviews) — in the reader's own shell. */
-function portfolioTabLink(enrolmentId: string | undefined, tab: 'tasks' | 'reviews', isStaff: boolean): string {
+function portfolioTabLink(
+  enrolmentId: string | undefined,
+  tab: 'tasks' | 'reviews' | 'gateway',
+  isStaff: boolean
+): string {
   if (!enrolmentId) return isStaff ? '/caseload/apprenticeships' : '/lms/apprenticeship';
   const base = isStaff ? '/caseload/apprenticeships/learners' : '/lms/apprenticeship';
   return `${base}/${enrolmentId}?tab=${tab}`;
@@ -138,6 +150,14 @@ function enrich(
         link: portfolioTabLink(review?.enrolmentId, 'reviews', isStaff)
       };
     }
+    case 'appr.gateway.ready': {
+      const who = row.entityId ? appr.enrolments?.get(row.entityId)?.learnerName : null;
+      return {
+        ...base,
+        subject: `Ready for gateway — ${who ?? 'apprentice'}`,
+        link: portfolioTabLink(row.entityId ?? undefined, 'gateway', isStaff)
+      };
+    }
     default:
       return { ...base, subject: 'Notification', link: homePath };
   }
@@ -168,7 +188,9 @@ export async function getNotificationCentre(
   ];
   const taskIds = idsOf('appr_task');
   const reviewIds = idsOf('appr_review');
+  const enrolmentIds = idsOf('appr_enrolment');
   const appr: ApprTargets = {
+    enrolments: enrolmentIds.length ? await getEnrolmentLinkTargets(enrolmentIds) : new Map(),
     tasks: taskIds.length ? await getTaskLinkTargets(taskIds) : new Map(),
     reviews: reviewIds.length ? await getReviewLinkTargets(reviewIds) : new Map()
   };

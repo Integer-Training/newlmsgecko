@@ -30,6 +30,7 @@ vi.mock('@cio/db/queries/apprenticeship', () => ({
   insertApprEvidence: vi.fn(),
   insertApprReview: vi.fn(async () => ({ id: 'rev-1' })),
   insertApprUploads: vi.fn(async () => undefined),
+  sumGlhLogMinutes: vi.fn(async () => 0),
   filterUploadKeysInOrg: vi.fn(async (_o: string, keys: string[]) => keys),
   markUploadsAttached: vi.fn(async () => undefined),
   markUploadsRemoved: vi.fn(async () => undefined),
@@ -94,7 +95,7 @@ import * as q from '@cio/db/queries/apprenticeship';
 import { isTutorAllocatedToLearner } from '@cio/db/queries/allocation';
 import { apprenticeshipRouter } from '@api/routes/apprenticeship';
 import { notifyEvidenceReviewed, notifyEvidenceSubmitted } from '@api/services/apprenticeship/notifications';
-import { getPortfolio } from '@api/services/apprenticeship/enrolment';
+import { exportPortfolioCsv, getPortfolio } from '@api/services/apprenticeship/enrolment';
 import { createEvidence, getEvidenceDetail, updateEvidence } from '@api/services/apprenticeship/evidence';
 
 const ORG = 'org-1';
@@ -692,5 +693,74 @@ describe('evidence detail carries the enrolment (files can be added outside a po
     const res = await call({ method: 'GET', path: `/apprenticeship/evidence/${EV}` }, 'admin');
     expect(res.status).toBe(200);
     expect((await res.json()).data.enrolmentId).toBe(ENR);
+  });
+});
+
+describe('at end-point assessment (gateway confirmed) the apprentice can no longer add or change evidence', () => {
+  const selfActor = { ...ACTORS.learner, userId: LRN } as Actor;
+  function callAs(r: Route, actor: Actor) {
+    ACTORS.self = actor;
+    return call(r, 'self');
+  }
+  const atGateway = { ...ENROLMENT, gatewayPassedAt: '2026-05-01T00:00:00Z' };
+  beforeEach(() => {
+    vi.mocked(q.getApprEnrolment).mockResolvedValue(atGateway as never);
+    vi.mocked(q.getApprEnrolmentByProgrammeLearner).mockResolvedValue(atGateway as never);
+    vi.mocked(q.getEnrolmentOverview).mockResolvedValue({ ...OVERVIEW, enrolment: atGateway } as never);
+  });
+
+  it('learner create, edit and presign -> 403 "end-point assessment"; nothing is written', async () => {
+    const created = await callAs(EVIDENCE_ROUTES[1], selfActor);
+    expect(created.status).toBe(403);
+    expect(JSON.stringify(await created.json())).toContain('end-point assessment');
+    expect((await callAs(EVIDENCE_ROUTES[2], selfActor)).status).toBe(403);
+    expect((await callAs(EVIDENCE_ROUTES[7], selfActor)).status).toBe(403);
+    expect(q.insertApprEvidence).not.toHaveBeenCalled();
+    expect(q.updateApprEvidence).not.toHaveBeenCalled();
+  });
+
+  it('staff are unaffected (admin and allocated tutor can still add evidence)', async () => {
+    expect((await call(EVIDENCE_ROUTES[1], 'admin')).status).toBe(201);
+    vi.mocked(isTutorAllocatedToLearner).mockResolvedValue(true);
+    expect((await call(EVIDENCE_ROUTES[1], 'tutor')).status).toBe(201);
+  });
+
+  it('an apprentice whose gateway is not confirmed can still add evidence', async () => {
+    vi.mocked(q.getApprEnrolment).mockResolvedValue(ENROLMENT as never);
+    expect((await callAs(EVIDENCE_ROUTES[1], selfActor)).status).toBe(201);
+  });
+
+  it('the portfolio summary carries GLH and the stage; null-safe when no unit has GLH', async () => {
+    vi.mocked(q.getEnrolmentOverview).mockResolvedValue({
+      ...OVERVIEW,
+      enrolment: atGateway,
+      gatewayChecklist: [{ key: 'm', label: 'M', kind: 'MANUAL' }]
+    } as never);
+    const data = await getPortfolio(ACTORS.admin, ENR);
+    expect(data.summary).toMatchObject({
+      stage: 'AT_GATEWAY',
+      glh: { targetMinutes: null, doneMinutes: 0, expectedMinutes: null }
+    });
+    expect(data.gateway.locked).toBe(true);
+  });
+});
+
+describe('CSV export carries GLH target / done / expected (null-safe)', () => {
+  const structure = (glh: number | null) => ({
+    qualifications: [{ id: 'q1', title: 'Q', sort: 0 }],
+    units: [{ id: 'u1', qualificationId: 'q1', code: 'U1', title: 'Unit', glh, sort: 0 }],
+    criteria: [{ id: 'c1', unitId: 'u1', code: '1.1', text: 'Do', requiredCount: 1, sort: 0 }]
+  });
+  const lines = async () => (await exportPortfolioCsv(ACTORS.admin, ENR)).csv.split(String.fromCharCode(13, 10));
+
+  it('adds the three columns; blank when the programme has no unit GLH', async () => {
+    vi.mocked(q.getApprProgrammeStructure).mockResolvedValue(structure(10) as never);
+    const withGlh = await lines();
+    expect(withGlh[0]).toContain('GLH target (h),GLH done (h),GLH expected (h)');
+    expect(withGlh[1].split(',').slice(-3)[0]).toBe('10');
+
+    vi.mocked(q.getApprProgrammeStructure).mockResolvedValue(structure(null) as never);
+    const noGlh = await lines();
+    expect(noGlh[1].endsWith(',,,')).toBe(true);
   });
 });

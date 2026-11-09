@@ -31,6 +31,10 @@
   let reference = $state('');
   let newCode = $state('');
   let newTitle = $state('');
+  let newGlh = $state('');
+  const newGlhValid = $derived(
+    newGlh.trim() === '' || (Number.isInteger(Number(newGlh)) && Number(newGlh) >= 0 && Number(newGlh) <= 2000)
+  );
   let busy = $state(false);
   let deleteOpen = $state(false);
 
@@ -54,16 +58,18 @@
 
   async function addUnit(e: Event) {
     e.preventDefault();
-    if (!newTitle.trim() || busy) return;
+    if (!newTitle.trim() || !newGlhValid || busy) return;
     busy = true;
     const ok = await programmesApi.createUnit(programmeId, qualification.id, {
       code: newCode.trim() || null,
-      title: newTitle.trim()
+      title: newTitle.trim(),
+      glh: newGlh.trim() === '' ? null : Number(newGlh)
     });
     busy = false;
     if (ok) {
       newCode = '';
       newTitle = '';
+      newGlh = '';
     }
   }
 
@@ -96,6 +102,8 @@
     );
   }
 
+  const glhTotal = $derived(qualification.units.reduce((n, u) => n + (u.glh ?? 0), 0));
+  const glhText = $derived(glhTotal > 0 ? ` · ${glhTotal} GLH` : '');
   const criteriaTotal = $derived(qualification.units.reduce((n, u) => n + u.criteria.length, 0));
 </script>
 
@@ -108,7 +116,7 @@
           {qualification.units.length} unit{qualification.units.length === 1 ? '' : 's'} · {criteriaTotal} criteri{criteriaTotal ===
           1
             ? 'on'
-            : 'a'} · click a unit to see its criteria
+            : 'a'}{glhText} · click a unit to see its criteria
         </p>
       </div>
     {:else if editing}
@@ -142,7 +150,7 @@
           {/if}{qualification.units.length} unit{qualification.units.length === 1 ? '' : 's'} · {criteriaTotal} criteri{criteriaTotal ===
           1
             ? 'on'
-            : 'a'}
+            : 'a'}{glhText}
         </p>
       </div>
       <div class="flex items-center gap-1">
@@ -215,7 +223,20 @@
         class="h-8"
       />
     </div>
-    <Button type="submit" size="sm" disabled={!newTitle.trim() || busy}>
+    <div class="space-y-1">
+      <label for="au-glh-{qualification.id}" class="text-xs font-medium">GLH (hours)</label>
+      <Input
+        id="au-glh-{qualification.id}"
+        type="number"
+        min={0}
+        max={2000}
+        step={1}
+        bind:value={newGlh}
+        class="h-8 w-28"
+        aria-invalid={!newGlhValid}
+      />
+    </div>
+    <Button type="submit" size="sm" disabled={!newTitle.trim() || !newGlhValid || busy}>
       <PlusIcon class="size-4" /> Add unit
     </Button>
   </form>

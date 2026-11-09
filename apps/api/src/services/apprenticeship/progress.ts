@@ -1,7 +1,18 @@
 import type { TxClient, DbOrTxClient } from '@cio/db/drizzle';
 import {
+  buildGatewayView,
+  buildGlhView,
+  resolveChecklist,
+  type GatewayView,
+  type GlhView
+} from '@api/services/apprenticeship/gateway-core';
+import {
+  claimGatewayReady,
+  clearGatewayReady,
   countAcceptedByCriterion,
   getApprEnrolment,
+  getApprProgramme,
+  sumGlhLogMinutes,
   getApprSettings,
   getEvidenceTotals,
   listProgrammeCriteria,
@@ -31,6 +42,12 @@ export interface EnrolmentProgressDetail extends ApprEnrolmentProgress {
   /** criterionId → accepted evidence count (for the criteria rows / grid). */
   acceptedByCriterion: Map<string, number>;
   totals: { submitted: number; accepted: number; referred: number; otjMinutes: number };
+  /** GLH target / done (units + staff logs) / expected — nulls when no unit has GLH. */
+  glh: GlhView;
+  /** Gateway checklist state with LIVE auto items. */
+  gateway: GatewayView;
+  /** Set by recomputeEnrolment (opt-in) when THIS call newly made the learner ready - the caller notifies after commit. */
+  gatewayReadyClaimed?: boolean;
 }
 
 /** Everything about one learner's progress, from scratch (reads only). Null if the enrolment does not exist. */
@@ -41,13 +58,15 @@ export async function buildEnrolmentProgress(
 ): Promise<EnrolmentProgressDetail | null> {
   const enrolment = await getApprEnrolment(enrolmentId, client);
   if (!enrolment) return null;
-  const [units, criteria, accepted, totals, unitRows, settings] = await Promise.all([
+  const [units, criteria, accepted, totals, unitRows, settings, programme, loggedGlh] = await Promise.all([
     listProgrammeUnits(enrolment.programmeId, client),
     listProgrammeCriteria(enrolment.programmeId, client),
     countAcceptedByCriterion(enrolment.programmeId, enrolment.learnerId, client),
     getEvidenceTotals(enrolment.programmeId, enrolment.learnerId, client),
     listEnrolmentUnitRows(enrolmentId, client),
-    opts.settings ? Promise.resolve(opts.settings) : getApprSettings(enrolment.organizationId, client)
+    opts.settings ? Promise.resolve(opts.settings) : getApprSettings(enrolment.organizationId, client),
+    getApprProgramme(enrolment.programmeId, client),
+    sumGlhLogMinutes(enrolmentId, client)
   ]);
 
   const datesByUnit = new Map(unitRows.map((r) => [r.unitId, r]));
@@ -74,7 +93,22 @@ export async function buildEnrolmentProgress(
     today: opts.today ?? todayIso(),
     settings
   });
-  return { ...progress, enrolmentId, acceptedByCriterion: accepted, totals };
+  const unitStatus = new Map(progress.units.map((u) => [u.unitId, u.status]));
+  const glh = buildGlhView(
+    units.map((u) => ({ glh: u.glh ?? null, complete: unitStatus.get(u.unitId) === 'COMPLETE' })),
+    loggedGlh,
+    progress.expectedPct
+  );
+  const gateway = buildGatewayView({
+    checklist: resolveChecklist(programme?.gatewayChecklist),
+    manual: enrolment.gatewayItems,
+    unitsTotal: progress.units.length,
+    unitsComplete: progress.units.filter((u) => u.status === 'COMPLETE').length,
+    otjMinutes: progress.otjMinutes,
+    otjTargetMinutes: progress.otjTargetMinutes,
+    enrolment
+  });
+  return { ...progress, enrolmentId, acceptedByCriterion: accepted, totals, glh, gateway };
 }
 
 /**
@@ -82,7 +116,11 @@ export async function buildEnrolmentProgress(
  * affects progress (evidence status/mapping/minutes, criteria required counts, unit set) so readers never see a
  * half-updated learner. Returns the fresh progress so the caller can hand it straight back to the UI.
  */
-export async function recomputeEnrolment(tx: TxClient, enrolmentId: string): Promise<EnrolmentProgressDetail | null> {
+export async function recomputeEnrolment(
+  tx: TxClient,
+  enrolmentId: string,
+  opts: { claimGatewayReady?: boolean } = {}
+): Promise<EnrolmentProgressDetail | null> {
   const detail = await buildEnrolmentProgress(enrolmentId, tx);
   if (!detail) return null;
   await writeEnrolmentCache(
@@ -93,9 +131,16 @@ export async function recomputeEnrolment(tx: TxClient, enrolmentId: string): Pro
       submittedCount: detail.totals.submitted,
       acceptedCount: detail.totals.accepted,
       referredCount: detail.totals.referred,
+      glhMinutes: detail.glh.doneMinutes,
       units: detail.units.map((u) => ({ unitId: u.unitId, actualPct: u.actualPct, complete: u.status === 'COMPLETE' }))
     },
     tx
   );
+  // Gateway readiness flag. Only claimed when the caller opted in (it must then notify after commit); a drop in
+  // readiness always clears it so the notification can fire again. Nothing changes once the gateway is confirmed.
+  if (!detail.gateway.locked) {
+    if (!detail.gateway.ready) await clearGatewayReady(tx, enrolmentId);
+    else if (opts.claimGatewayReady) detail.gatewayReadyClaimed = await claimGatewayReady(tx, enrolmentId);
+  }
   return detail;
 }

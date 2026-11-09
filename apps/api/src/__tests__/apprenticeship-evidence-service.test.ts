@@ -113,7 +113,7 @@ describe('reviewEvidence', () => {
     const notes = vi.mocked(q.insertEvidenceNote).mock.calls.map((c) => c[1]);
     expect(notes[0]).toMatchObject({ kind: 'AUDIT', body: 'Evidence accepted', statusAtTime: 'ACCEPTED' });
     expect(notes[1]).toMatchObject({ kind: 'GENERAL', body: 'Well done' });
-    expect(recomputeEnrolment).toHaveBeenCalledWith({ tx: true }, 'enr-1');
+    expect(recomputeEnrolment).toHaveBeenCalledWith({ tx: true }, 'enr-1', { claimGatewayReady: true });
     expect(res.summary?.status).toBe('CONCERN');
     expect(recordAudit).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -268,6 +268,31 @@ describe('learners table status computation', () => {
     expect(byId.none).toMatchObject({ overdueTaskCount: 0, nextReview: null, reviewOverdue: false });
     // the day used for "overdue" is passed to the single rows query
     expect(vi.mocked(q.listEnrolmentRows).mock.calls[0][0]).toMatchObject({ today: NOW.toISOString().slice(0, 10) });
+  });
+
+  it('adds GLH (cached done, programme target, expected on read) and the gateway stage to every row; null-safe without unit GLH', async () => {
+    const ready = { english: { done: true }, maths: { done: true }, employer: { done: true }, tutor: { done: true } };
+    vi.mocked(q.listEnrolmentRows).mockResolvedValue([
+      row('ready', 'Ann', {
+        actualPct: 100,
+        otjMinutes: 100000,
+        glhTargetMinutes: 1200,
+        glhMinutes: 700,
+        unitsTotal: 2,
+        unitsComplete: 2,
+        gatewayItems: ready
+      }),
+      row('learning', 'Bob', { unitsTotal: 2, unitsComplete: 1, gatewayItems: ready }),
+      row('gw', 'Cat', { gatewayPassedAt: '2026-05-01T00:00:00Z', epaBookedDate: '2026-07-01' }),
+      row('plain', 'Dee', {})
+    ] as never);
+    const res = await listEnrolments(admin, { page: 1, pageSize: 25 }, NOW);
+    const byId = Object.fromEntries(res.items.map((i) => [i.id, i]));
+    expect(byId.ready).toMatchObject({ stage: 'READY_FOR_GATEWAY', gatewayReady: true });
+    expect(byId.ready.glh).toMatchObject({ targetMinutes: 1200, doneMinutes: 700 });
+    expect(byId.learning).toMatchObject({ stage: 'IN_LEARNING', gatewayReady: false });
+    expect(byId.gw).toMatchObject({ stage: 'EPA_BOOKED', stageLabel: 'EPA booked' });
+    expect(byId.plain.glh).toEqual({ targetMinutes: null, doneMinutes: 0, expectedMinutes: null });
   });
 
   it('runs ONE rows query scoped to the actor (tutor → allocated, learner → self)', async () => {

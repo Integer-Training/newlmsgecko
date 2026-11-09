@@ -4,14 +4,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // (none allocated → nothing); a review goes to the apprentice and clears every tutor's "to mark" alert for that
 // evidence; everything is in-app only (no email template); notifySafely never throws. DB + pipeline mocked.
 
-vi.mock('@cio/db/queries/allocation', () => ({ listTutorsForLearner: vi.fn(async () => []) }));
+vi.mock('@cio/db/queries/allocation', () => ({
+  listTutorsForLearner: vi.fn(async () => []),
+  listTutorsForLearnerInOrg: vi.fn(async () => [])
+}));
+vi.mock('@cio/db/queries/apprenticeship', () => ({ listOrgAdminIds: vi.fn(async () => []) }));
 vi.mock('@cio/db/queries/comms', () => ({ markNotificationsReadForEntity: vi.fn(async () => 0) }));
 vi.mock('@api/services/comms/notify', () => ({ emitNotification: vi.fn(async () => undefined) }));
 
-import { listTutorsForLearner } from '@cio/db/queries/allocation';
+import { listTutorsForLearner, listTutorsForLearnerInOrg } from '@cio/db/queries/allocation';
+import { listOrgAdminIds } from '@cio/db/queries/apprenticeship';
 import { markNotificationsReadForEntity } from '@cio/db/queries/comms';
 import { emitNotification } from '@api/services/comms/notify';
 import {
+  notifyGatewayReady,
   notifyEvidenceReviewed,
   notifyEvidenceSubmitted,
   notifySafely
@@ -68,5 +74,32 @@ describe('notifySafely', () => {
       })
     ).resolves.toBeUndefined();
     spy.mockRestore();
+  });
+});
+
+describe('notifyGatewayReady', () => {
+  it('goes to the allocated tutors of the learner (THIS org only) and the org admins, once each, in-app only', async () => {
+    vi.mocked(listTutorsForLearnerInOrg).mockResolvedValue([
+      { tutorId: 't1', email: null },
+      { tutorId: 'a1', email: null }
+    ] as never);
+    vi.mocked(listOrgAdminIds).mockResolvedValue(['a1', 'a2']);
+    await notifyGatewayReady({ enrolmentId: 'enr-1', learnerId: 'l-1', organizationId: 'org-1' });
+    expect(listTutorsForLearnerInOrg).toHaveBeenCalledWith('l-1', 'org-1');
+    expect(listOrgAdminIds).toHaveBeenCalledWith('org-1');
+    expect(emitNotification).toHaveBeenCalledTimes(1);
+    expect(emitNotification).toHaveBeenCalledWith({
+      type: 'appr.gateway.ready',
+      recipients: [{ userId: 't1' }, { userId: 'a1' }, { userId: 'a2' }],
+      entityType: 'appr_enrolment',
+      entityId: 'enr-1'
+    });
+  });
+
+  it('nobody to tell -> nothing is sent', async () => {
+    vi.mocked(listTutorsForLearnerInOrg).mockResolvedValue([]);
+    vi.mocked(listOrgAdminIds).mockResolvedValue([]);
+    await notifyGatewayReady({ enrolmentId: 'enr-1', learnerId: 'l-1', organizationId: 'org-1' });
+    expect(emitNotification).not.toHaveBeenCalled();
   });
 });

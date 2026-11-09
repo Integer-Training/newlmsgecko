@@ -42,6 +42,14 @@ export interface ApprNextReviewRef {
 // subquery would silently match the subquery's own table): overdue task count and the earliest open review.
 const overdueTaskCountOf = (today: string) =>
   sql<number>`(select count(*) from appr_task ot where ot.enrolment_id = ${sql.raw('"appr_enrolment"."id"')} and ot.due_date < ${today}::date and ot.status <> 'COMPLETE')::int`;
+// GLH target (minutes) of the enrolment's programme = sum of unit GLH; null when no unit has GLH.
+const glhTargetOf = sql<
+  number | null
+>`(select sum(gu.glh) * 60 from appr_unit gu join appr_qualification gq on gq.id = gu.qualification_id where gq.programme_id = ${sql.raw('"appr_enrolment"."programme_id"')} and gu.glh > 0)::int`;
+// Units of the learner and how many are complete (from the progress cache) — feeds the gateway AUTO_UNITS item.
+const unitsTotalOf = sql<number>`(select count(*) from appr_enrolment_unit eu where eu.enrolment_id = ${sql.raw('"appr_enrolment"."id"')})::int`;
+const unitsCompleteOf = sql<number>`(select count(*) from appr_enrolment_unit ec where ec.enrolment_id = ${sql.raw('"appr_enrolment"."id"')} and ec.completed_at is not null)::int`;
+
 const nextReviewOf = sql<ApprNextReviewRef | null>`(select json_build_object('id', nr.id, 'scheduledDate', nr.scheduled_date, 'status', nr.status)
   from appr_review nr where nr.enrolment_id = ${sql.raw('"appr_enrolment"."id"')} and nr.status in ('SCHEDULED', 'DRAFT', 'AWAITING_SIGNATURES')
   order by nr.scheduled_date asc, nr.created_at asc limit 1)`;
@@ -86,7 +94,17 @@ export async function listEnrolmentRows(scope: EnrolmentListScope, client: DbOrT
       referredCount: e.referredCount,
       tutors: tutorsOf,
       overdueTaskCount: overdueTaskCountOf(scope.today ?? new Date().toISOString().slice(0, 10)),
-      nextReview: nextReviewOf
+      nextReview: nextReviewOf,
+      glhMinutes: e.glhMinutes,
+      glhTargetMinutes: glhTargetOf,
+      unitsTotal: unitsTotalOf,
+      unitsComplete: unitsCompleteOf,
+      gatewayItems: e.gatewayItems,
+      gatewayPassedAt: e.gatewayPassedAt,
+      epaBookedDate: e.epaBookedDate,
+      epaResult: e.epaResult,
+      epaResultDate: e.epaResultDate,
+      gatewayChecklist: schema.apprProgramme.gatewayChecklist
     })
     .from(e)
     .innerJoin(schema.profile, eq(schema.profile.id, e.learnerId))
@@ -112,7 +130,8 @@ export async function getEnrolmentOverview(
       programmeLevel: schema.apprProgramme.level,
       tutors: tutorsOf,
       overdueTaskCount: overdueTaskCountOf(today),
-      nextReview: nextReviewOf
+      nextReview: nextReviewOf,
+      gatewayChecklist: schema.apprProgramme.gatewayChecklist
     })
     .from(e)
     .innerJoin(schema.profile, eq(schema.profile.id, e.learnerId))

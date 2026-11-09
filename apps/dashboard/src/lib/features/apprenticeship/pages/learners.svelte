@@ -17,6 +17,7 @@
   import AddLearnerDialog from '../components/learners/add-learner-dialog.svelte';
   import ProgressBar from '../components/shared/progress-bar.svelte';
   import StatusChip from '../components/shared/status-chip.svelte';
+  import StageChip from '../components/shared/stage-chip.svelte';
   import { fmtMinutes, fmtPct, STATUS_LABEL } from '../components/shared/format';
 
   // Gecko Apprenticeships — the learners table. One row per enrolment: qualification progress against where the
@@ -268,7 +269,12 @@
                       )} target
                     </p>
                   </Table.Cell>
-                  <Table.Cell><StatusChip status={r.status} /></Table.Cell>
+                  <Table.Cell>
+                    <div class="flex flex-col items-start gap-1">
+                      <StatusChip status={r.status} />
+                      <StageChip stage={r.stage} label={r.stageLabel} />
+                    </div>
+                  </Table.Cell>
                   <Table.Cell class="text-sm">{tutorNames(r.tutors)}</Table.Cell>
                   <Table.Cell class="text-right">
                     {#if r.toMark > 0}

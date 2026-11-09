@@ -238,3 +238,44 @@ describe('Skills Portfolio unit codes', () => {
     expect(kept).toMatchObject({ id: 'u1', patch: { code: 'MY-CODE', title: 'Talking' } });
   });
 });
+
+describe('optional glh column (guided learning hours per unit)', () => {
+  const Q1 = { id: 'q1', title: 'Q', reference: null };
+  const empty = { qualifications: [Q1], units: [], criteria: [] } as never;
+  const csv = (glh: string) => ['unit_code,unit_title,glh', `U1,Talking,${glh}`].join('\n');
+
+  it('sets GLH on new units; blank leaves it null', () => {
+    expect(planStructureImport(empty, csv('45')).newUnits[0]).toMatchObject({ glh: 45 });
+    expect(planStructureImport(empty, csv('')).newUnits[0]).toMatchObject({ glh: null });
+    expect(planStructureImport(empty, csv('0')).newUnits[0]).toMatchObject({ glh: 0 });
+  });
+
+  it('updates an existing unit only when the value changes; blank never clears it; no glh column = untouched', () => {
+    const existing = {
+      qualifications: [Q1],
+      units: [{ id: 'u1', qualificationId: 'q1', code: 'U1', title: 'Talking', externalRef: null, glh: 30, sort: 0 }],
+      criteria: []
+    } as never;
+    expect(planStructureImport(existing, csv('30')).summary.unitsUpdated).toBe(0);
+    const changed = planStructureImport(existing, csv('60'));
+    expect(changed.unitUpdates[0]).toMatchObject({ id: 'u1', patch: { glh: 60 } });
+    expect(planStructureImport(existing, csv('')).summary.unitsUpdated).toBe(0);
+    expect(planStructureImport(existing, 'unit_code,unit_title\nU1,Talking').summary.unitsUpdated).toBe(0);
+  });
+
+  it('rejects a non-whole, negative or over-2000 value on that row only', () => {
+    for (const bad of ['1.5', '-1', '2001', 'abc']) {
+      const plan = planStructureImport(empty, csv(bad));
+      expect(plan.errors[0]?.message, bad).toMatch(/glh must be a whole number/);
+      expect(plan.newUnits).toHaveLength(0);
+    }
+  });
+
+  it('the Skills Portfolio format has no glh, so units stay null', () => {
+    const sp = [
+      'code,unitTitle,name,description,completedItems,requiredItems',
+      '"X/1","U1 Talking","1.1","Say",0,1'
+    ].join('\n');
+    expect(planStructureImport(empty, sp).newUnits[0]).toMatchObject({ glh: null });
+  });
+});

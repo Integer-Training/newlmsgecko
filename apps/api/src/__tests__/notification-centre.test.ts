@@ -14,7 +14,8 @@ vi.mock('@cio/db/queries/comms', () => ({
 vi.mock('@cio/db/queries/apprenticeship', () => ({
   getEvidenceLinkTargets: vi.fn(async () => new Map()),
   getTaskLinkTargets: vi.fn(async () => new Map()),
-  getReviewLinkTargets: vi.fn(async () => new Map())
+  getReviewLinkTargets: vi.fn(async () => new Map()),
+  getEnrolmentLinkTargets: vi.fn(async () => new Map())
 }));
 
 import {
@@ -24,7 +25,12 @@ import {
   markAllNotificationsRead,
   getLessonLinkTargets
 } from '@cio/db/queries/comms';
-import { getEvidenceLinkTargets, getReviewLinkTargets, getTaskLinkTargets } from '@cio/db/queries/apprenticeship';
+import {
+  getEnrolmentLinkTargets,
+  getEvidenceLinkTargets,
+  getReviewLinkTargets,
+  getTaskLinkTargets
+} from '@cio/db/queries/apprenticeship';
 import {
   getNotificationCentre,
   markOwnNotificationRead,
@@ -212,6 +218,24 @@ describe('Gecko Apprenticeships tasks + reviews alerts → the right tab, in the
     await getNotificationCentre(learner);
     expect(getTaskLinkTargets).not.toHaveBeenCalled();
     expect(getReviewLinkTargets).not.toHaveBeenCalled();
+  });
+});
+
+describe('Gecko Apprenticeships gateway-ready alert', () => {
+  it('tutor and admin: opens the learner portfolio on the Gateway tab, naming the learner', async () => {
+    vi.mocked(getEnrolmentLinkTargets).mockResolvedValue(new Map([['enr-1', { learnerName: 'Amy Apprentice' }]]));
+    mList.mockResolvedValue([
+      row({ type: 'appr.gateway.ready', entityType: 'appr_enrolment', entityId: 'enr-1' })
+    ] as never);
+    for (const role of ['TUTOR', 'ADMIN'] as const) {
+      const who: Actor = { authenticated: true, userId: 'x', role, status: 'ACTIVE', orgId: 'o1' };
+      const res = await getNotificationCentre(who);
+      expect(getEnrolmentLinkTargets).toHaveBeenCalledWith(['enr-1']);
+      expect(res.items[0]).toMatchObject({
+        subject: 'Ready for gateway — Amy Apprentice',
+        link: '/caseload/apprenticeships/learners/enr-1?tab=gateway'
+      });
+    }
   });
 });
 

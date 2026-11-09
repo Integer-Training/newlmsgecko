@@ -6,6 +6,8 @@ import {
   getProgrammeForActor,
   requireAuthed
 } from '@api/services/apprenticeship/access';
+import { buildGatewayView, buildGlhView, resolveChecklist } from '@api/services/apprenticeship/gateway-core';
+import { notifyGatewayReady, notifySafely } from '@api/services/apprenticeship/notifications';
 import { recomputeEnrolment, todayIso, type EnrolmentProgressDetail } from '@api/services/apprenticeship/progress';
 import { createOrgUser } from '@api/services/organization/users';
 import { createTutorAllocation } from '@api/services/organization/allocation';
@@ -22,6 +24,7 @@ import {
   getEvidenceTotals,
   insertApprEnrolment,
   insertApprReview,
+  sumGlhLogMinutes,
   getApprProgramme,
   listPlannedPlanTasksForEnrolment,
   listReviewsForEnrolment,
@@ -48,6 +51,7 @@ import {
   criterionMet,
   expectedPct,
   firstReviewDate,
+  glhExpectedMinutes,
   isReviewOverdue,
   otjExpectedMinutes,
   otjTargetMinutes,
@@ -174,6 +178,21 @@ export async function listEnrolments(actor: Actor, query: EnrolmentListQuery, no
 
   const computed = rows.map((r) => {
     const p = computeRowProgress(r, settings, today);
+    const gateway = buildGatewayView({
+      checklist: resolveChecklist(r.gatewayChecklist),
+      manual: r.gatewayItems,
+      unitsTotal: r.unitsTotal ?? 0,
+      unitsComplete: r.unitsComplete ?? 0,
+      otjMinutes: r.otjMinutes,
+      otjTargetMinutes: p.otjTargetMinutes,
+      enrolment: {
+        gatewayPassedAt: r.gatewayPassedAt ?? null,
+        epaBookedDate: r.epaBookedDate ?? null,
+        epaResult: r.epaResult ?? null,
+        epaResultDate: r.epaResultDate ?? null,
+        achievedAt: r.achievedAt
+      }
+    });
     return {
       id: r.id,
       programmeId: r.programmeId,
@@ -196,6 +215,15 @@ export async function listEnrolments(actor: Actor, query: EnrolmentListQuery, no
       toMark: r.submittedCount,
       acceptedCount: r.acceptedCount,
       referredCount: r.referredCount,
+      // GLH done is the cached total (units + staff logs); the target is the programme's unit GLH; expected on read.
+      glh: {
+        targetMinutes: r.glhTargetMinutes ?? null,
+        doneMinutes: r.glhMinutes ?? 0,
+        expectedMinutes: glhExpectedMinutes(r.glhTargetMinutes ?? null, p.expectedPct)
+      },
+      stage: gateway.stage,
+      stageLabel: gateway.stageLabel,
+      gatewayReady: gateway.ready,
       overdueTaskCount: r.overdueTaskCount ?? 0,
       nextReview: r.nextReview ?? null,
       reviewOverdue: reviewOverdueOf(r.nextReview, today)
@@ -338,12 +366,13 @@ async function loadPortfolio(actor: Actor, enrolmentId: string, now: Date = new 
     throw notFound();
   }
   const { enrolment } = overview;
-  const [structure, counts, totals, unitRows, settings] = await Promise.all([
+  const [structure, counts, totals, unitRows, settings, loggedGlh] = await Promise.all([
     getApprProgrammeStructure(enrolment.programmeId),
     countEvidenceByCriterion(enrolment.programmeId, enrolment.learnerId),
     getEvidenceTotals(enrolment.programmeId, enrolment.learnerId),
     listEnrolmentUnitRows(enrolment.id),
-    getApprSettings(enrolment.organizationId)
+    getApprSettings(enrolment.organizationId),
+    sumGlhLogMinutes(enrolment.id)
   ]);
 
   const datesByUnit = new Map(unitRows.map((r) => [r.unitId, r]));
@@ -426,6 +455,20 @@ async function loadPortfolio(actor: Actor, enrolmentId: string, now: Date = new 
     counts: { submitted: totals.submitted, accepted: totals.accepted, referred: totals.referred }
   };
   const nextReview = overview.nextReview ?? null;
+  const glh = buildGlhView(
+    structure.units.map((u) => ({ glh: u.glh ?? null, complete: progressByUnit.get(u.id)?.status === 'COMPLETE' })),
+    loggedGlh,
+    progress.expectedPct
+  );
+  const gateway = buildGatewayView({
+    checklist: resolveChecklist(overview.gatewayChecklist),
+    manual: enrolment.gatewayItems,
+    unitsTotal: structure.units.length,
+    unitsComplete: structure.units.filter((u) => progressByUnit.get(u.id)?.status === 'COMPLETE').length,
+    otjMinutes: progress.otjMinutes,
+    otjTargetMinutes: progress.otjTargetMinutes,
+    enrolment
+  });
 
   return {
     enrolment: {
@@ -451,8 +494,13 @@ async function loadPortfolio(actor: Actor, enrolmentId: string, now: Date = new 
       ...summary,
       overdueTaskCount: overview.overdueTaskCount ?? 0,
       nextReview,
-      reviewOverdue: reviewOverdueOf(nextReview, todayIso(now))
+      reviewOverdue: reviewOverdueOf(nextReview, todayIso(now)),
+      glh,
+      stage: gateway.stage,
+      stageLabel: gateway.stageLabel,
+      gatewayReady: gateway.ready
     },
+    gateway,
     qualifications
   };
 }
@@ -504,11 +552,21 @@ export async function updateEnrolment(actor: Actor, enrolmentId: string, patch: 
   }
   const startChanged = patch.startDate !== undefined && patch.startDate !== enrolment.startDate;
   const programme = startChanged ? await getApprProgramme(enrolment.programmeId) : null;
-  await runInTransaction(async (tx) => {
+  const detail = await runInTransaction(async (tx) => {
     await updateApprEnrolment(enrolmentId, patch, tx);
     if (startChanged) await rebaseOnStartDate(tx, enrolmentId, patch.startDate!, programme?.reviewIntervalWeeks ?? 12);
-    await recomputeEnrolment(tx, enrolmentId);
+    return recomputeEnrolment(tx, enrolmentId, { claimGatewayReady: true });
   });
+  // New hours / OTJ target can make the learner ready: the claim happened in the transaction, tell tutors + admins.
+  if (detail?.gatewayReadyClaimed) {
+    await notifySafely('gateway ready', () =>
+      notifyGatewayReady({
+        enrolmentId,
+        learnerId: enrolment.learnerId,
+        organizationId: enrolment.organizationId
+      })
+    );
+  }
   await recordAudit({
     actor,
     action: 'appr.enrolment.updated',
@@ -606,7 +664,19 @@ export async function exportPortfolioCsv(actor: Actor, enrolmentId: string, unit
     'Required',
     'Accepted',
     'Met',
-    'Evidence'
+    'Evidence',
+    'GLH target (h)',
+    'GLH done (h)',
+    'GLH expected (h)'
+  ];
+  // Learner-level GLH, repeated on each row; blank when the programme has no unit GLH (null-safe).
+  const hours = (minutes: number | null | undefined) =>
+    minutes === null || minutes === undefined ? '' : String(Math.round((minutes / 60) * 10) / 10);
+  const glh = portfolio.summary.glh;
+  const glhCells = [
+    hours(glh.targetMinutes),
+    glh.targetMinutes === null ? '' : hours(glh.doneMinutes),
+    hours(glh.expectedMinutes)
   ];
   const lines = [header.map(csvCell).join(',')];
   for (const q of portfolio.qualifications) {
@@ -623,7 +693,8 @@ export async function exportPortfolioCsv(actor: Actor, enrolmentId: string, unit
             c.requiredCount,
             c.acceptedCount,
             c.met ? 'Yes' : 'No',
-            (titles.get(c.id) ?? []).join('; ')
+            (titles.get(c.id) ?? []).join('; '),
+            ...glhCells
           ]
             .map(csvCell)
             .join(',')

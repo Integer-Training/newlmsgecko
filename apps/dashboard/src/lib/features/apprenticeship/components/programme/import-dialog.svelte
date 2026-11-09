@@ -25,6 +25,7 @@
     ['criterion_text', 'What the learner must show'],
     ['group', 'Heading the criterion sits under, e.g. Knowledge'],
     ['required', 'How many pieces of evidence it needs (default 1)'],
+    ['glh', 'Optional guided learning hours for the unit, a whole number 0–2000'],
     ['unit_ref / criterion_ref', 'Optional IDs from another system, so re-importing updates instead of duplicating']
   ];
 

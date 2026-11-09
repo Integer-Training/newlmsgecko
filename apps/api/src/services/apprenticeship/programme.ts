@@ -207,7 +207,12 @@ export async function updateUnit(
 ) {
   await getProgrammeForActor(actor, programmeId);
   if (!(await getApprUnitInProgramme(programmeId, qualificationId, unitId))) throw notFound('Unit');
-  const row = await updateApprUnit(unitId, patch);
+  // Unit GLH feeds every learner's GLH target / done, so changing it re-derives the cache in the same transaction.
+  const row = await runInTransaction(async (tx) => {
+    const updated = await updateApprUnit(unitId, patch, tx);
+    if (patch.glh !== undefined) await recomputeProgramme(tx, programmeId);
+    return updated;
+  });
   await audit(actor, 'appr.unit.updated', 'appr_unit', unitId, { programmeId, fields: Object.keys(patch) });
   return row;
 }
@@ -340,6 +345,7 @@ export async function importStructureCsv(actor: Actor, programmeId: string, body
         code: u.code,
         title: u.title,
         externalRef: u.externalRef,
+        glh: u.glh,
         sort: u.sort
       }))
     );

@@ -6,7 +6,8 @@ import { APPR_IMPORT_MAX_ROWS } from '@cio/utils/validation/apprenticeship';
 // Gecko Apprenticeships — generic CSV import of a programme's structure. PURE: given what already exists and the
 // CSV text, returns the preview counts + the exact rows to insert / update, so preview and apply can never disagree.
 // Columns (case-insensitive header): qualification, unit_code, unit_title, criterion_code, criterion_text, group,
-// required, unit_ref, criterion_ref. Matching is idempotent: external ref first, else unit code (or title when the
+// required, unit_ref, criterion_ref, glh (optional, whole guided learning hours 0-2000 for the unit; blank = unchanged).
+// Matching is idempotent: external ref first, else unit code (or title when the
 // unit has no code) within the qualification, else criterion code within the unit.
 
 export interface ImportQualification {
@@ -20,6 +21,7 @@ export interface ImportUnit {
   code: string | null;
   title: string;
   externalRef: string | null;
+  glh?: number | null;
   sort: number;
 }
 export interface ImportCriterion {
@@ -42,9 +44,13 @@ export interface ImportPlan {
     code: string | null;
     title: string;
     externalRef: string | null;
+    glh: number | null;
     sort: number;
   }[];
-  unitUpdates: { id: string; patch: { code: string | null; title: string; externalRef: string | null } }[];
+  unitUpdates: {
+    id: string;
+    patch: { code: string | null; title: string; externalRef: string | null; glh: number | null };
+  }[];
   newCriteria: {
     id: string;
     unitId: string;
@@ -65,8 +71,8 @@ interface UnitState {
   id: string;
   isNew: boolean;
   qualificationId: string;
-  cur: { code: string | null; title: string; externalRef: string | null };
-  orig: { code: string | null; title: string; externalRef: string | null } | null;
+  cur: { code: string | null; title: string; externalRef: string | null; glh: number | null };
+  orig: { code: string | null; title: string; externalRef: string | null; glh: number | null } | null;
   sort: number;
   nextCriterionSort: number;
 }
@@ -167,7 +173,7 @@ export function planStructureImport(
   };
   const criteriaOfUnit = new Map<string, number>(); // next sort per unit
   for (const u of existing.units) {
-    const cur = { code: u.code, title: u.title, externalRef: u.externalRef };
+    const cur = { code: u.code, title: u.title, externalRef: u.externalRef, glh: u.glh ?? null };
     indexUnit({
       id: u.id,
       isNew: false,
@@ -211,6 +217,7 @@ export function planStructureImport(
     const critRef = v['criterion_ref'] ?? '';
     const group = v['group'] ?? '';
     const requiredCell = v['required'] ?? '';
+    const glhCell = v['glh'] ?? '';
 
     if (!unitCode && !unitTitle && !unitRef) {
       // Fully blank data rows are ignored; anything else needs a unit.
@@ -249,6 +256,16 @@ export function planStructureImport(
       required = n;
     }
 
+    let glh: number | null = null;
+    if (glhCell !== '') {
+      const n = Number(glhCell);
+      if (!Number.isInteger(n) || n < 0 || n > 2000) {
+        fail(row, 'glh must be a whole number of hours from 0 to 2000');
+        continue;
+      }
+      glh = n;
+    }
+
     // Unit match
     let unit =
       (unitRef ? unitByRef.get(norm(unitRef)) : undefined) ??
@@ -280,7 +297,7 @@ export function planStructureImport(
         id: randomUUID(),
         isNew: true,
         qualificationId: qid,
-        cur: { code: unitCode || unitCodeHint || null, title, externalRef: unitRef || null },
+        cur: { code: unitCode || unitCodeHint || null, title, externalRef: unitRef || null, glh },
         orig: null,
         sort,
         nextCriterionSort: 0
@@ -291,6 +308,7 @@ export function planStructureImport(
       if (unitCode) unit.cur.code = unitCode;
       else if (unitCodeHint && !unit.cur.code) unit.cur.code = unitCodeHint;
       if (unitRef) unit.cur.externalRef = unitRef;
+      if (glh !== null) unit.cur.glh = glh;
       indexUnit(unit);
     }
 
@@ -333,11 +351,15 @@ export function planStructureImport(
         code: u.cur.code,
         title: u.cur.title,
         externalRef: u.cur.externalRef,
+        glh: u.cur.glh,
         sort: u.sort
       });
     } else if (
       u.orig &&
-      (u.orig.code !== u.cur.code || u.orig.title !== u.cur.title || u.orig.externalRef !== u.cur.externalRef)
+      (u.orig.code !== u.cur.code ||
+        u.orig.title !== u.cur.title ||
+        u.orig.externalRef !== u.cur.externalRef ||
+        u.orig.glh !== u.cur.glh)
     ) {
       plan.unitUpdates.push({ id: u.id, patch: { ...u.cur } });
     }

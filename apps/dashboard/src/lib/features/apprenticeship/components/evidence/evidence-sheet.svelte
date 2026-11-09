@@ -23,6 +23,8 @@
     preCriteria?: string[];
     /** This learner's tasks (portfolio only): lets new evidence answer one, and names the task a piece answers. */
     tasks?: TaskItem[];
+    /** Hides editing (apprentice at end-point assessment). */
+    editBlocked?: boolean;
     preTaskId?: string | null;
     learnerName?: string | null;
     /** Called after any save / review so the parent can refresh its counts and lists. */
@@ -39,6 +41,7 @@
     metIds = null,
     preCriteria = [],
     tasks = [],
+    editBlocked = false,
     preTaskId = null,
     learnerName = null,
     onChanged,
@@ -174,6 +177,7 @@
               {metIds}
               {learnerName}
               onEdit={() => (editing = true)}
+              {editBlocked}
               onChanged={changed}
               onNoteAdded={(n) => {
                 if (detail) detail = { ...detail, notes: [...detail.notes, n] };

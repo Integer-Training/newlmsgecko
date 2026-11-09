@@ -1,8 +1,9 @@
-import type { ApprProgressStatus } from '@cio/utils/constants/apprenticeship';
+import type { ApprProgressStatus, ApprStage } from '@cio/utils/constants/apprenticeship';
 import { classroomio } from '$lib/utils/services/api';
 import { BaseApi } from '$lib/utils/services/api/base.svelte';
 import { snackbar } from '$features/ui/snackbar/store';
 import { call, type CallResult } from './call';
+import type { GatewayView, GlhSummary } from './gateway.svelte';
 
 // Gecko Apprenticeships — admin client for the learners table, enrolment and the portfolio payload. Shapes mirror
 // apps/api/src/services/apprenticeship/enrolment.ts. All numbers (actual / expected %, status, OTJ) are the API's;
@@ -33,6 +34,10 @@ export interface EnrolmentRow {
   overdueTaskCount?: number;
   nextReview?: { id: string; scheduledDate: string; status: string } | null;
   reviewOverdue?: boolean;
+  glh?: GlhSummary;
+  stage?: ApprStage;
+  stageLabel?: string;
+  gatewayReady?: boolean;
 }
 
 export interface EnrolmentList {
@@ -67,6 +72,10 @@ export interface ProgressSummary {
   overdueTaskCount?: number;
   nextReview?: { id: string; scheduledDate: string; status: string } | null;
   reviewOverdue?: boolean;
+  glh?: GlhSummary;
+  stage?: ApprStage;
+  stageLabel?: string;
+  gatewayReady?: boolean;
 }
 
 export interface PortfolioCriterion {
@@ -119,6 +128,7 @@ export interface Portfolio {
   programme: { id: string; title: string; reference: string | null; level: string | null };
   tutors: { id: string; name: string | null }[] | string[];
   summary: ProgressSummary;
+  gateway?: GatewayView;
   qualifications: PortfolioQualification[];
 }
 

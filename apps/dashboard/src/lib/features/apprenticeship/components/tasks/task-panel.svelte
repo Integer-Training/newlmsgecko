@@ -161,7 +161,9 @@
 
         <div class="flex flex-wrap justify-between gap-2 border-t pt-4">
           <div class="flex flex-wrap gap-2">
-            {#if task.status !== 'COMPLETE'}
+            {#if task.status !== 'COMPLETE' && store.evidenceBlocked}
+              <p class="text-sm text-amber-700 dark:text-amber-300">{store.blockedMessage}</p>
+            {:else if task.status !== 'COMPLETE'}
               <Button onclick={answer}>{isStaff ? 'Add evidence for this task' : 'Answer task'}</Button>
             {/if}
           </div>

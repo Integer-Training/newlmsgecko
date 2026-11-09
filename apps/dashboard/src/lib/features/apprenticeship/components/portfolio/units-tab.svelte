@@ -185,6 +185,8 @@
                         variant="ghost"
                         size="sm"
                         aria-label="Add evidence for {c.code}"
+                        disabled={store.evidenceBlocked}
+                        title={store.evidenceBlocked ? store.blockedMessage : undefined}
                         onclick={() => store.openNewEvidence([c.id])}
                       >
                         <PlusIcon size={14} class="mr-1" /> Evidence

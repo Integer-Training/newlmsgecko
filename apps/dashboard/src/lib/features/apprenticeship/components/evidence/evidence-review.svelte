@@ -21,11 +21,22 @@
     metIds?: Set<string> | null;
     learnerName?: string | null;
     onEdit: () => void;
+    /** The apprentice is at end-point assessment: no editing. */
+    editBlocked?: boolean;
     /** After a review or a note: the parent refetches counts / queue. `closed` = the review decision was made. */
     onChanged: (opts: { reviewed: boolean }) => void;
     onNoteAdded: (note: EvidenceDetail['notes'][number]) => void;
   }
-  let { detail, tree, metIds = null, learnerName = null, onEdit, onChanged, onNoteAdded }: Props = $props();
+  let {
+    detail,
+    tree,
+    metIds = null,
+    learnerName = null,
+    onEdit,
+    editBlocked = false,
+    onChanged,
+    onNoteAdded
+  }: Props = $props();
 
   const ev = $derived(detail.evidence);
   const mappedIds = $derived(detail.criteria.flatMap((q) => q.units.flatMap((u) => u.criteria.map((c) => c.id))));
@@ -59,7 +70,7 @@
 <div class="space-y-5 px-4 pb-6">
   <div class="flex flex-wrap items-center gap-2">
     <EvidenceStatusChip status={ev.status} />
-    {#if detail.permissions.canEdit}
+    {#if detail.permissions.canEdit && !editBlocked}
       <Button variant="outline" size="sm" class="ml-auto" onclick={onEdit}>
         <PencilIcon size={14} class="mr-1" /> Edit
       </Button>

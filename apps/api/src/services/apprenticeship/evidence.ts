@@ -9,6 +9,7 @@ import {
   requireAuthed
 } from '@api/services/apprenticeship/access';
 import {
+  notifyGatewayReady,
   notifyEvidenceReviewed,
   notifyEvidenceSubmitted,
   notifySafely
@@ -159,6 +160,28 @@ function toStoredFiles(
   );
 }
 
+/** Once the gateway is confirmed the apprentice is at end-point assessment: they can no longer add or change evidence. */
+function assertLearnerMayAddEvidence(actor: Actor, enrolment: { gatewayPassedAt?: string | null } | null | undefined) {
+  if (!isStaff(actor) && enrolment?.gatewayPassedAt) {
+    throw new AppError('Your apprenticeship is at end-point assessment', ErrorCodes.FORBIDDEN, 403);
+  }
+}
+
+/** The learner just became ready for the gateway (claimed inside the transaction): tell tutors + admins, non-fatally. */
+async function notifyIfGatewayReady(
+  detail: { gatewayReadyClaimed?: boolean } | null | undefined,
+  enrolment: { id: string; learnerId: string; organizationId: string } | null | undefined
+) {
+  if (!detail?.gatewayReadyClaimed || !enrolment) return;
+  await notifySafely('gateway ready', () =>
+    notifyGatewayReady({
+      enrolmentId: enrolment.id,
+      learnerId: enrolment.learnerId,
+      organizationId: enrolment.organizationId
+    })
+  );
+}
+
 function noteKindFor(actor: Actor, requested: ApprNoteKind | undefined): ApprNoteKind {
   // AUDIT is the system trail; only staff may write one by hand.
   return isStaff(actor) ? (requested ?? 'GENERAL') : 'GENERAL';
@@ -251,6 +274,7 @@ export async function listToMarkQueue(actor: Actor, query: { programmeId?: strin
 
 export async function presignEvidenceUploads(actor: Actor, input: EvidencePresignInput) {
   const enrolment = await getEnrolmentForActor(actor, input.enrolmentId);
+  assertLearnerMayAddEvidence(actor, enrolment);
 
   let evidenceId = input.evidenceId;
   if (evidenceId) {
@@ -309,6 +333,7 @@ export async function createEvidence(actor: Actor, enrolmentId: string, input: E
   const a = requireAuthed(actor);
   const enrolment = await getEnrolmentForActor(actor, enrolmentId);
   const staff = isStaff(a);
+  assertLearnerMayAddEvidence(actor, enrolment);
   const status: ApprEvidenceStatus = staff ? (input.status ?? 'SUBMITTED') : 'SUBMITTED';
 
   await assertActiveType(enrolment.organizationId, input.typeKey);
@@ -367,7 +392,7 @@ export async function createEvidence(actor: Actor, enrolmentId: string, input: E
         });
       }
       await syncTaskStatuses(tx, [input.taskId]);
-      return { evidence, detail: await recomputeEnrolment(tx, enrolment.id) };
+      return { evidence, detail: await recomputeEnrolment(tx, enrolment.id, { claimGatewayReady: true }) };
     });
   } catch (error) {
     if (isUniqueConstraintViolation(error)) {
@@ -376,6 +401,7 @@ export async function createEvidence(actor: Actor, enrolmentId: string, input: E
     throw error;
   }
 
+  await notifyIfGatewayReady(result.detail, enrolment);
   await audit(actor, 'appr.evidence.created', evidenceId, {
     programmeId: enrolment.programmeId,
     learnerId: enrolment.learnerId,
@@ -427,6 +453,7 @@ export async function updateEvidence(actor: Actor, evidenceId: string, input: Ev
   };
 
   const enrolment = await getApprEnrolmentByProgrammeLearner(evidence.programmeId, evidence.learnerId);
+  assertLearnerMayAddEvidence(actor, enrolment);
   // Linking to a (different) task: it must belong to this learner + programme. The old task is re-synced too.
   if (input.taskId) await assertTaskForEvidence(input.taskId, evidence);
   const keptKeys = files?.map((f) => f.key) ?? [];
@@ -468,9 +495,13 @@ export async function updateEvidence(actor: Actor, evidenceId: string, input: Ev
     }
     // A resubmission (or a re-link) changes which evidence is the latest for its task(s): keep the cache in step.
     await syncTaskStatuses(tx, [evidence.taskId, updated.taskId]);
-    return { evidence: updated, detail: enrolment ? await recomputeEnrolment(tx, enrolment.id) : null };
+    return {
+      evidence: updated,
+      detail: enrolment ? await recomputeEnrolment(tx, enrolment.id, { claimGatewayReady: true }) : null
+    };
   });
 
+  await notifyIfGatewayReady(result.detail, enrolment);
   await audit(actor, 'appr.evidence.updated', evidenceId, {
     fields: Object.keys(input),
     resubmitted
@@ -523,9 +554,13 @@ export async function reviewEvidence(actor: Actor, evidenceId: string, input: Ev
       });
     }
     await syncTaskStatuses(tx, [updated.taskId]);
-    return { evidence: updated, detail: enrolment ? await recomputeEnrolment(tx, enrolment.id) : null };
+    return {
+      evidence: updated,
+      detail: enrolment ? await recomputeEnrolment(tx, enrolment.id, { claimGatewayReady: true }) : null
+    };
   });
 
+  await notifyIfGatewayReady(result.detail, enrolment);
   await audit(actor, 'appr.evidence.reviewed', evidenceId, {
     decision: input.decision,
     from: evidence.status,

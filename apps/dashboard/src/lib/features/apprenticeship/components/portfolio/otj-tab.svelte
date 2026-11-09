@@ -1,6 +1,7 @@
 <script lang="ts">
   import * as Table from '@cio/ui/base/table';
   import { Empty } from '@cio/ui/custom/empty';
+  import GlhSection from './glh-section.svelte';
   import type { PortfolioStore } from '../../stores/portfolio.svelte';
   import EvidenceStatusChip from '../shared/evidence-status-chip.svelte';
   import StatusChip from '../shared/status-chip.svelte';
@@ -92,5 +93,6 @@
         </Table.Root>
       </div>
     {/if}
+    <GlhSection {store} />
   </div>
 {/if}

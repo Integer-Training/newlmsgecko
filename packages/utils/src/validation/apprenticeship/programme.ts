@@ -53,7 +53,7 @@ export const ZQualificationUpdate = ZQualificationCreate.partial().refine((v) =>
 export const ZUnitCreate = z.object({
   code: optionalText(100),
   title: trimmed(300),
-  glh: z.number().int().min(0).max(100000).nullish()
+  glh: z.number().int().min(0).max(2000).nullish()
 });
 export const ZUnitUpdate = ZUnitCreate.partial().refine((v) => Object.keys(v).length > 0, {
   message: 'Nothing to update'

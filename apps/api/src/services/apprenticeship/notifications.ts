@@ -1,4 +1,5 @@
-import { listTutorsForLearner } from '@cio/db/queries/allocation';
+import { listTutorsForLearner, listTutorsForLearnerInOrg } from '@cio/db/queries/allocation';
+import { listOrgAdminIds } from '@cio/db/queries/apprenticeship';
 import { markNotificationsReadForEntity } from '@cio/db/queries/comms';
 import { emitNotification } from '@api/services/comms/notify';
 
@@ -10,6 +11,7 @@ import { emitNotification } from '@api/services/comms/notify';
 export const EVIDENCE_ENTITY = 'appr_evidence';
 export const TASK_ENTITY = 'appr_task';
 export const REVIEW_ENTITY = 'appr_review';
+export const ENROLMENT_ENTITY = 'appr_enrolment';
 
 /** Evidence submitted or resubmitted by the apprentice → their ALLOCATED tutor(s). No tutor → nothing sent. */
 export async function notifyEvidenceSubmitted(ctx: { evidenceId: string; learnerId: string }): Promise<void> {
@@ -55,6 +57,26 @@ export async function notifyReviewReadyToSign(ctx: { reviewId: string; learnerId
     recipients: [{ userId: ctx.learnerId }],
     entityType: REVIEW_ENTITY,
     entityId: ctx.reviewId
+  });
+}
+
+/** A learner became ready for the gateway -> their allocated tutors (this org) and the org's admins, once. */
+export async function notifyGatewayReady(ctx: {
+  enrolmentId: string;
+  learnerId: string;
+  organizationId: string;
+}): Promise<void> {
+  const [tutors, admins] = await Promise.all([
+    listTutorsForLearnerInOrg(ctx.learnerId, ctx.organizationId),
+    listOrgAdminIds(ctx.organizationId)
+  ]);
+  const recipients = [...new Set([...tutors.map((t) => t.tutorId), ...admins])];
+  if (recipients.length === 0) return;
+  await emitNotification({
+    type: 'appr.gateway.ready',
+    recipients: recipients.map((userId) => ({ userId })),
+    entityType: ENROLMENT_ENTITY,
+    entityId: ctx.enrolmentId
   });
 }
 

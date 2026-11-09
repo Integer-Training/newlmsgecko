@@ -1,4 +1,5 @@
 import { Hono } from '@api/utils/hono';
+import { gatewayRouter } from '@api/routes/apprenticeship/gateway';
 import { enrolmentsRouter } from '@api/routes/apprenticeship/enrolments';
 import { evidenceRouter } from '@api/routes/apprenticeship/evidence';
 import { programmesRouter } from '@api/routes/apprenticeship/programmes';
@@ -15,4 +16,5 @@ export const apprenticeshipRouter = new Hono()
   .route('/evidence', evidenceRouter)
   .route('/task-plans', taskPlansRouter)
   .route('/tasks', tasksRouter)
-  .route('/reviews', reviewsRouter);
+  .route('/reviews', reviewsRouter)
+  .route('/', gatewayRouter);

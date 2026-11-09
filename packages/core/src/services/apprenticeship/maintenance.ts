@@ -1,18 +1,26 @@
 import { listTutorsForLearnerInOrg } from '@cio/db/queries/allocation';
 import {
   claimDueReviews,
+  claimGatewayReadyNow,
   claimOverdueTasks,
   deleteUploadRows,
   getEnrolmentLearnerIds,
   insertFirstReviewIfNone,
+  listGatewayReadyCandidates,
+  listOrgAdminIds,
   listEnrolmentsNeedingFirstReview,
   listReferencedUploadKeys,
   listUploadsForCleanup,
   markUploadsAttached
 } from '@cio/db/queries/apprenticeship';
 import { insertNotification } from '@cio/db/queries/comms';
-import { APPR_REVIEW_DUE_NOTICE_DAYS, APPR_UPLOAD_GRACE_HOURS } from '@cio/utils/constants/apprenticeship';
-import { addDays, firstReviewDate } from '@cio/utils/functions/apprenticeship-progress';
+import {
+  APPR_DEFAULT_GATEWAY_CHECKLIST,
+  APPR_DEFAULT_SETTINGS,
+  APPR_REVIEW_DUE_NOTICE_DAYS,
+  APPR_UPLOAD_GRACE_HOURS
+} from '@cio/utils/constants/apprenticeship';
+import { addDays, firstReviewDate, gatewayState, otjTargetMinutes } from '@cio/utils/functions/apprenticeship-progress';
 
 import { getStorageConfig } from '../../config/storage';
 import { deleteFromS3 } from '../../utils/s3';
@@ -90,7 +98,7 @@ export async function runApprUploadCleanup(
 
 async function notifyAll(
   userIds: string[],
-  type: 'appr.task.overdue' | 'appr.review.due',
+  type: 'appr.task.overdue' | 'appr.review.due' | 'appr.gateway.ready',
   entityType: string,
   entityId: string
 ) {
@@ -140,6 +148,8 @@ export async function runApprReviewDueScan(opts: { today?: string; batchSize?: n
   const today = opts.today ?? todayIso();
   // First make sure every eligible enrolment has a review to be reminded about (idempotent back-fill).
   const firstReviewsCreated = await runApprFirstReviewBackfill({ today });
+  // And any "ready for gateway" alert that a non-claiming recompute left unsent.
+  const gatewayReady = await runApprGatewayReadyScan();
   const horizon = addDays(today, APPR_REVIEW_DUE_NOTICE_DAYS) ?? today;
   const batchSize = opts.batchSize ?? 200;
   let claimedTotal = 0;
@@ -161,7 +171,7 @@ export async function runApprReviewDueScan(opts: { today?: string; batchSize?: n
     claimedTotal += claimed.length;
     if (claimed.length < batchSize) break;
   }
-  return { reviews: claimedTotal, notifications, firstReviewsCreated };
+  return { reviews: claimedTotal, notifications, firstReviewsCreated, gatewayReadyNotified: gatewayReady.flagged };
 }
 
 /**
@@ -192,4 +202,51 @@ export async function runApprFirstReviewBackfill(opts: { today?: string; batchSi
     if (await ensureFirstReview(r, r.reviewIntervalWeeks, { today: opts.today })) created += 1;
   }
   return created;
+}
+
+/**
+ * Safety net for "ready for gateway": readiness first reached by a recompute that does not claim (a programme-level one)
+ * leaves the learner ready but unflagged. For each such enrolment the flag is claimed FIRST (so a rerun or a concurrent
+ * evidence-triggered claim cannot double-send), then the allocated tutors (this org) and the org admins are told.
+ * Readiness uses the progress cache (the same values the last recompute wrote) with the shared gateway rule.
+ */
+export async function runApprGatewayReadyScan(opts: { batchSize?: number } = {}) {
+  const candidates = await listGatewayReadyCandidates(opts.batchSize ?? 500);
+  let flagged = 0;
+  let notifications = 0;
+  for (const c of candidates) {
+    const checklist =
+      c.gatewayChecklist && c.gatewayChecklist.length > 0 ? c.gatewayChecklist : APPR_DEFAULT_GATEWAY_CHECKLIST;
+    const target = otjTargetMinutes({
+      start: c.startDate,
+      end: c.plannedEndDate,
+      contractedHoursWeek: c.contractedHoursWeek,
+      overrideMinutes: c.otjTargetMinutesOverride,
+      settings: {
+        otjFactor: c.otjFactor ?? APPR_DEFAULT_SETTINGS.otjFactor,
+        otjWeeklyCapHours: c.otjWeeklyCapHours ?? APPR_DEFAULT_SETTINGS.otjWeeklyCapHours
+      }
+    });
+    const { ready } = gatewayState({
+      checklist,
+      manual: c.gatewayItems ?? {},
+      unitsTotal: c.unitsTotal,
+      unitsComplete: c.unitsComplete,
+      otjMinutes: c.otjMinutes,
+      otjTargetMinutes: target
+    });
+    if (!ready || !(await claimGatewayReadyNow(c.id))) continue;
+    flagged += 1;
+    const [tutors, admins] = await Promise.all([
+      listTutorsForLearnerInOrg(c.learnerId, c.organizationId),
+      listOrgAdminIds(c.organizationId)
+    ]);
+    notifications += await notifyAll(
+      [...tutors.map((t) => t.tutorId), ...admins],
+      'appr.gateway.ready',
+      'appr_enrolment',
+      c.id
+    );
+  }
+  return { candidates: candidates.length, flagged, notifications };
 }

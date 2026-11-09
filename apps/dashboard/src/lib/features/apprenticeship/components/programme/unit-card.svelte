@@ -33,6 +33,7 @@
   let editingUnit = $state(false);
   let unitCode = $state('');
   let unitTitle = $state('');
+  let unitGlh = $state('');
   let busy = $state(false);
 
   // Criterion editing: a draft keyed by criterion id, or the "new" draft row.
@@ -59,19 +60,26 @@
       draft.requiredCount <= 50
   );
 
+  // GLH (guided learning hours): blank = not set, otherwise a whole number 0–2000.
+  const glhValid = $derived(
+    unitGlh.trim() === '' || (Number.isInteger(Number(unitGlh)) && Number(unitGlh) >= 0 && Number(unitGlh) <= 2000)
+  );
+
   function startEditUnit() {
     unitCode = unit.code ?? '';
     unitTitle = unit.title;
+    unitGlh = unit.glh === null || unit.glh === undefined ? '' : String(unit.glh);
     editingUnit = true;
   }
 
   async function saveUnit(e: Event) {
     e.preventDefault();
-    if (!unitTitle.trim() || busy) return;
+    if (!unitTitle.trim() || !glhValid || busy) return;
     busy = true;
     const ok = await programmesApi.updateUnit(programmeId, qualificationId, unit.id, {
       code: unitCode.trim() || null,
-      title: unitTitle.trim()
+      title: unitTitle.trim(),
+      glh: unitGlh.trim() === '' ? null : Number(unitGlh)
     });
     busy = false;
     if (ok) editingUnit = false;
@@ -222,7 +230,18 @@
           class="h-8 min-w-48 flex-1"
           required
         />
-        <Button type="submit" size="icon-sm" aria-label="Save unit" disabled={!unitTitle.trim() || busy}>
+        <Input
+          aria-label="GLH (hours)"
+          type="number"
+          min={0}
+          max={2000}
+          step={1}
+          bind:value={unitGlh}
+          placeholder="GLH (hours)"
+          class="h-8 w-32"
+          aria-invalid={!glhValid}
+        />
+        <Button type="submit" size="icon-sm" aria-label="Save unit" disabled={!unitTitle.trim() || !glhValid || busy}>
           <CheckIcon class="size-4" />
         </Button>
         <Button type="button" size="icon-sm" variant="ghost" aria-label="Cancel" onclick={() => (editingUnit = false)}>
@@ -241,6 +260,9 @@
         <span class="shrink-0 text-xs text-(--muted-foreground)">
           {unit.criteria.length} criteri{unit.criteria.length === 1 ? 'on' : 'a'}
         </span>
+        {#if unit.glh !== null && unit.glh !== undefined}
+          <span class="shrink-0 text-xs text-(--muted-foreground)">GLH {unit.glh} h</span>
+        {/if}
       </button>
       <div class="flex items-center gap-1">
         <Button

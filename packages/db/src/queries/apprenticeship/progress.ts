@@ -80,7 +80,7 @@ export async function listProgrammeCriteria(programmeId: string, client: DbOrTxC
 /** Every unit of a programme in display order (units with no criteria still appear). */
 export async function listProgrammeUnits(programmeId: string, client: DbOrTxClient = db) {
   return client
-    .select({ unitId: schema.apprUnit.id, qualificationId: schema.apprQualification.id })
+    .select({ unitId: schema.apprUnit.id, qualificationId: schema.apprQualification.id, glh: schema.apprUnit.glh })
     .from(schema.apprUnit)
     .innerJoin(schema.apprQualification, eq(schema.apprQualification.id, schema.apprUnit.qualificationId))
     .where(eq(schema.apprQualification.programmeId, programmeId))
@@ -138,6 +138,8 @@ export async function writeEnrolmentCache(
     submittedCount: number;
     acceptedCount: number;
     referredCount: number;
+    /** GLH done (units + logs), minutes. */
+    glhMinutes?: number;
     units: { unitId: string; actualPct: number | null; complete: boolean }[];
   },
   client: DbOrTxClient = db
@@ -151,6 +153,7 @@ export async function writeEnrolmentCache(
       submittedCount: cache.submittedCount,
       acceptedCount: cache.acceptedCount,
       referredCount: cache.referredCount,
+      ...(cache.glhMinutes !== undefined ? { glhMinutes: cache.glhMinutes } : {}),
       recomputedAt: now
     })
     .where(eq(schema.apprEnrolment.id, enrolmentId));

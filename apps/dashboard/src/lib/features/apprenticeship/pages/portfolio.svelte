@@ -15,6 +15,7 @@
   import CriteriaGrid from '../components/portfolio/criteria-grid.svelte';
   import EvidenceTab from '../components/portfolio/evidence-tab.svelte';
   import OtjTab from '../components/portfolio/otj-tab.svelte';
+  import GatewayTab from '../components/portfolio/gateway-tab.svelte';
   import AchievedTab from '../components/portfolio/achieved-tab.svelte';
   import TasksTab from '../components/portfolio/tasks-tab.svelte';
   import ReviewsTab from '../components/portfolio/reviews-tab.svelte';
@@ -44,7 +45,7 @@
   });
 
   // A notification links here with ?tab=tasks|reviews: open on that tab (once the portfolio has loaded), then drop it.
-  const TABS = ['units', 'map', 'evidence', 'tasks', 'reviews', 'otj', 'achieved'];
+  const TABS = ['units', 'map', 'evidence', 'tasks', 'reviews', 'otj', 'gateway', 'achieved'];
   let openedTab = false;
   $effect(() => {
     if (openedTab || !store.data) return;
@@ -111,6 +112,14 @@
       {:else if store.data}
         <div class="space-y-4">
           <SummaryStrip {store} onEditDates={() => (datesOpen = true)} onSpread={() => (spreadOpen = true)} />
+          {#if store.evidenceBlocked}
+            <p
+              role="status"
+              class="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-300"
+            >
+              {store.blockedMessage}
+            </p>
+          {/if}
 
           <Tabs.Root bind:value={store.tab}>
             <Tabs.List class="ui:h-auto ui:flex-wrap">
@@ -136,7 +145,8 @@
                   <span class="ml-1 rounded-full bg-rose-600 px-1.5 text-xs font-medium text-white">Overdue</span>
                 {/if}
               </Tabs.Trigger>
-              <Tabs.Trigger value="otj">Off-the-job</Tabs.Trigger>
+              <Tabs.Trigger value="otj">Hours</Tabs.Trigger>
+              <Tabs.Trigger value="gateway">Gateway</Tabs.Trigger>
               <Tabs.Trigger value="achieved">Achieved</Tabs.Trigger>
             </Tabs.List>
             <div class="mt-4 min-h-64">
@@ -146,6 +156,7 @@
               <Tabs.Content value="tasks"><TasksTab {store} /></Tabs.Content>
               <Tabs.Content value="reviews"><ReviewsTab {store} /></Tabs.Content>
               <Tabs.Content value="otj"><OtjTab {store} /></Tabs.Content>
+              <Tabs.Content value="gateway"><GatewayTab {store} /></Tabs.Content>
               <Tabs.Content value="achieved"><AchievedTab {store} /></Tabs.Content>
             </div>
           </Tabs.Root>
@@ -164,6 +175,7 @@
           {metIds}
           preCriteria={store.sheet.criterionIds}
           tasks={store.tasks}
+          editBlocked={store.evidenceBlocked}
           preTaskId={store.sheet.taskId}
           learnerName={store.data.learner.name}
           onChanged={() => store.refresh()}

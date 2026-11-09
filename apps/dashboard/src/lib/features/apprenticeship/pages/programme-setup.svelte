@@ -11,6 +11,7 @@
   import ProgrammeHeader from '$features/apprenticeship/components/programme/programme-header.svelte';
   import QualificationSection from '$features/apprenticeship/components/programme/qualification-section.svelte';
   import ImportDialog from '$features/apprenticeship/components/programme/import-dialog.svelte';
+  import GatewayChecklist from '$features/apprenticeship/components/programme/gateway-checklist.svelte';
 
   // Programme setup: details + units -> criteria editor + CSV import. One programme = one course (qualification);
   // older programmes holding several qualifications still list each one so nothing is hidden.
@@ -63,6 +64,7 @@
       {:else}
         <div class="flex max-w-7xl flex-col gap-4">
           <ProgrammeHeader programme={tree} />
+          <GatewayChecklist programmeId={tree.id} />
 
           {#each tree.qualifications as qualification, i (qualification.id)}
             <QualificationSection

@@ -93,6 +93,7 @@ export async function updateApprProgramme(
     level: string | null;
     status: string;
     reviewIntervalWeeks: number;
+    gatewayChecklist: { key: string; label: string; kind: string }[] | null;
   }>,
   client: DbOrTxClient = db
 ) {

@@ -13,7 +13,10 @@ vi.mock('@cio/db/queries/apprenticeship', () => ({
   claimDueReviews: vi.fn(),
   getEnrolmentLearnerIds: vi.fn(async () => new Map()),
   listEnrolmentsNeedingFirstReview: vi.fn(async () => []),
-  insertFirstReviewIfNone: vi.fn(async () => true)
+  insertFirstReviewIfNone: vi.fn(async () => true),
+  listGatewayReadyCandidates: vi.fn(async () => []),
+  claimGatewayReadyNow: vi.fn(async () => true),
+  listOrgAdminIds: vi.fn(async () => [])
 }));
 vi.mock('@cio/db/queries/allocation', () => ({ listTutorsForLearnerInOrg: vi.fn(async () => []) }));
 vi.mock('@cio/db/queries/comms', () => ({ insertNotification: vi.fn(async () => ({ id: 'n' })) }));
@@ -26,6 +29,7 @@ import { insertNotification } from '@cio/db/queries/comms';
 import { deleteFromS3 } from '@cio/core/utils/s3';
 import {
   ensureFirstReview,
+  runApprGatewayReadyScan,
   runApprReviewDueScan,
   runApprTaskOverdueScan,
   runApprUploadCleanup
@@ -156,7 +160,7 @@ describe('runApprReviewDueScan', () => {
     vi.mocked(listTutorsForLearnerInOrg).mockResolvedValue([{ tutorId: 'tut1', email: null }] as never);
     const res = await runApprReviewDueScan({ today: '2026-06-10' });
     expect(vi.mocked(q.claimDueReviews).mock.calls[0][0]).toBe('2026-06-17');
-    expect(res).toEqual({ reviews: 1, notifications: 1, firstReviewsCreated: 0 });
+    expect(res).toEqual({ reviews: 1, notifications: 1, firstReviewsCreated: 0, gatewayReadyNotified: 0 });
     expect(listTutorsForLearnerInOrg).toHaveBeenCalledWith('lrn', 'org-1');
     expect(vi.mocked(insertNotification).mock.calls[0][0]).toMatchObject({
       userId: 'tut1',
@@ -170,7 +174,8 @@ describe('runApprReviewDueScan', () => {
     expect(await runApprReviewDueScan({ today: '2026-06-10' })).toEqual({
       reviews: 0,
       notifications: 0,
-      firstReviewsCreated: 0
+      firstReviewsCreated: 0,
+      gatewayReadyNotified: 0
     });
     expect(insertNotification).not.toHaveBeenCalled();
   });
@@ -203,5 +208,112 @@ describe('first-review back-fill (ensureFirstReview + the daily scan)', () => {
     ] as never);
     vi.mocked(q.insertFirstReviewIfNone).mockResolvedValueOnce(false);
     expect((await runApprReviewDueScan({ today: '2026-06-01' })).firstReviewsCreated).toBe(0);
+  });
+});
+
+describe('overdue scan skips learners at gateway / achieved (WHERE clause of the claim query)', () => {
+  it('only claims tasks of enrolments with no gateway_passed_at and no achieved_at', async () => {
+    const real = await vi.importActual<typeof import('@cio/db/queries/apprenticeship')>(
+      '@cio/db/queries/apprenticeship'
+    );
+    const { PgDialect } = await import('drizzle-orm/pg-core');
+    let where: unknown;
+    const fake = {
+      select: () => ({
+        from: () => ({
+          where: (w: unknown) => {
+            where = w;
+            return { orderBy: () => ({ limit: async () => [] }) };
+          }
+        })
+      })
+    };
+    await real.claimOverdueTasks('2026-06-10', 10, fake as never);
+    const { sql: text } = new PgDialect().sqlToQuery(where as never);
+    expect(text).toContain('en.gateway_passed_at is null');
+    expect(text).toContain('en.achieved_at is null');
+    expect(text).toContain('"appr_task"."enrolment_id"');
+    expect(text).toContain('"overdue_notified_at" is null');
+  });
+});
+
+describe('runApprGatewayReadyScan (safety net for a non-claiming recompute)', () => {
+  const ready = { english: { done: true }, maths: { done: true }, employer: { done: true }, tutor: { done: true } };
+  const cand = (over: Record<string, unknown> = {}) => ({
+    id: 'enr-1',
+    organizationId: 'org-1',
+    learnerId: 'lrn',
+    startDate: '2026-01-01',
+    plannedEndDate: '2026-12-31',
+    contractedHoursWeek: 30,
+    otjTargetMinutesOverride: 600,
+    otjMinutes: 700,
+    gatewayItems: ready,
+    gatewayChecklist: null,
+    otjFactor: null,
+    otjWeeklyCapHours: null,
+    unitsTotal: 2,
+    unitsComplete: 2,
+    ...over
+  });
+
+  it('claims first, then tells the allocated tutors (this org) and the org admins, once each', async () => {
+    vi.mocked(q.listGatewayReadyCandidates).mockResolvedValueOnce([cand()] as never);
+    vi.mocked(listTutorsForLearnerInOrg).mockResolvedValue([
+      { tutorId: 'tut1', email: null },
+      { tutorId: 'adm', email: null }
+    ] as never);
+    vi.mocked(q.listOrgAdminIds).mockResolvedValue(['adm', 'adm2']);
+    const res = await runApprGatewayReadyScan();
+    expect(q.claimGatewayReadyNow).toHaveBeenCalledWith('enr-1');
+    expect(listTutorsForLearnerInOrg).toHaveBeenCalledWith('lrn', 'org-1');
+    expect(res).toEqual({ candidates: 1, flagged: 1, notifications: 3 });
+    expect(
+      vi
+        .mocked(insertNotification)
+        .mock.calls.map((c) => c[0].userId)
+        .sort()
+    ).toEqual(['adm', 'adm2', 'tut1']);
+    expect(vi.mocked(insertNotification).mock.calls[0][0]).toMatchObject({
+      type: 'appr.gateway.ready',
+      entityType: 'appr_enrolment',
+      entityId: 'enr-1'
+    });
+  });
+
+  it('does nothing for learners who are not ready (any unit, OTJ or manual item missing)', async () => {
+    vi.mocked(q.listGatewayReadyCandidates).mockResolvedValueOnce([
+      cand({ unitsComplete: 1 }),
+      cand({ id: 'e2', otjMinutes: 100 }),
+      cand({ id: 'e3', gatewayItems: { ...ready, maths: { done: false } } }),
+      cand({ id: 'e4', unitsTotal: 0, unitsComplete: 0 })
+    ] as never);
+    const res = await runApprGatewayReadyScan();
+    expect(res).toEqual({ candidates: 4, flagged: 0, notifications: 0 });
+    expect(q.claimGatewayReadyNow).not.toHaveBeenCalled();
+    expect(insertNotification).not.toHaveBeenCalled();
+  });
+
+  it('is once-only: when another path already claimed the flag nobody is notified again', async () => {
+    vi.mocked(q.listGatewayReadyCandidates).mockResolvedValueOnce([cand()] as never);
+    vi.mocked(q.claimGatewayReadyNow).mockResolvedValueOnce(false);
+    expect(await runApprGatewayReadyScan()).toEqual({ candidates: 1, flagged: 0, notifications: 0 });
+    expect(insertNotification).not.toHaveBeenCalled();
+  });
+
+  it('uses the programme checklist and org OTJ settings, and the daily review-due scan runs it', async () => {
+    vi.mocked(q.listGatewayReadyCandidates).mockResolvedValueOnce([
+      cand({
+        gatewayChecklist: [{ key: 'only', label: 'Only', kind: 'MANUAL' }],
+        gatewayItems: { only: { done: true } },
+        unitsComplete: 0,
+        otjMinutes: 0
+      })
+    ] as never);
+    vi.mocked(listTutorsForLearnerInOrg).mockResolvedValue([] as never);
+    vi.mocked(q.listOrgAdminIds).mockResolvedValue(['adm']);
+    vi.mocked(q.claimDueReviews).mockResolvedValue([] as never);
+    const res = await runApprReviewDueScan({ today: '2026-06-10' });
+    expect(res.gatewayReadyNotified).toBe(1);
   });
 });

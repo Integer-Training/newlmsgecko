@@ -1,5 +1,8 @@
+import { get } from 'svelte/store';
+import { isOrgTeamMember } from '$lib/utils/store/org';
 import { snackbar } from '$features/ui/snackbar/store';
 import { enrolmentsApi, type EnrolmentUpdateBody, type Portfolio, type UnitDatesBody } from '../api/enrolments.svelte';
+import { gatewayApi, type GlhLog } from '../api/gateway.svelte';
 import { reviewsApi, type ReviewItem } from '../api/reviews.svelte';
 import { tasksApi, type TaskItem } from '../api/tasks.svelte';
 import { evidenceApi, type EvidenceListItem, type PickerQualification } from '../api/evidence.svelte';
@@ -17,6 +20,8 @@ export class PortfolioStore {
   reviews = $state<ReviewItem[]>([]);
   tasksError = $state<string | null>(null);
   reviewsError = $state<string | null>(null);
+  glhLogs = $state<GlhLog[]>([]);
+  glhError = $state<string | null>(null);
   loading = $state(true);
   error = $state<string | null>(null);
   saving = $state(false);
@@ -64,11 +69,12 @@ export class PortfolioStore {
   async load() {
     const reqId = ++this.#reqId;
     this.loading = this.data === null;
-    const [p, e, t, r] = await Promise.all([
+    const [p, e, t, r, g] = await Promise.all([
       enrolmentsApi.getPortfolio(this.enrolmentId),
       evidenceApi.forEnrolment(this.enrolmentId),
       tasksApi.forEnrolment(this.enrolmentId),
-      reviewsApi.forEnrolment(this.enrolmentId)
+      reviewsApi.forEnrolment(this.enrolmentId),
+      gatewayApi.glhLogs(this.enrolmentId)
     ]);
     if (reqId !== this.#reqId) return;
     this.loading = false;
@@ -91,6 +97,12 @@ export class PortfolioStore {
       this.reviewsError = null;
     } else {
       this.reviewsError = r.error;
+    }
+    if (g.ok) {
+      this.glhLogs = g.data.items;
+      this.glhError = null;
+    } else {
+      this.glhError = g.error;
     }
     this.version += 1;
   }
@@ -144,6 +156,10 @@ export class PortfolioStore {
   }
 
   openNewEvidence(criterionIds: string[] = [], taskId: string | null = null) {
+    if (this.evidenceBlocked) {
+      snackbar.error(this.blockedMessage);
+      return;
+    }
     this.sheet = { open: true, mode: 'add', evidenceId: null, criterionIds, taskId };
   }
 
@@ -154,6 +170,17 @@ export class PortfolioStore {
       task.id
     );
   }
+
+  /** The gateway has been confirmed: the apprentice is at end-point assessment and cannot add evidence. */
+  get gatewayLocked(): boolean {
+    return !!this.data?.gateway?.gatewayPassedAt;
+  }
+
+  /** The apprentice (not staff) may not add evidence once the gateway is confirmed. */
+  get evidenceBlocked(): boolean {
+    return this.gatewayLocked && get(isOrgTeamMember) !== true;
+  }
+  readonly blockedMessage = 'Your apprenticeship is at end-point assessment — speak to your tutor';
 
   // ── Tasks / reviews ──
   get overdueTaskCount(): number {

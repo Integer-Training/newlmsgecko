@@ -9,6 +9,7 @@
   import type { PortfolioStore } from '../../stores/portfolio.svelte';
   import ProgressBar from '../shared/progress-bar.svelte';
   import StatusChip from '../shared/status-chip.svelte';
+  import StageChip from '../shared/stage-chip.svelte';
   import { fmtDate, fmtMinutes, fmtPct } from '../shared/format';
 
   interface Props {
@@ -35,6 +36,7 @@
         <div class="flex flex-wrap items-center gap-2">
           <h2 class="text-xl font-semibold">{d.learner.name}</h2>
           <StatusChip status={d.summary.status} />
+          <StageChip stage={d.summary.stage} label={d.summary.stageLabel} />
         </div>
         <p class="text-sm text-(--muted-foreground)">
           {d.programme.title} · Tutor: {tutorNames(d.tutors)}
@@ -59,9 +61,11 @@
         <Button variant="outline" size="sm" onclick={exportCsv} loading={exporting} disabled={exporting}>
           <DownloadIcon size={14} class="mr-1" /> Export CSV
         </Button>
-        <Button size="sm" onclick={() => store.openNewEvidence()}>
-          <PlusIcon size={14} class="mr-1" /> Add evidence
-        </Button>
+        {#if !store.evidenceBlocked}
+          <Button size="sm" onclick={() => store.openNewEvidence()}>
+            <PlusIcon size={14} class="mr-1" /> Add evidence
+          </Button>
+        {/if}
       </div>
     </div>
 
