@@ -19,6 +19,7 @@
   import AchievedTab from '../components/portfolio/achieved-tab.svelte';
   import TasksTab from '../components/portfolio/tasks-tab.svelte';
   import ReviewsTab from '../components/portfolio/reviews-tab.svelte';
+  import OnboardingTab from '../components/onboarding/onboarding-tab.svelte';
   import DatesDialog from '../components/portfolio/dates-dialog.svelte';
   import TutorsDialog from '../components/portfolio/tutors-dialog.svelte';
   import SpreadDialog from '../components/portfolio/spread-dialog.svelte';
@@ -47,7 +48,7 @@
   });
 
   // A notification links here with ?tab=tasks|reviews: open on that tab (once the portfolio has loaded), then drop it.
-  const TABS = ['units', 'map', 'evidence', 'tasks', 'reviews', 'otj', 'gateway', 'achieved'];
+  const TABS = ['units', 'map', 'evidence', 'tasks', 'reviews', 'otj', 'gateway', 'achieved', 'onboarding'];
   let openedTab = false;
   $effect(() => {
     if (openedTab || !store.data) return;
@@ -155,6 +156,7 @@
               <Tabs.Trigger value="otj">Hours</Tabs.Trigger>
               <Tabs.Trigger value="gateway">Gateway</Tabs.Trigger>
               <Tabs.Trigger value="achieved">Achieved</Tabs.Trigger>
+              <Tabs.Trigger value="onboarding">Onboarding</Tabs.Trigger>
             </Tabs.List>
             <div class="mt-4 min-h-64">
               <Tabs.Content value="units"><UnitsTab {store} /></Tabs.Content>
@@ -165,6 +167,7 @@
               <Tabs.Content value="otj"><OtjTab {store} /></Tabs.Content>
               <Tabs.Content value="gateway"><GatewayTab {store} /></Tabs.Content>
               <Tabs.Content value="achieved"><AchievedTab {store} /></Tabs.Content>
+              <Tabs.Content value="onboarding"><OnboardingTab {enrolmentId} /></Tabs.Content>
             </div>
           </Tabs.Root>
         </div>

@@ -15,7 +15,7 @@ import {
   type DbOrTxClient,
   type SQL
 } from '@db/drizzle';
-import { tutorReachSql } from './tutors';
+import { tutorReachSql, tutorsDisplaySql } from './tutors';
 import { profileDisplayName } from './names';
 
 // Gecko Apprenticeships — task plans, plan items and learner tasks. No access control here: services resolve the actor
@@ -111,13 +111,26 @@ export async function listPlanAssignees(planId: string, client: DbOrTxClient = d
       learnerName: profileDisplayName,
       startDate: schema.apprEnrolment.startDate,
       taskCount: sql<number>`count(*)::int`,
-      completeCount: sql<number>`count(*) filter (where ${t.status} = 'COMPLETE')::int`
+      completeCount: sql<number>`count(*) filter (where ${t.status} = 'COMPLETE')::int`,
+      overdueCount: sql<number>`count(*) filter (where ${t.dueDate} < current_date and ${t.status} <> 'COMPLETE')::int`,
+      tutors: tutorsDisplaySql(
+        '"appr_task"."learner_id"',
+        '"appr_task"."programme_id"',
+        '"appr_task"."organization_id"'
+      )
     })
     .from(t)
     .innerJoin(schema.apprEnrolment, eq(schema.apprEnrolment.id, t.enrolmentId))
     .innerJoin(schema.profile, eq(schema.profile.id, t.learnerId))
     .where(eq(t.planId, planId))
-    .groupBy(t.enrolmentId, t.learnerId, schema.apprEnrolment.startDate, schema.profile.id)
+    .groupBy(
+      t.enrolmentId,
+      t.learnerId,
+      t.programmeId,
+      t.organizationId,
+      schema.apprEnrolment.startDate,
+      schema.profile.id
+    )
     .orderBy(asc(profileDisplayName));
 }
 

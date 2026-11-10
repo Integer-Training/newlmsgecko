@@ -64,6 +64,7 @@
               <Table.Head>Status</Table.Head>
               <Table.Head class="text-right">Time</Table.Head>
               <Table.Head>Created</Table.Head>
+              <Table.Head>By</Table.Head>
             </Table.Row>
           </Table.Header>
           <Table.Body>
@@ -87,6 +88,7 @@
                 </Table.Cell>
                 <Table.Cell class="text-right">{fmtMinutes(e.minutes)}</Table.Cell>
                 <Table.Cell>{fmtDate(e.createdAt)}</Table.Cell>
+                <Table.Cell>{e.createdByName ?? '—'}</Table.Cell>
               </Table.Row>
             {/each}
           </Table.Body>

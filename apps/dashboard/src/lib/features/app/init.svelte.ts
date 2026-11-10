@@ -32,6 +32,7 @@ import { setTheme } from '$lib/utils/functions/theme';
 import { setupAnalyticsBasedOnLicense } from '$lib/utils/functions/appSetup';
 import shouldRedirectOnAuth from '$lib/utils/functions/routes/shouldRedirectOnAuth';
 import { ROLE } from '@cio/utils/constants';
+import { myApprenticeshipApi } from '$features/apprenticeship/api/my-apprenticeship.svelte';
 
 type AppSetupParams = AppOrgParams;
 
@@ -474,7 +475,12 @@ class AppInitApi extends BaseApi {
       return;
     }
 
-    goto(resolve('/lms', {}));
+    // Apprentices land on their own dashboard. Learner check is cheap (one small call); on any failure fall back to /lms
+    // (whose layout redirects apprentices anyway).
+    void myApprenticeshipApi
+      .load()
+      .catch(() => undefined)
+      .then(() => goto(resolve(myApprenticeshipApi.hasAny ? '/lms/apprenticeship' : '/lms', {})));
   }
 
   goToOrg() {

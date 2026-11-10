@@ -12,6 +12,7 @@ import type { AuthSession } from '@api/types/auth';
 
 vi.mock('@cio/db/queries/apprenticeship', () => ({
   isProgrammeTutor: vi.fn(async () => false),
+  countOnboardingTypes: vi.fn(async () => 1),
   getApprProgramme: vi.fn(),
   getApprEnrolment: vi.fn(),
   getApprEnrolmentByProgrammeLearner: vi.fn(async () => null),

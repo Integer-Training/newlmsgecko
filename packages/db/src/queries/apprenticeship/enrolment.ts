@@ -1,7 +1,8 @@
 import * as schema from '@db/schema';
 
 import { and, asc, db, eq, ilike, inArray, or, sql, type DbOrTxClient, type SQL } from '@db/drizzle';
-import { tutorReachSql } from './tutors';
+import { noTutorSql, tutorReachSql, tutorsDisplaySql } from './tutors';
+import { onboardingCountsSql, onboardingIncompleteSql } from './onboarding';
 import { profileDisplayName } from './names';
 
 // Gecko Apprenticeships — enrolment reads/writes. No access control here: services resolve the actor first and pass
@@ -10,14 +11,15 @@ import { profileDisplayName } from './names';
 export interface ApprTutorRef {
   id: string;
   name: string;
+  kind?: 'NAMED' | 'PROGRAMME';
 }
 
-// Allocated tutors of the enrolment's learner as a JSON array — a correlated subquery, so a list stays ONE statement.
-const tutorsOf = sql<
-  ApprTutorRef[]
->`coalesce((select json_agg(json_build_object('id', tp.id, 'name', coalesce(nullif(tu.name, ''), tp.fullname)) order by coalesce(nullif(tu.name, ''), tp.fullname))
-  from tutor_allocation ta join profile tp on tp.id = ta.tutor_id left join "user" tu on tu.id = tp.id
-  where ta.learner_id = ${sql.raw('"appr_enrolment"."learner_id"')} and ta.organization_id = ${sql.raw('"appr_enrolment"."organization_id"')}), '[]'::json)`;
+// Tutors to display for the enrolment (named, else programme) as a JSON array — see tutorsDisplaySql.
+const tutorsOf = tutorsDisplaySql(
+  '"appr_enrolment"."learner_id"',
+  '"appr_enrolment"."programme_id"',
+  '"appr_enrolment"."organization_id"'
+);
 
 export interface EnrolmentListScope {
   organizationId: string;
@@ -25,6 +27,10 @@ export interface EnrolmentListScope {
   /** Admin filter: only learners whose NAMED tutor (allocation) is this tutor. */
   tutorId?: string;
   search?: string;
+  /** Admin/tutor filter: learners with neither a named tutor nor a programme tutor. */
+  noTutor?: boolean;
+  /** Filter: learners whose required onboarding documents are not all approved yet. */
+  onboardingIncomplete?: boolean;
   /** TUTOR actor: only enrolments this tutor reaches — named tutor OR programme tutor (the access rule). */
   restrictToTutorId?: string;
   /** LEARNER actor: only this learner. */
@@ -71,6 +77,16 @@ export async function listEnrolmentRows(scope: EnrolmentListScope, client: DbOrT
     );
   }
   if (scope.restrictToLearnerId) conditions.push(eq(e.learnerId, scope.restrictToLearnerId));
+  if (scope.noTutor) {
+    conditions.push(
+      noTutorSql(
+        '"appr_enrolment"."learner_id"',
+        '"appr_enrolment"."programme_id"',
+        '"appr_enrolment"."organization_id"'
+      )
+    );
+  }
+  if (scope.onboardingIncomplete) conditions.push(onboardingIncompleteSql());
   if (scope.search) {
     const term = `%${scope.search.replace(/[\\%_]/g, '\\$&')}%`;
     conditions.push(or(ilike(profileDisplayName, term), ilike(schema.profile.email, term)));
@@ -94,6 +110,7 @@ export async function listEnrolmentRows(scope: EnrolmentListScope, client: DbOrT
       acceptedCount: e.acceptedCount,
       referredCount: e.referredCount,
       tutors: tutorsOf,
+      onboarding: onboardingCountsSql(),
       overdueTaskCount: overdueTaskCountOf(scope.today ?? new Date().toISOString().slice(0, 10)),
       nextReview: nextReviewOf,
       glhMinutes: e.glhMinutes,

@@ -11,3 +11,4 @@ export * from './tasks';
 export * from './reviews';
 export * from './gateway';
 export * from './tutors';
+export * from './onboarding';

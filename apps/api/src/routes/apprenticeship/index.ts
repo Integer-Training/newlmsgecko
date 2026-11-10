@@ -1,5 +1,6 @@
 import { Hono } from '@api/utils/hono';
 import { gatewayRouter } from '@api/routes/apprenticeship/gateway';
+import { onboardingRouter } from '@api/routes/apprenticeship/onboarding';
 import { enrolmentsRouter } from '@api/routes/apprenticeship/enrolments';
 import { evidenceRouter } from '@api/routes/apprenticeship/evidence';
 import { programmesRouter } from '@api/routes/apprenticeship/programmes';
@@ -19,4 +20,5 @@ export const apprenticeshipRouter = new Hono()
   .route('/tasks', tasksRouter)
   .route('/reviews', reviewsRouter)
   .route('/', gatewayRouter)
-  .route('/', tutorsRouter);
+  .route('/', tutorsRouter)
+  .route('/', onboardingRouter);

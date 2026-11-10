@@ -16,7 +16,8 @@ vi.mock('@cio/db/queries/apprenticeship', () => ({
   getEvidenceLinkTargets: vi.fn(async () => new Map()),
   getTaskLinkTargets: vi.fn(async () => new Map()),
   getReviewLinkTargets: vi.fn(async () => new Map()),
-  getEnrolmentLinkTargets: vi.fn(async () => new Map())
+  getEnrolmentLinkTargets: vi.fn(async () => new Map()),
+  getOnboardingDocLinkTargets: vi.fn(async () => new Map())
 }));
 
 import {

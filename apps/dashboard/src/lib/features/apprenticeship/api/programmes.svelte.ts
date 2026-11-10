@@ -19,6 +19,8 @@ export interface ProgrammeRow {
   unitCount: number;
   criterionCount: number;
   learnerCount: number;
+  /** Names of the programme's tutors (role-2 members of the org). */
+  tutorNames?: string[];
 }
 export interface Criterion {
   id: string;

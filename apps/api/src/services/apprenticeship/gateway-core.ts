@@ -39,6 +39,8 @@ export interface GatewayView {
     done: boolean;
     note: string | null;
     by: string | null;
+    /** Display name of `by` (filled by withGatewayNames). */
+    byName?: string | null;
     at: string | null;
   }[];
   /** Every checklist item is done (live). After confirmation the checklist is locked and this stays as last computed. */
@@ -49,10 +51,21 @@ export interface GatewayView {
   locked: boolean;
   gatewayPassedAt: string | null;
   gatewayPassedBy: string | null;
+  /** Display name of `gatewayPassedBy` (filled by withGatewayNames). */
+  gatewayPassedByName?: string | null;
   epaBookedDate: string | null;
   epaResult: string | null;
   epaResultDate: string | null;
   achievedAt: string | null;
+}
+
+/** The view with the display names of whoever ticked / confirmed, given an id → name lookup. */
+export function withGatewayNames(view: GatewayView, names: ReadonlyMap<string, string>): GatewayView {
+  return {
+    ...view,
+    items: view.items.map((i) => ({ ...i, byName: i.by ? (names.get(i.by) ?? null) : null })),
+    gatewayPassedByName: view.gatewayPassedBy ? (names.get(view.gatewayPassedBy) ?? null) : null
+  };
 }
 
 /**

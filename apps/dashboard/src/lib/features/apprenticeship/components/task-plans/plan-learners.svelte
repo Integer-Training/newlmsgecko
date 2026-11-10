@@ -8,6 +8,7 @@
   import { currentOrg } from '$lib/utils/store/org';
   import { snackbar } from '$features/ui/snackbar/store';
   import { taskPlansApi, type TaskPlan, type TaskPlanAssignee } from '../../api/task-plans.svelte';
+  import TutorCell from '../shared/tutor-cell.svelte';
   import { fmtDate } from '../shared/format';
   import ConfirmDeleteDialog from '../programme/confirm-delete-dialog.svelte';
   import AssignDialog from './assign-dialog.svelte';
@@ -177,6 +178,13 @@
           <span class="hidden shrink-0 text-xs text-(--muted-foreground) sm:inline">
             {a.startDate ? `Started ${fmtDate(a.startDate)}` : 'No start date'}
           </span>
+          <span class="hidden shrink-0 sm:inline"><TutorCell tutors={a.tutors} /></span>
+          {#if (a.overdueCount ?? 0) > 0}
+            <span
+              class="inline-flex shrink-0 items-center rounded-full bg-rose-100 px-2 py-0.5 text-xs font-medium whitespace-nowrap text-rose-800 dark:bg-rose-500/20 dark:text-rose-300"
+              >{a.overdueCount} overdue</span
+            >
+          {/if}
           <span class="shrink-0 text-xs tabular-nums">{a.completeCount}/{a.taskCount} complete</span>
         </li>
       {:else}

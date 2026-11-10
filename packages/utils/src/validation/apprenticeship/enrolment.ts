@@ -27,6 +27,13 @@ export const ZEnrolmentListQuery = z.object({
   tutorId: z.uuid().optional(),
   status: z.enum(APPR_PROGRESS_STATUSES).optional(),
   search: z.string().trim().max(100).optional(),
+  // 'true' → learners with neither a named tutor nor a programme tutor.
+  noTutor: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((v) => (v === 'true' ? true : undefined)),
+  // 'incomplete' → learners whose required onboarding documents are not all approved.
+  onboarding: z.enum(['incomplete']).optional(),
   page: z.coerce.number().int().min(1).max(100000).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(25)
 });

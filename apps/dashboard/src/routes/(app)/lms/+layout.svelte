@@ -1,11 +1,16 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
+  import { page } from '$app/state';
+  import { profile } from '$lib/utils/store/user';
   import * as Sidebar from '@cio/ui/base/sidebar';
   import LmsHeader from '$features/ui/navigation/lms-header.svelte';
   import { LMSSidebar } from '$features/ui/sidebar/lms-sidebar';
   import TutorFeedbackDialog from '$features/lms/components/tutor-feedback-dialog.svelte';
   import { tutorFeedbackApi } from '$features/lms/api/tutor-feedback.svelte';
   import { myApprenticeshipApi } from '$features/apprenticeship/api/my-apprenticeship.svelte';
+  import { apprenticeShell } from '$features/apprenticeship/api/apprentice-shell.svelte';
+  import { onboardingChanged } from '$features/apprenticeship/api/onboarding.svelte';
 
   interface Props {
     children?: import('svelte').Snippet;
@@ -31,9 +36,35 @@
     }
   }
 
-  // Decides whether "My apprenticeship" shows in the menu (Phase C); fire-and-forget, a failure just hides it.
-  onMount(() => {
-    void myApprenticeshipApi.load();
+  // Decides which shell the learner gets: an apprenticeship enrolment swaps the whole sidebar (the nav shows its
+  // skeleton until this resolves, so there is no flash). A failure falls back to the normal learner sidebar.
+  // Runs once per session and again when a different user signs in.
+  let loadedFor: string | null = null;
+  $effect(() => {
+    const id = $profile.id;
+    if (!id || id === loadedFor) return;
+    const changedUser = loadedFor !== null;
+    loadedFor = id;
+    void myApprenticeshipApi.load(changedUser);
+  });
+
+  // Apprentices land on their dashboard instead of the course dashboard (client-side, once the check has loaded).
+  $effect(() => {
+    if (!myApprenticeshipApi.loaded || !myApprenticeshipApi.hasAny) return;
+    if (page.url.pathname.replace(/\/$/, '') === '/lms') {
+      goto('/lms/apprenticeship', { replaceState: true });
+    }
+  });
+
+  // Sidebar extras for the apprentice shell: onboarding badge (current enrolment) and "My courses" visibility.
+  $effect(() => {
+    void onboardingChanged.count; // refetch after any onboarding save / withdraw / review
+    if (!myApprenticeshipApi.hasAny) return;
+    void apprenticeShell.refreshOnboardingBadge(myApprenticeshipApi.currentEnrolmentId);
+  });
+  $effect(() => {
+    if (!myApprenticeshipApi.hasAny || !$profile.id) return;
+    void apprenticeShell.loadCourses();
   });
 
   onMount(async () => {

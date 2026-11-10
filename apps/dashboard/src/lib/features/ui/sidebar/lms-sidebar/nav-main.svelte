@@ -8,6 +8,8 @@
   import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
   import { getLmsNavigationItems } from '$features/ui/navigation/lms-navigation';
   import { HoverableItem } from '@cio/ui/custom/moving-icons';
+  import { myApprenticeshipApi } from '$features/apprenticeship/api/my-apprenticeship.svelte';
+  import EnrolmentSwitcher from '$features/apprenticeship/components/shared/enrolment-switcher.svelte';
 
   const items = $derived(getLmsNavigationItems($currentOrg, $t, page.url.pathname));
 
@@ -16,58 +18,76 @@
 
 <Sidebar.Group>
   <Sidebar.GroupLabel>{$t('org_navigation.platform')}</Sidebar.GroupLabel>
-  <Sidebar.Menu>
-    {#each items as item (item.title)}
-      <Collapsible.Root open={item.isActive || item.isExpanded} class="group/collapsible">
-        {#snippet child({ props })}
-          <Sidebar.MenuItem {...props}>
-            <Collapsible.Trigger>
-              {#snippet child({ props })}
-                <Sidebar.MenuButton {...props} tooltipContent={item.title} isActive={item.isActive}>
-                  {#snippet child({ props })}
-                    <HoverableItem>
-                      {#snippet children(isHovered)}
-                        <a href={item.url} {...props}>
-                          {#if item.icon}
-                            {@const Icon = item.icon}
-                            <Icon {isHovered} size={16} class="custom" />
+  {#if !myApprenticeshipApi.loaded}
+    <!-- Which shell (course vs apprentice) isn't known until the apprenticeship check returns: no menu flash. -->
+    <Sidebar.Menu>
+      {#each [0, 1, 2, 3] as i (i)}
+        <Sidebar.MenuItem><Sidebar.MenuSkeleton showIcon /></Sidebar.MenuItem>
+      {/each}
+    </Sidebar.Menu>
+  {:else}
+    {#if myApprenticeshipApi.enrolments.length > 1}
+      <EnrolmentSwitcher />
+    {/if}
+    <Sidebar.Menu>
+      {#each items as item (item.title)}
+        <Collapsible.Root open={item.isActive || item.isExpanded} class="group/collapsible">
+          {#snippet child({ props })}
+            <Sidebar.MenuItem {...props}>
+              <Collapsible.Trigger>
+                {#snippet child({ props })}
+                  <Sidebar.MenuButton {...props} tooltipContent={item.title} isActive={item.isActive}>
+                    {#snippet child({ props })}
+                      <HoverableItem>
+                        {#snippet children(isHovered)}
+                          <a href={item.url} {...props}>
+                            {#if item.icon}
+                              {@const Icon = item.icon}
+                              <Icon {isHovered} size={16} class="custom" />
 
-                            <span>{item.title}</span>
-                          {:else}
-                            <span>{item.title}</span>
-                          {/if}
-                          {#if item.items}
-                            <ChevronRightIcon
-                              class="custom ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90"
-                            />
-                          {/if}
-                        </a>
-                      {/snippet}
-                    </HoverableItem>
-                  {/snippet}
-                </Sidebar.MenuButton>
-              {/snippet}
-            </Collapsible.Trigger>
-            {#if item.items}
-              <Collapsible.Content>
-                <Sidebar.MenuSub>
-                  {#each item.items ?? [] as subItem (subItem.title)}
-                    <Sidebar.MenuSubItem>
-                      <Sidebar.MenuSubButton isActive={isActive(pathWithQuery, subItem.url, undefined, true)}>
-                        {#snippet child({ props })}
-                          <a href={subItem.url} {...props}>
-                            <span>{subItem.title}</span>
+                              <span>{item.title}</span>
+                            {:else}
+                              <span>{item.title}</span>
+                            {/if}
+                            {#if item.badge}
+                              <span
+                                class="bg-sidebar-accent text-sidebar-accent-foreground ml-auto rounded-full px-1.5 text-xs font-medium group-data-[collapsible=icon]:hidden"
+                                >{item.badge}</span
+                              >
+                            {/if}
+                            {#if item.items}
+                              <ChevronRightIcon
+                                class="custom ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90"
+                              />
+                            {/if}
                           </a>
                         {/snippet}
-                      </Sidebar.MenuSubButton>
-                    </Sidebar.MenuSubItem>
-                  {/each}
-                </Sidebar.MenuSub>
-              </Collapsible.Content>
-            {/if}
-          </Sidebar.MenuItem>
-        {/snippet}
-      </Collapsible.Root>
-    {/each}
-  </Sidebar.Menu>
+                      </HoverableItem>
+                    {/snippet}
+                  </Sidebar.MenuButton>
+                {/snippet}
+              </Collapsible.Trigger>
+              {#if item.items}
+                <Collapsible.Content>
+                  <Sidebar.MenuSub>
+                    {#each item.items ?? [] as subItem (subItem.title)}
+                      <Sidebar.MenuSubItem>
+                        <Sidebar.MenuSubButton isActive={isActive(pathWithQuery, subItem.url, undefined, true)}>
+                          {#snippet child({ props })}
+                            <a href={subItem.url} {...props}>
+                              <span>{subItem.title}</span>
+                            </a>
+                          {/snippet}
+                        </Sidebar.MenuSubButton>
+                      </Sidebar.MenuSubItem>
+                    {/each}
+                  </Sidebar.MenuSub>
+                </Collapsible.Content>
+              {/if}
+            </Sidebar.MenuItem>
+          {/snippet}
+        </Collapsible.Root>
+      {/each}
+    </Sidebar.Menu>
+  {/if}
 </Sidebar.Group>

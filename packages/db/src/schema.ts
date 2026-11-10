@@ -5174,3 +5174,91 @@ export const apprProgrammeTutor = pgTable(
     index('idx_appr_programme_tutor_tutor').on(table.tutorId)
   ]
 );
+
+// Onboarding documents an apprentice uploads after receiving their login (photo ID, NI proof, signed agreement…).
+// Types are org-configurable (programme_id null = every programme); a type in use is deactivated, never deleted.
+export const apprOnboardingDocType = pgTable(
+  'appr_onboarding_doc_type',
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    organizationId: uuid('organization_id').notNull(),
+    programmeId: uuid('programme_id'),
+    label: varchar({ length: 120 }).notNull(),
+    description: text(),
+    required: boolean().default(true).notNull(),
+    allowNotHeld: boolean('allow_not_held').default(false).notNull(),
+    sequence: integer().default(0).notNull(),
+    active: boolean().default(true).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId],
+      foreignColumns: [organization.id],
+      name: 'appr_onboarding_doc_type_organization_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.programmeId],
+      foreignColumns: [apprProgramme.id],
+      name: 'appr_onboarding_doc_type_programme_id_fkey'
+    }).onDelete('cascade'),
+    index('idx_appr_onboarding_doc_type_org').on(table.organizationId, table.sequence)
+  ]
+);
+
+// One upload slot per (enrolment, document type). Status SUBMITTED|APPROVED|REJECTED; not_held = the learner
+// declared they do not hold the document (only where the type allows it), reviewed like an upload.
+export const apprOnboardingDoc = pgTable(
+  'appr_onboarding_doc',
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    organizationId: uuid('organization_id').notNull(),
+    enrolmentId: uuid('enrolment_id').notNull(),
+    learnerId: uuid('learner_id').notNull(),
+    docTypeId: uuid('doc_type_id').notNull(),
+    files: jsonb().default([]).$type<ApprFile[]>().notNull(),
+    notHeld: boolean('not_held').default(false).notNull(),
+    learnerNote: text('learner_note'),
+    status: varchar().default('SUBMITTED').notNull(),
+    reviewNote: text('review_note'),
+    reviewedBy: uuid('reviewed_by'),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true, mode: 'string' }),
+    submittedBy: uuid('submitted_by'),
+    submittedAt: timestamp('submitted_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId],
+      foreignColumns: [organization.id],
+      name: 'appr_onboarding_doc_organization_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.enrolmentId],
+      foreignColumns: [apprEnrolment.id],
+      name: 'appr_onboarding_doc_enrolment_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.learnerId],
+      foreignColumns: [profile.id],
+      name: 'appr_onboarding_doc_learner_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.docTypeId],
+      foreignColumns: [apprOnboardingDocType.id],
+      name: 'appr_onboarding_doc_doc_type_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.reviewedBy],
+      foreignColumns: [profile.id],
+      name: 'appr_onboarding_doc_reviewed_by_fkey'
+    }).onDelete('set null'),
+    foreignKey({
+      columns: [table.submittedBy],
+      foreignColumns: [profile.id],
+      name: 'appr_onboarding_doc_submitted_by_fkey'
+    }).onDelete('set null'),
+    unique('appr_onboarding_doc_unique').on(table.enrolmentId, table.docTypeId),
+    index('idx_appr_onboarding_doc_org_status').on(table.organizationId, table.status)
+  ]
+);

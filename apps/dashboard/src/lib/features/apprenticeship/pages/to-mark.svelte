@@ -13,6 +13,7 @@
   import { enrolmentsApi } from '../api/enrolments.svelte';
   import { evidenceApi, type ToMarkPage } from '../api/evidence.svelte';
   import EvidenceSheet from '../components/evidence/evidence-sheet.svelte';
+  import TutorCell from '../components/shared/tutor-cell.svelte';
   import { fmtDate } from '../components/shared/format';
 
   // Gecko Apprenticeships — the marking queue: evidence waiting for a decision, oldest first. A row opens the
@@ -68,6 +69,12 @@
   function openRow(row: { id: string; learnerName: string | null }) {
     selected = { id: row.id, learnerName: row.learnerName };
     sheetOpen = true;
+  }
+
+  // Whole days since the evidence was submitted; amber once it has waited more than a week.
+  function waitingDays(row: { submittedAt?: string; createdAt: string }) {
+    const t = new Date(row.submittedAt ?? row.createdAt).getTime();
+    return Number.isNaN(t) ? 0 : Math.max(0, Math.floor((Date.now() - t) / 86_400_000));
   }
 
   const programmeLabel = $derived(
@@ -126,11 +133,14 @@
             <Table.Header>
               <Table.Row>
                 <Table.Head>Learner</Table.Head>
+                <Table.Head>Tutor</Table.Head>
                 <Table.Head>Programme</Table.Head>
                 <Table.Head>Evidence</Table.Head>
+                <Table.Head>Task</Table.Head>
                 <Table.Head>Type</Table.Head>
                 <Table.Head class="text-right">Criteria</Table.Head>
                 <Table.Head>Submitted</Table.Head>
+                <Table.Head>Waiting</Table.Head>
                 <Table.Head><span class="sr-only">Actions</span></Table.Head>
               </Table.Row>
             </Table.Header>
@@ -138,11 +148,28 @@
               {#each data.items as row (row.id)}
                 <Table.Row class="cursor-pointer" onclick={() => openRow(row)}>
                   <Table.Cell class="font-medium">{row.learnerName ?? '—'}</Table.Cell>
+                  <Table.Cell><TutorCell tutors={row.tutors} /></Table.Cell>
                   <Table.Cell>{row.programmeTitle}</Table.Cell>
                   <Table.Cell class="max-w-72 break-words whitespace-normal!">{row.title}</Table.Cell>
+                  <Table.Cell class="max-w-56 text-sm break-words whitespace-normal!">
+                    {#if row.taskTitle}
+                      <p>{row.taskTitle}</p>
+                      {#if row.taskDueDate}
+                        <p class="text-xs text-(--muted-foreground)">Due {fmtDate(row.taskDueDate)}</p>
+                      {/if}
+                    {:else}
+                      <span class="text-(--muted-foreground)">—</span>
+                    {/if}
+                  </Table.Cell>
                   <Table.Cell class="text-sm text-(--muted-foreground)">{row.typeLabel ?? '—'}</Table.Cell>
                   <Table.Cell class="text-right">{row.criteriaCount}</Table.Cell>
-                  <Table.Cell class="whitespace-nowrap">{fmtDate(row.createdAt)}</Table.Cell>
+                  <Table.Cell class="whitespace-nowrap">{fmtDate(row.submittedAt ?? row.createdAt)}</Table.Cell>
+                  <Table.Cell class="whitespace-nowrap">
+                    {@const days = waitingDays(row)}
+                    <span class={days > 7 ? 'font-medium text-amber-700 dark:text-amber-300' : ''}
+                      >{days} day{days === 1 ? '' : 's'}</span
+                    >
+                  </Table.Cell>
                   <Table.Cell>
                     <Button
                       variant="outline"

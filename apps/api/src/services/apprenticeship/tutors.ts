@@ -75,7 +75,9 @@ export async function getEnrolmentTutors(actor: Actor, enrolmentId: string) {
     getEnrolmentOverview(enrolment.id),
     listTutorsForProgramme(enrolment.programmeId)
   ]);
-  return { named: overview?.tutors ?? [], programme: programmeTutors };
+  // overview.tutors falls back to programme tutors for display; this dialog manages NAMED tutors only.
+  const named = (overview?.tutors ?? []).filter((t) => t.kind !== 'PROGRAMME');
+  return { named, programme: programmeTutors };
 }
 
 export async function addNamedTutor(actor: Actor, enrolmentId: string, tutorId: string) {

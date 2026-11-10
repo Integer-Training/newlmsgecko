@@ -170,6 +170,7 @@
                 <Table.Head class="text-right">Units</Table.Head>
                 <Table.Head class="text-right">Criteria</Table.Head>
                 <Table.Head class="text-right">Learners</Table.Head>
+                <Table.Head class="text-right">Tutors</Table.Head>
                 <Table.Head class="text-right"><span class="sr-only">Actions</span></Table.Head>
               </Table.Row>
             </Table.Header>
@@ -188,6 +189,9 @@
                   <Table.Cell class="text-right tabular-nums">{p.unitCount}</Table.Cell>
                   <Table.Cell class="text-right tabular-nums">{p.criterionCount}</Table.Cell>
                   <Table.Cell class="text-right tabular-nums">{p.learnerCount}</Table.Cell>
+                  <Table.Cell class="text-right tabular-nums" title={(p.tutorNames ?? []).join(', ')}
+                    >{p.tutorNames?.length ?? 0}</Table.Cell
+                  >
                   <Table.Cell class="text-right">
                     <div class="flex justify-end gap-2">
                       <Button size="sm" variant="outline" href="{base}/{p.id}">Open</Button>

@@ -29,6 +29,8 @@ export interface GatewayItem {
   done: boolean;
   note: string | null;
   by: string | null;
+  /** Display name of `by`. */
+  byName?: string | null;
   at: string | null;
 }
 
@@ -41,6 +43,8 @@ export interface GatewayView {
   locked: boolean;
   gatewayPassedAt: string | null;
   gatewayPassedBy: string | null;
+  /** Display name of `gatewayPassedBy`. */
+  gatewayPassedByName?: string | null;
   epaBookedDate: string | null;
   epaResult: ApprEpaResult | null;
   epaResultDate: string | null;

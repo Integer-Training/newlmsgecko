@@ -172,3 +172,74 @@ export const APPR_STAGE_LABELS: Record<ApprStage, string> = {
 };
 /** One staff GLH log entry is capped at a day. */
 export const APPR_GLH_LOG_MAX_MINUTES = 24 * 60;
+
+// ── Onboarding documents (uploaded by the apprentice after receiving their login) ──
+
+export const APPR_ONBOARDING_STATUSES = ['SUBMITTED', 'APPROVED', 'REJECTED'] as const;
+export type ApprOnboardingStatus = (typeof APPR_ONBOARDING_STATUSES)[number];
+export const APPR_ONBOARDING_STATUS_LABELS: Record<ApprOnboardingStatus, string> = {
+  SUBMITTED: 'Waiting for review',
+  APPROVED: 'Approved',
+  REJECTED: 'Needs re-upload'
+};
+export const APPR_ONBOARDING_FILES_MAX = 10;
+export const APPR_ONBOARDING_LABEL_MAX = 120;
+export const APPR_ONBOARDING_TYPES_MAX = 50;
+
+/** Seeded for an org the first time its onboarding types are read. Admins edit them in Apprenticeships › Settings. */
+export const APPR_DEFAULT_ONBOARDING_DOC_TYPES: readonly {
+  label: string;
+  description: string;
+  required: boolean;
+  allowNotHeld: boolean;
+}[] = [
+  { label: 'Photo ID', description: 'Passport or photocard driving licence.', required: true, allowNotHeld: false },
+  {
+    label: 'Proof of National Insurance number',
+    description: 'NI card, payslip or a letter from HMRC/DWP showing your NI number.',
+    required: true,
+    allowNotHeld: false
+  },
+  {
+    label: 'Proof of address',
+    description: 'Utility bill, bank statement or council tax bill dated within the last 3 months.',
+    required: true,
+    allowNotHeld: false
+  },
+  {
+    label: 'Right to work',
+    description: 'UK/Irish passport, or your share code / visa / biometric residence permit.',
+    required: true,
+    allowNotHeld: false
+  },
+  {
+    label: 'English and maths certificates',
+    description: 'GCSE or Functional Skills certificates. If you do not have them, tick "I don\'t have this".',
+    required: true,
+    allowNotHeld: true
+  },
+  {
+    label: 'Other qualification certificates',
+    description: 'Any other relevant qualifications (optional).',
+    required: false,
+    allowNotHeld: false
+  },
+  {
+    label: 'Signed apprenticeship agreement',
+    description: 'The apprenticeship agreement signed by you and your employer.',
+    required: true,
+    allowNotHeld: false
+  },
+  {
+    label: 'Signed commitment statement / training plan',
+    description: 'The training plan signed by you, your employer and the provider.',
+    required: true,
+    allowNotHeld: false
+  },
+  {
+    label: 'Learning support evidence',
+    description: 'EHCP, diagnosis letter or similar, if you would like extra support (optional).',
+    required: false,
+    allowNotHeld: false
+  }
+];

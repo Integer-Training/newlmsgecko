@@ -2,7 +2,7 @@ import axios from 'axios';
 import { classroomio } from '$lib/utils/services/api';
 import { snackbar } from '$features/ui/snackbar/store';
 import { call, type CallResult } from './call';
-import type { EnrolmentRow } from './enrolments.svelte';
+import type { EnrolmentRow, TutorsInput } from './enrolments.svelte';
 
 // Gecko Apprenticeships — admin client for task plans (templates): list / detail / edit / archive / delete, their
 // tasks (plan items), brief file upload (presign → PUT) and assigning plans to learners. Shapes mirror
@@ -59,6 +59,8 @@ export interface TaskPlanAssignee {
   startDate: string | null;
   taskCount: number;
   completeCount: number;
+  overdueCount?: number;
+  tutors?: TutorsInput;
 }
 
 export interface TaskPlanDetail {

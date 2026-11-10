@@ -7,7 +7,9 @@ import {
   requireAuthed
 } from '@api/services/apprenticeship/access';
 import { buildGatewayView, buildGlhView, resolveChecklist } from '@api/services/apprenticeship/gateway-core';
+import { nameGatewayActors } from '@api/services/apprenticeship/gateway-names';
 import { notifyGatewayReadyOrRelease } from '@api/services/apprenticeship/notifications';
+import { ensureOnboardingTypes } from '@api/services/apprenticeship/onboarding';
 import { recomputeEnrolment, todayIso, type EnrolmentProgressDetail } from '@api/services/apprenticeship/progress';
 import { createOrgUser } from '@api/services/organization/users';
 import { createTutorAllocation } from '@api/services/organization/allocation';
@@ -167,11 +169,15 @@ export async function listEnrolments(actor: Actor, query: EnrolmentListQuery, no
     programmeId: query.programmeId,
     tutorId: query.tutorId,
     search: query.search || undefined,
+    noTutor: query.noTutor,
+    onboardingIncomplete: query.onboarding === 'incomplete',
     today: todayIso(now)
   };
   if (a.role === 'TUTOR') scope.restrictToTutorId = a.userId;
   else if (a.role === 'LEARNER') scope.restrictToLearnerId = a.userId;
   else if (a.role !== 'ADMIN') throw new AppError('You do not have access to this action', ErrorCodes.FORBIDDEN, 403);
+  // The Onboarding column counts the org's document types, so give a new org its defaults before the first list.
+  if (a.role !== 'LEARNER') await ensureOnboardingTypes(a.orgId);
 
   const [rows, settings] = await Promise.all([listEnrolmentRows(scope), getApprSettings(a.orgId)]);
   const today = todayIso(now);
@@ -199,6 +205,7 @@ export async function listEnrolments(actor: Actor, query: EnrolmentListQuery, no
       programmeTitle: r.programmeTitle,
       learner: { id: r.learnerId, name: r.learnerName, email: r.learnerEmail },
       tutors: r.tutors ?? [],
+      onboarding: r.onboarding ?? null,
       startDate: r.startDate,
       plannedEndDate: r.plannedEndDate,
       achievedAt: r.achievedAt,

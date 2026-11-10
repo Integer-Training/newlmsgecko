@@ -9,12 +9,21 @@ import type { GatewayView, GlhSummary } from './gateway.svelte';
 // apps/api/src/services/apprenticeship/enrolment.ts. All numbers (actual / expected %, status, OTJ) are the API's;
 // this client never recomputes them.
 
+/** Tutors as the API sends them: objects ('PROGRAMME' kind = assigned to the programme, not named) or plain names. */
+export type TutorsInput =
+  | { id: string; name: string | null; kind?: 'NAMED' | 'PROGRAMME' }[]
+  | string[]
+  | null
+  | undefined;
+
 export interface EnrolmentRow {
   id: string;
   programmeId: string;
   programmeTitle: string;
   learner: { id: string; name: string; email: string | null };
-  tutors: { id: string; name: string | null }[] | string[];
+  tutors: TutorsInput;
+  /** Required onboarding documents approved / required; null or required 0 = nothing to approve. */
+  onboarding?: { required: number; approved: number; submitted: number; rejected: number } | null;
   startDate: string | null;
   plannedEndDate: string | null;
   achievedAt: string | null;
@@ -53,6 +62,10 @@ export interface EnrolmentFilters {
   tutorId?: string;
   status?: ApprProgressStatus;
   search?: string;
+  /** Only learners with neither a named nor a programme tutor. */
+  noTutor?: boolean;
+  /** 'incomplete' = required onboarding documents not all approved. */
+  onboarding?: 'incomplete';
   page: number;
   pageSize: number;
 }
@@ -126,7 +139,7 @@ export interface Portfolio {
   };
   learner: { id: string; name: string; email: string | null };
   programme: { id: string; title: string; reference: string | null; level: string | null };
-  tutors: { id: string; name: string | null }[] | string[];
+  tutors: TutorsInput;
   summary: ProgressSummary;
   gateway?: GatewayView;
   qualifications: PortfolioQualification[];
@@ -169,10 +182,14 @@ export interface LearnerOption {
   email: string | null;
 }
 
-/** Tutor names for display, whichever shape the API sends (objects or plain names). */
-export function tutorNames(tutors: EnrolmentRow['tutors'] | Portfolio['tutors'] | null | undefined): string {
-  const names = ((tutors ?? []) as (string | { name: string | null })[])
-    .map((t) => (typeof t === 'string' ? t : t?.name))
+/** Tutor names for display, whichever shape the API sends. Programme tutors read "Name (programme)". */
+export function tutorNames(tutors: TutorsInput | Portfolio['tutors']): string {
+  const names = ((tutors ?? []) as (string | { name: string | null; kind?: string })[])
+    .map((t) => {
+      if (typeof t === 'string') return t;
+      if (!t?.name) return '';
+      return t.kind === 'PROGRAMME' ? `${t.name} (programme)` : t.name;
+    })
     .filter(Boolean);
   return names.length ? names.join(', ') : '—';
 }
@@ -201,6 +218,8 @@ class EnrolmentsApi extends BaseApi {
     if (filters.tutorId) query.tutorId = filters.tutorId;
     if (filters.status) query.status = filters.status;
     if (filters.search?.trim()) query.search = filters.search.trim();
+    if (filters.noTutor) query.noTutor = 'true';
+    if (filters.onboarding) query.onboarding = filters.onboarding;
     this.isLoading = true;
     const res = await call<EnrolmentList>(() => classroomio.apprenticeship.enrolments.$get({ query }));
     if (reqId !== this.#reqId) return;

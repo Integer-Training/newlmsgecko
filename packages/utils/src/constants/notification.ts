@@ -27,7 +27,11 @@ export const NOTIFICATION_TYPES = [
   'appr.review.sign',
   'appr.review.due',
   // Deploy 2: learner ready for the gateway (-> allocated tutors + org admins).
-  'appr.gateway.ready'
+  'appr.gateway.ready',
+  // Onboarding documents: uploaded (-> org admins), reviewed (-> apprentice), all required approved (-> named tutors + admins).
+  'appr.onboarding.submitted',
+  'appr.onboarding.reviewed',
+  'appr.onboarding.complete'
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
@@ -60,7 +64,10 @@ export const NOTIFICATION_TYPE_CATEGORY: Record<NotificationType, NotificationCa
   'appr.task.overdue': 'coursework',
   'appr.review.sign': 'coursework',
   'appr.review.due': 'coursework',
-  'appr.gateway.ready': 'coursework'
+  'appr.gateway.ready': 'coursework',
+  'appr.onboarding.submitted': 'coursework',
+  'appr.onboarding.reviewed': 'coursework',
+  'appr.onboarding.complete': 'coursework'
 };
 
 export function categoryForNotificationType(type: NotificationType): NotificationCategory {

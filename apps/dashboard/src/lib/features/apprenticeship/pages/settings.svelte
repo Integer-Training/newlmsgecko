@@ -11,6 +11,7 @@
   import { currentOrg } from '$lib/utils/store/org';
   import { snackbar } from '$features/ui/snackbar/store';
   import { programmesApi, type EvidenceType } from '$features/apprenticeship/api/programmes.svelte';
+  import OnboardingTypesSettings from '$features/apprenticeship/components/onboarding/onboarding-types-settings.svelte';
 
   // Org rules for Gecko Apprenticeships: progress thresholds, off-the-job (OTJ) hours, and the evidence-type list.
   // Status is computed on read, so saving the thresholds needs no recalculation.
@@ -110,7 +111,7 @@
   <Page.Header>
     <Page.HeaderContent>
       <Page.Title>Apprenticeship settings</Page.Title>
-      <Page.Subtitle>Progress rules and evidence types · {$currentOrg.name}</Page.Subtitle>
+      <Page.Subtitle>Progress rules, evidence types and onboarding documents · {$currentOrg.name}</Page.Subtitle>
     </Page.HeaderContent>
   </Page.Header>
 
@@ -235,6 +236,10 @@
                 <PlusIcon class="size-4" /> Add
               </Button>
             </form>
+          </div>
+
+          <div class="lg:col-span-2">
+            <OnboardingTypesSettings />
           </div>
         </div>
       {/if}

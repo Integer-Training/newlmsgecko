@@ -1,7 +1,7 @@
 import * as schema from '@db/schema';
 
 import { and, asc, db, desc, eq, inArray, sql, type DbOrTxClient, type SQL } from '@db/drizzle';
-import { tutorReachSql } from './tutors';
+import { tutorReachSql, tutorsDisplaySql } from './tutors';
 import { profileDisplayName } from './names';
 
 // Gecko Apprenticeships — evidence reads/writes. No access control here: services resolve the actor and the enrolment
@@ -42,6 +42,11 @@ export async function listEvidenceForLearner(
       createdAt: ev.createdAt,
       createdBy: ev.createdBy,
       createdByName: profileDisplayName,
+      reviewedBy: ev.reviewedBy,
+      reviewedByName: sql<
+        string | null
+      >`(select coalesce(nullif(ru.name, ''), rp.fullname) from profile rp left join "user" ru on ru.id = rp.id where rp.id = ${ev.reviewedBy})`,
+      reviewedAt: ev.reviewedAt,
       criteriaCount: criteriaCountOf,
       fileCount: fileCountOf
     })
@@ -251,6 +256,15 @@ export async function listToMark(
       programmeId: ev.programmeId,
       programmeTitle: schema.apprProgramme.title,
       criteriaCount: criteriaCountOf,
+      submittedAt: ev.updatedAt,
+      taskId: ev.taskId,
+      taskTitle: sql<string | null>`(select tt.title from appr_task tt where tt.id = ${ev.taskId})`,
+      taskDueDate: sql<string | null>`(select tt.due_date from appr_task tt where tt.id = ${ev.taskId})`,
+      tutors: tutorsDisplaySql(
+        '"appr_evidence"."learner_id"',
+        '"appr_evidence"."programme_id"',
+        '"appr_evidence"."organization_id"'
+      ),
       total: sql<number>`count(*) over()::int`
     })
     .from(ev)

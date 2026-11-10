@@ -11,6 +11,7 @@ import {
 import {
   getEnrolmentLinkTargets,
   getEvidenceLinkTargets,
+  getOnboardingDocLinkTargets,
   getReviewLinkTargets,
   getTaskLinkTargets
 } from '@cio/db/queries/apprenticeship';
@@ -43,17 +44,19 @@ type TaskTargets = Awaited<ReturnType<typeof getTaskLinkTargets>>;
 type ReviewTargets = Awaited<ReturnType<typeof getReviewLinkTargets>>;
 
 type EnrolmentTargets = Awaited<ReturnType<typeof getEnrolmentLinkTargets>>;
+type OnboardingDocTargets = Awaited<ReturnType<typeof getOnboardingDocLinkTargets>>;
 
 interface ApprTargets {
   tasks: TaskTargets;
   reviews: ReviewTargets;
   enrolments?: EnrolmentTargets;
+  onboardingDocs?: OnboardingDocTargets;
 }
 
 /** Gecko Apprenticeships: open the portfolio on a tab (tasks / reviews) — in the reader's own shell. */
 function portfolioTabLink(
   enrolmentId: string | undefined,
-  tab: 'tasks' | 'reviews' | 'gateway',
+  tab: 'tasks' | 'reviews' | 'gateway' | 'onboarding',
   isStaff: boolean
 ): string {
   if (!enrolmentId) return isStaff ? '/caseload/apprenticeships' : '/lms/apprenticeship';
@@ -158,6 +161,31 @@ function enrich(
         link: portfolioTabLink(row.entityId ?? undefined, 'gateway', isStaff)
       };
     }
+    case 'appr.onboarding.submitted': {
+      const who = row.entityId ? appr.enrolments?.get(row.entityId)?.learnerName : null;
+      return {
+        ...base,
+        subject: `Onboarding document uploaded — ${who ?? 'apprentice'}`,
+        link: portfolioTabLink(row.entityId ?? undefined, 'onboarding', isStaff)
+      };
+    }
+    case 'appr.onboarding.reviewed': {
+      const doc = row.entityId ? appr.onboardingDocs?.get(row.entityId) : undefined;
+      const label = doc?.label ?? 'Onboarding document';
+      const subject =
+        doc?.status === 'REJECTED'
+          ? `${label} needs re-uploading${doc.reviewNote ? ` — ${doc.reviewNote}` : ''}`
+          : `${label} approved`;
+      return { ...base, subject, link: portfolioTabLink(doc?.enrolmentId, 'onboarding', isStaff) };
+    }
+    case 'appr.onboarding.complete': {
+      const who = row.entityId ? appr.enrolments?.get(row.entityId)?.learnerName : null;
+      return {
+        ...base,
+        subject: `Onboarding complete — ${who ?? 'apprentice'}`,
+        link: portfolioTabLink(row.entityId ?? undefined, 'onboarding', isStaff)
+      };
+    }
     default:
       return { ...base, subject: 'Notification', link: homePath };
   }
@@ -189,10 +217,12 @@ export async function getNotificationCentre(
   const taskIds = idsOf('appr_task');
   const reviewIds = idsOf('appr_review');
   const enrolmentIds = idsOf('appr_enrolment');
+  const onboardingDocIds = idsOf('appr_onboarding_doc');
   const appr: ApprTargets = {
     enrolments: enrolmentIds.length ? await getEnrolmentLinkTargets(enrolmentIds) : new Map(),
     tasks: taskIds.length ? await getTaskLinkTargets(taskIds) : new Map(),
-    reviews: reviewIds.length ? await getReviewLinkTargets(reviewIds) : new Map()
+    reviews: reviewIds.length ? await getReviewLinkTargets(reviewIds) : new Map(),
+    onboardingDocs: onboardingDocIds.length ? await getOnboardingDocLinkTargets(onboardingDocIds) : new Map()
   };
 
   // The recipient's home dashboard — where their broadcast banner + feed live (tutor → /caseload, else /lms).

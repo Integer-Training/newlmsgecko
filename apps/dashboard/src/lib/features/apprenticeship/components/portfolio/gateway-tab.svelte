@@ -157,7 +157,9 @@
       <p
         class="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300"
       >
-        Gateway confirmed on {fmtDate(gw.gatewayPassedAt)}. The checklist is locked.
+        Gateway confirmed{gw.gatewayPassedByName ? ` by ${gw.gatewayPassedByName}` : ''} on {fmtDate(
+          gw.gatewayPassedAt
+        )}. The checklist is locked.
       </p>
     {:else if gw.ready}
       <div
@@ -241,7 +243,9 @@
                 <p class="text-sm">{item.note}</p>
               {/if}
               {#if item.done && item.at}
-                <p class="text-xs text-(--muted-foreground)">Ticked {fmtDate(item.at)}</p>
+                <p class="text-xs text-(--muted-foreground)">
+                  Ticked{item.byName ? ` by ${item.byName}` : ''} on {fmtDate(item.at)}
+                </p>
               {/if}
             {/if}
           </div>

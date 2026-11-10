@@ -10,14 +10,47 @@ export interface MyEnrolment {
   programmeTitle: string;
 }
 
+const PICKED_KEY = 'gecko.apprentice.enrolment.v1';
+
+function readPicked(): string | null {
+  try {
+    return localStorage.getItem(PICKED_KEY);
+  } catch {
+    return null;
+  }
+}
+
 class MyApprenticeshipApi {
   enrolments = $state<MyEnrolment[]>([]);
   loaded = $state(false);
   error = $state<string | null>(null);
   #inflight: Promise<void> | null = null;
+  /** The enrolment the apprentice picked in the sidebar switcher (remembered per viewer; see currentEnrolmentId). */
+  #pickedId = $state<string | null>(readPicked());
 
   get hasAny() {
     return this.enrolments.length > 0;
+  }
+
+  /** The enrolment the apprentice shell shows: their last pick if still valid, else the first one. */
+  get currentEnrolmentId(): string | null {
+    const picked = this.#pickedId;
+    if (picked && this.enrolments.some((e) => e.id === picked)) return picked;
+    return this.enrolments[0]?.id ?? null;
+  }
+
+  get current(): MyEnrolment | null {
+    const id = this.currentEnrolmentId;
+    return this.enrolments.find((e) => e.id === id) ?? null;
+  }
+
+  setCurrent(id: string) {
+    this.#pickedId = id;
+    try {
+      localStorage.setItem(PICKED_KEY, id);
+    } catch {
+      // storage blocked — the pick just won't survive a reload
+    }
   }
 
   load(force = false): Promise<void> {

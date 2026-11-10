@@ -87,6 +87,8 @@
             <Table.Head>OTJ time</Table.Head>
             <Table.Head>Created</Table.Head>
             <Table.Head>By</Table.Head>
+            <Table.Head>Marked by</Table.Head>
+            <Table.Head>Marked on</Table.Head>
           </Table.Row>
         </Table.Header>
         <Table.Body>
@@ -111,6 +113,8 @@
               <Table.Cell>{e.includeOtj ? fmtMinutes(e.minutes) : '—'}</Table.Cell>
               <Table.Cell class="whitespace-nowrap">{fmtDate(e.createdAt)}</Table.Cell>
               <Table.Cell>{e.createdByName ?? '—'}</Table.Cell>
+              <Table.Cell>{e.reviewedByName ?? '—'}</Table.Cell>
+              <Table.Cell class="whitespace-nowrap">{fmtDate(e.reviewedAt)}</Table.Cell>
             </Table.Row>
           {/each}
         </Table.Body>

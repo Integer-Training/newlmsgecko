@@ -6,6 +6,7 @@ import type { Actor } from '@cio/db/actor';
 
 vi.mock('@cio/db/queries/apprenticeship', () => ({
   isProgrammeTutor: vi.fn(async () => false),
+  countOnboardingTypes: vi.fn(async () => 1),
   getApprEnrolment: vi.fn(),
   getApprEnrolmentByProgrammeLearner: vi.fn(),
   getApprEvidence: vi.fn(),
@@ -294,6 +295,26 @@ describe('learners table status computation', () => {
     expect(byId.learning).toMatchObject({ stage: 'IN_LEARNING', gatewayReady: false });
     expect(byId.gw).toMatchObject({ stage: 'EPA_BOOKED', stageLabel: 'EPA booked' });
     expect(byId.plain.glh).toEqual({ targetMinutes: null, doneMinutes: 0, expectedMinutes: null });
+  });
+
+  it('passes the displayed tutors (named or programme) and onboarding counts through, and the noTutor / onboarding filters to the query', async () => {
+    const onboarding = { required: 3, approved: 2, submitted: 1, rejected: 0 };
+    vi.mocked(q.listEnrolmentRows).mockResolvedValue([
+      row('named', 'Ann', { tutors: [{ id: 't1', name: 'Tina T', kind: 'NAMED' }], onboarding }),
+      row('prog', 'Bob', { tutors: [{ id: 't2', name: 'Pat P', kind: 'PROGRAMME' }] }),
+      row('none', 'Cat', {})
+    ] as never);
+    const res = await listEnrolments(admin, { ...query, noTutor: true, onboarding: 'incomplete' }, NOW);
+    const byId = Object.fromEntries(res.items.map((i) => [i.id, i]));
+    expect(byId.named.tutors).toEqual([{ id: 't1', name: 'Tina T', kind: 'NAMED' }]);
+    expect(byId.named.onboarding).toEqual(onboarding);
+    expect(byId.prog.tutors).toEqual([{ id: 't2', name: 'Pat P', kind: 'PROGRAMME' }]);
+    expect(byId.prog.onboarding).toBeNull();
+    expect(byId.none.tutors).toEqual([]);
+    expect(vi.mocked(q.listEnrolmentRows).mock.calls[0][0]).toMatchObject({
+      noTutor: true,
+      onboardingIncomplete: true
+    });
   });
 
   it('runs ONE rows query scoped to the actor (tutor → allocated, learner → self)', async () => {

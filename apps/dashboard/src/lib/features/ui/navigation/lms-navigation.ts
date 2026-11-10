@@ -1,12 +1,19 @@
 import {
+  AttachmentIcon,
   CertificateIcon,
+  ChartColumnIcon,
   CommunityIcon,
+  ContentIcon,
   CourseIcon,
+  DashboardIcon,
   ExerciseIcon,
   ExploreIcon,
   GoalIcon,
   HomeIcon,
-  SettingsIcon
+  NewsFeedIcon,
+  ReviewIcon,
+  SettingsIcon,
+  SetupIcon
 } from '@cio/ui/custom/moving-icons';
 
 import type { AccountOrg } from '$features/app/types';
@@ -20,6 +27,7 @@ import {
   EXPLORE_ENABLED
 } from '$lib/utils/constants/features';
 import { myApprenticeshipApi } from '$features/apprenticeship/api/my-apprenticeship.svelte';
+import { apprenticeShell } from '$features/apprenticeship/api/apprentice-shell.svelte';
 
 export interface NavItem {
   title: string;
@@ -29,6 +37,8 @@ export interface NavItem {
   isActive?: boolean;
   isExpanded?: boolean;
   show?: () => boolean;
+  /** Small pill after the title (e.g. onboarding progress); undefined/null = none. */
+  badge?: string | null;
   items?: NavItem[];
   useHashUrl?: boolean;
   nestedRoutes?: NestedRouteConfig[];
@@ -46,6 +56,8 @@ export interface NavItemConfig {
   icon?: Component;
   show?: (currentOrg: AccountOrg | null) => boolean;
   matchPattern?: string;
+  /** Evaluated on every render so a rune-backed value stays reactive. */
+  badge?: () => string | null;
   items?: NavItemConfig[];
   useHashUrl?: boolean;
   nestedRoutes?: NestedRouteConfig[];
@@ -129,6 +141,99 @@ export const baseNavConfig: NavItemConfig[] = [
   }
 ];
 
+const APPRENTICE_BASE = '/apprenticeship';
+
+// Gecko Apprenticeships — the separate shell a learner with an apprenticeship enrolment gets. Replaces the whole
+// learner sidebar (Home / Exercises are course-dashboard concepts and stay hidden). Notifications have no page of
+// their own (only the header bell), so they are not listed here.
+export const apprenticeNavConfig: NavItemConfig[] = [
+  {
+    titleKey: 'Dashboard',
+    path: APPRENTICE_BASE,
+    icon: DashboardIcon,
+    matchPattern: '^/lms/apprenticeship/?$'
+  },
+  {
+    titleKey: 'Onboarding',
+    path: `${APPRENTICE_BASE}/onboarding`,
+    icon: SetupIcon,
+    matchPattern: '^/lms/apprenticeship/onboarding(/.*)?$',
+    badge: () => {
+      const o = apprenticeShell.onboarding;
+      if (!o || o.enrolmentId !== myApprenticeshipApi.currentEnrolmentId || o.complete) return null;
+      return `${o.approved}/${o.required}`;
+    }
+  },
+  {
+    titleKey: 'Units & criteria',
+    path: `${APPRENTICE_BASE}/units`,
+    icon: ContentIcon,
+    matchPattern: '^/lms/apprenticeship/units(/.*)?$'
+  },
+  {
+    titleKey: 'Evidence',
+    path: `${APPRENTICE_BASE}/evidence`,
+    icon: AttachmentIcon,
+    matchPattern: '^/lms/apprenticeship/evidence(/.*)?$'
+  },
+  {
+    titleKey: 'Tasks',
+    path: `${APPRENTICE_BASE}/tasks`,
+    icon: ExerciseIcon,
+    matchPattern: '^/lms/apprenticeship/tasks(/.*)?$'
+  },
+  {
+    titleKey: 'Reviews',
+    path: `${APPRENTICE_BASE}/reviews`,
+    icon: ReviewIcon,
+    matchPattern: '^/lms/apprenticeship/reviews(/.*)?$'
+  },
+  {
+    titleKey: 'Off-the-job',
+    path: `${APPRENTICE_BASE}/otj`,
+    icon: ChartColumnIcon,
+    matchPattern: '^/lms/apprenticeship/otj(/.*)?$'
+  },
+  {
+    titleKey: 'Gateway',
+    path: `${APPRENTICE_BASE}/gateway`,
+    icon: GoalIcon,
+    matchPattern: '^/lms/apprenticeship/gateway(/.*)?$'
+  },
+  {
+    // Not under /lms — absolute link (see getLmsNavigationItems).
+    titleKey: 'Messages',
+    path: '/messages',
+    icon: NewsFeedIcon,
+    matchPattern: '^/messages(/.*)?$'
+  },
+  {
+    titleKey: 'My courses',
+    path: '/mylearning',
+    icon: CourseIcon,
+    matchPattern: '^/lms/mylearning(/.*)?$',
+    // Only for apprentices who also have course enrolments (the same enrolled-courses list the course dashboard uses).
+    show: () => apprenticeShell.hasCourses === true
+  },
+  {
+    titleKey: 'lms_navigation.settings',
+    path: '/settings/notifications',
+    icon: SettingsIcon,
+    matchPattern: '^/lms/settings(/.*)?$'
+  }
+];
+
+/** The nav config in force: the apprentice shell for learners with an apprenticeship, else the standard learner one. */
+export function getActiveLmsNavConfig(): NavItemConfig[] {
+  return myApprenticeshipApi.hasAny ? apprenticeNavConfig : baseNavConfig;
+}
+
+/** Messages lives outside /lms; every other config path is under it. */
+export function lmsUrlFor(path: string): string {
+  if (path === '') return '/lms';
+  return path === '/messages' ? path : `/lms${path}`;
+}
+
 /**
  * Get LMS navigation items based on organization context
  */
@@ -139,14 +244,14 @@ export function getLmsNavigationItems(
 ): NavItem[] {
   const items: NavItem[] = [];
 
-  for (const config of baseNavConfig) {
+  for (const config of getActiveLmsNavConfig()) {
     // Skip items that should be hidden based on customization
     if (config.show && !config.show(currentOrg)) {
       continue;
     }
 
-    const url = config.path === '' ? '/lms' : `/lms${config.path}`;
-    const fullPath = config.path === '' ? '/lms' : `/lms${config.path}`;
+    const url = lmsUrlFor(config.path);
+    const fullPath = url;
 
     const item: NavItem = {
       title: t(config.titleKey),
@@ -155,6 +260,7 @@ export function getLmsNavigationItems(
       icon: config.icon,
       isActive: isActive(pagePathname, fullPath, config.matchPattern),
       isExpanded: config.items ? isActive(pagePathname, fullPath, config.matchPattern) : undefined,
+      badge: config.badge?.() ?? null,
       useHashUrl: config.useHashUrl,
       nestedRoutes: config.nestedRoutes,
       supportsDynamicSegment: config.supportsDynamicSegment,

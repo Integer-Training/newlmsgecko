@@ -208,3 +208,36 @@ tree (programme structure GET is `requireStaff`); Add learner pickers show full 
 (`splitUnitCode`; re-import fills an empty code only); file links open before the await (popup blockers).
 Verified end to end on the local stack (learner upload → tutor alert → refer → resubmit → accept → learner alert,
 every shell page and cross-role block) — API 855 pass / 15 known baseline failures.
+
+## Apprentice shell, table data, onboarding documents (2026-11-10)
+
+**Tutor display rule (every table).** Show the learner's NAMED tutor (tutor_allocation); if none, the programme
+tutor(s) labelled "(programme)"; if neither, an amber "No tutor" chip. SQL: `tutorsDisplaySql` / `noTutorSql`
+(`queries/apprenticeship/tutors.ts`); UI: `components/shared/tutor-cell.svelte` + `tutorNames()`. The portfolio
+Tutors dialog still manages NAMED tutors only (`getEnrolmentTutors` filters out the programme fallback).
+
+**Tables.** To mark: + Tutor, Task (title + due), Waiting. Learners: email, start → planned end, Tutor (rule),
+Onboarding approved/required, filters `noTutor=true` and `onboarding=incomplete`. Evidence tab: Marked by / on. OTJ
+tab: By. Reviews: signer names + dates, Next review. Plan assignees: tutor + overdue count. Programmes: Tutors.
+Gateway: who ticked / confirmed and when.
+
+**Apprentice shell.** A learner with any apprenticeship enrolment (`myApprenticeshipApi.hasAny`, awaited in the
+`/lms` layout) gets `apprenticeNavConfig` (`lms-navigation.ts`) instead of the course sidebar: Dashboard ·
+Onboarding (badge x/y) · Units & criteria · Evidence · Tasks · Reviews · Off-the-job · Gateway · Messages · My
+courses (only if they also have course enrolments) · Settings. `/lms` and post-login land on `/lms/apprenticeship`
+(apprentice dashboard). Section routes `/lms/apprenticeship/{onboarding,units,evidence,tasks,reviews,otj,gateway}`
+render the existing portfolio tab components for the current enrolment (switcher when several; per-viewer
+localStorage). Learners without an apprenticeship see the unchanged course sidebar.
+
+**Onboarding documents (migration 0032).** `appr_onboarding_doc_type` (org-configurable, programme-scoped or all,
+required, allow "I don't have this", order, active; 9 defaults seeded on first read under an advisory lock) and
+`appr_onboarding_doc` (one slot per enrolment + type; SUBMITTED | APPROVED | REJECTED). Complete = every active
+required applicable type APPROVED (computed on read). Access: admin everything; learner self (upload / replace /
+withdraw until APPROVED; sees own files); tutor STATUS ONLY (no files, no writes); else 404. File keys are prefixed
+per enrolment + type and must be live `appr_upload` rows for the learner (key-injection guard); dropped files go to
+the clean-up job. Review is optimistic on the status the reviewer saw (409 if stale); reject needs a reason.
+Notifications: `appr.onboarding.submitted` (admins), `.reviewed` (learner), `.complete` (named tutors + admins, once,
+on the incomplete → complete transition). Admin: portfolio Onboarding tab; Apprenticeships › Settings › Onboarding
+documents (types in use can only be deactivated). Endpoints under `/apprenticeship`: `GET|DELETE|PUT
+/enrolments/:id/onboarding[/:docTypeId]`, `POST .../presign`, `.../:docTypeId/review`, `.../:docTypeId/download`,
+`GET|POST /onboarding-types`, `PATCH|DELETE /onboarding-types/:typeId`, `PUT /onboarding-types/order`.

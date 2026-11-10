@@ -22,6 +22,47 @@ export function tutorReachSql(learnerCol: string, programmeCol: string, tutorId:
     or exists (select 1 from appr_programme_tutor apt where apt.programme_id = ${sql.raw(programmeCol)} and apt.tutor_id = ${tutorId}))`;
 }
 
+export interface ApprTutorDisplay {
+  id: string;
+  name: string;
+  kind: 'NAMED' | 'PROGRAMME';
+}
+
+/**
+ * The tutors to SHOW for a row, as one JSON array (correlated subquery, so a list stays ONE statement): the learner's
+ * NAMED tutors (allocation) when there are any, else the programme's tutors (still role-2 members of the org), else
+ * `[]` (the UI shows "No tutor"). Same outer-column rule as tutorReachSql: fully-qualified raw names.
+ */
+export function tutorsDisplaySql(learnerCol: string, programmeCol: string, orgCol: string) {
+  const l = sql.raw(learnerCol);
+  const p = sql.raw(programmeCol);
+  const o = sql.raw(orgCol);
+  return sql<ApprTutorDisplay[]>`coalesce(
+    (select json_agg(json_build_object('id', x.id, 'name', x.name, 'kind', 'NAMED') order by x.name) from (
+      select tp.id, coalesce(nullif(tu.name, ''), tp.fullname) as name
+      from tutor_allocation ta join profile tp on tp.id = ta.tutor_id left join "user" tu on tu.id = tp.id
+      where ta.learner_id = ${l} and ta.organization_id = ${o}) x
+     having count(*) > 0),
+    (select json_agg(json_build_object('id', y.id, 'name', y.name, 'kind', 'PROGRAMME') order by y.name) from (
+      select pp.id, coalesce(nullif(pu.name, ''), pp.fullname, pp.email) as name
+      from appr_programme_tutor apt join profile pp on pp.id = apt.tutor_id left join "user" pu on pu.id = pp.id
+      join organizationmember pom on pom.organization_id = apt.organization_id and pom.profile_id = apt.tutor_id and pom.role_id = ${ROLE_TUTOR_ID}
+      where apt.programme_id = ${p} and apt.organization_id = ${o}) y
+     having count(*) > 0),
+    '[]'::json)`;
+}
+
+/** SQL condition "no named tutor AND no programme tutor" for the row (the learners "no tutor" filter). */
+export function noTutorSql(learnerCol: string, programmeCol: string, orgCol: string) {
+  const l = sql.raw(learnerCol);
+  const p = sql.raw(programmeCol);
+  const o = sql.raw(orgCol);
+  return sql`(not exists (select 1 from tutor_allocation nta where nta.learner_id = ${l} and nta.organization_id = ${o})
+    and not exists (select 1 from appr_programme_tutor npt
+      join organizationmember nom on nom.organization_id = npt.organization_id and nom.profile_id = npt.tutor_id and nom.role_id = ${ROLE_TUTOR_ID}
+      where npt.programme_id = ${p} and npt.organization_id = ${o}))`;
+}
+
 /** Is this tutor assigned to this programme? */
 export async function isProgrammeTutor(programmeId: string, tutorId: string, client: DbOrTxClient = db) {
   const [row] = await client

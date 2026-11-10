@@ -32,7 +32,14 @@ export async function listApprProgrammesWithCounts(organizationId: string, statu
       qualificationCount: sql<number>`(select count(*) from appr_qualification q where q.programme_id = ${sql.raw('"appr_programme"."id"')})::int`,
       unitCount: sql<number>`(select count(*) from appr_unit u join appr_qualification q on q.id = u.qualification_id where q.programme_id = ${sql.raw('"appr_programme"."id"')})::int`,
       criterionCount: sql<number>`(select count(*) from appr_criterion c join appr_unit u on u.id = c.unit_id join appr_qualification q on q.id = u.qualification_id where q.programme_id = ${sql.raw('"appr_programme"."id"')})::int`,
-      learnerCount: sql<number>`(select count(*) from appr_enrolment e where e.programme_id = ${sql.raw('"appr_programme"."id"')})::int`
+      learnerCount: sql<number>`(select count(*) from appr_enrolment e where e.programme_id = ${sql.raw('"appr_programme"."id"')})::int`,
+      // Programme tutors that are still role-2 members of the org (same rule as listTutorsForProgramme).
+      tutorNames: sql<
+        string[]
+      >`coalesce((select json_agg(coalesce(nullif(tu.name, ''), tp.fullname, tp.email) order by coalesce(nullif(tu.name, ''), tp.fullname, tp.email))
+        from appr_programme_tutor apt join profile tp on tp.id = apt.tutor_id left join "user" tu on tu.id = tp.id
+        join organizationmember om on om.organization_id = apt.organization_id and om.profile_id = apt.tutor_id and om.role_id = 2
+        where apt.programme_id = ${sql.raw('"appr_programme"."id"')}), '[]'::json)`
     })
     .from(p)
     .where(

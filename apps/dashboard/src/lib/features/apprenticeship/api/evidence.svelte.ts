@@ -2,7 +2,7 @@ import axios from 'axios';
 import { classroomio } from '$lib/utils/services/api';
 import { snackbar } from '$features/ui/snackbar/store';
 import { call, type CallResult } from './call';
-import type { ProgressSummary } from './enrolments.svelte';
+import type { ProgressSummary, TutorsInput } from './enrolments.svelte';
 
 // Gecko Apprenticeships — admin client for evidence: list / detail / create / edit / review / notes, file upload
 // (presign → PUT → list on the row) and the marking queue. Shapes mirror apps/api/src/services/apprenticeship/evidence.ts.
@@ -28,6 +28,9 @@ export interface EvidenceListItem {
   createdAt: string;
   createdBy: string | null;
   createdByName: string | null;
+  reviewedBy?: string | null;
+  reviewedByName?: string | null;
+  reviewedAt?: string | null;
   criteriaCount: number;
   fileCount: number;
 }
@@ -102,8 +105,14 @@ export interface ToMarkItem {
   programmeId: string;
   programmeTitle: string;
   criteriaCount: number;
-  /** Not on the queue row today; shown when the API provides it. */
+  typeKey?: string;
   typeLabel?: string | null;
+  /** When it was (re)submitted for marking. */
+  submittedAt?: string;
+  taskId?: string | null;
+  taskTitle?: string | null;
+  taskDueDate?: string | null;
+  tutors: TutorsInput;
 }
 
 export interface ToMarkPage {

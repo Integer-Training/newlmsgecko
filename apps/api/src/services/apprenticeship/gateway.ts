@@ -6,6 +6,7 @@ import {
   requireAuthed
 } from '@api/services/apprenticeship/access';
 import { resolveChecklist } from '@api/services/apprenticeship/gateway-core';
+import { nameGatewayActors } from '@api/services/apprenticeship/gateway-names';
 import { notifyGatewayReadyOrRelease } from '@api/services/apprenticeship/notifications';
 import { buildEnrolmentProgress, recomputeEnrolment, todayIso } from '@api/services/apprenticeship/progress';
 import type { Actor } from '@cio/db/actor';
@@ -93,7 +94,7 @@ export async function getGateway(actor: Actor, enrolmentId: string) {
   const enrolment = await getEnrolmentForActor(actor, enrolmentId);
   const detail = await buildEnrolmentProgress(enrolment.id);
   if (!detail) throw new AppError('Learner portfolio not found', ErrorCodes.NOT_FOUND, 404);
-  return { ...detail.gateway, glh: detail.glh };
+  return { ...(await nameGatewayActors(detail.gateway)), glh: detail.glh };
 }
 
 export async function setGatewayItem(actor: Actor, enrolmentId: string, key: string, input: GatewayTickInput) {
@@ -119,7 +120,7 @@ export async function setGatewayItem(actor: Actor, enrolmentId: string, key: str
   });
   if (result?.gatewayReadyClaimed) await sendReady(enrolment);
   await audit(actor, 'appr.gateway.item_set', enrolment.id, { key, done: input.done });
-  return { ...result!.gateway, glh: result!.glh };
+  return { ...(await nameGatewayActors(result!.gateway)), glh: result!.glh };
 }
 
 export async function confirmGateway(actor: Actor, enrolmentId: string) {

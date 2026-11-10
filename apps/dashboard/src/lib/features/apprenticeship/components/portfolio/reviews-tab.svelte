@@ -65,6 +65,19 @@
     await store.refresh();
   }
 
+  // Who signed and when, one short line per party that has signed ("Tutor: Tina T · 3 Nov").
+  const shortDate = (iso: string | null) => {
+    if (!iso) return '';
+    const dt = new Date(iso);
+    return Number.isNaN(dt.getTime()) ? '' : dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  };
+  const signers = (r: ReviewItem) =>
+    [
+      { role: 'Tutor', name: r.tutorSignedName, at: r.tutorSignedAt },
+      { role: 'Learner', name: r.learnerSignedName, at: r.learnerSignedAt },
+      { role: 'Employer', name: r.employerSignedName, at: r.employerSignedAt }
+    ].filter((s) => s.name || s.at);
+
   const signedCount = (r: ReviewItem) =>
     [r.signatures.tutor, r.signatures.learner, r.signatures.employer].filter(Boolean).length;
 </script>
@@ -125,7 +138,8 @@
             <Table.Head>Scheduled</Table.Head>
             <Table.Head>Held</Table.Head>
             <Table.Head>Status</Table.Head>
-            <Table.Head class="text-right">Signatures</Table.Head>
+            <Table.Head>Signatures</Table.Head>
+            <Table.Head>Next review</Table.Head>
             <Table.Head>Targets</Table.Head>
           </Table.Row>
         </Table.Header>
@@ -146,7 +160,18 @@
               </Table.Cell>
               <Table.Cell class="whitespace-nowrap">{fmtDate(r.heldDate)}</Table.Cell>
               <Table.Cell><ReviewStatusChip status={r.status} overdue={r.overdue} /></Table.Cell>
-              <Table.Cell class="text-right">{r.status === 'CANCELLED' ? '—' : `${signedCount(r)} / 3`}</Table.Cell>
+              <Table.Cell class="text-xs">
+                {#if r.status === 'CANCELLED' || signers(r).length === 0}
+                  <span class="text-(--muted-foreground)">—</span>
+                {:else}
+                  {#each signers(r) as s (s.role)}
+                    <p class="whitespace-nowrap">
+                      {s.role}: {s.name ?? '—'}{s.at ? ` · ${shortDate(s.at)}` : ''}
+                    </p>
+                  {/each}
+                {/if}
+              </Table.Cell>
+              <Table.Cell class="whitespace-nowrap">{fmtDate(r.nextReviewDate)}</Table.Cell>
               <Table.Cell>{r.targets.length || '—'}</Table.Cell>
             </Table.Row>
           {/each}

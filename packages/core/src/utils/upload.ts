@@ -161,3 +161,27 @@ export function generateApprenticeshipTaskFileKey(
 ): string {
   return `${apprenticeshipTaskKeyPrefix(programmeId, learnerId, taskId)}${generateFileKey(fileName)}`;
 }
+
+/**
+ * Key prefix for one apprentice's onboarding document slot:
+ * `apprenticeship/{programmeId}/{learnerId}/onboarding/{enrolmentId}/{docTypeId}/`. Sensitive (photo ID etc.):
+ * downloads are re-guarded by the onboarding access rule (admin or the learner), never by the path.
+ */
+export function apprenticeshipOnboardingKeyPrefix(
+  programmeId: string,
+  learnerId: string,
+  enrolmentId: string,
+  docTypeId: string
+): string {
+  return `apprenticeship/${programmeId}/${learnerId}/onboarding/${enrolmentId}/${docTypeId}/`;
+}
+
+export function generateApprenticeshipOnboardingFileKey(
+  programmeId: string,
+  learnerId: string,
+  enrolmentId: string,
+  docTypeId: string,
+  fileName: string
+): string {
+  return `${apprenticeshipOnboardingKeyPrefix(programmeId, learnerId, enrolmentId, docTypeId)}${generateFileKey(fileName)}`;
+}

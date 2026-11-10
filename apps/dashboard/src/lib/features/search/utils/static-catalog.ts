@@ -1,5 +1,5 @@
 import type { AccountOrg } from '$features/app/types';
-import { baseNavConfig as lmsNavConfig } from '$features/ui/navigation/lms-navigation';
+import { getActiveLmsNavConfig, lmsUrlFor } from '$features/ui/navigation/lms-navigation';
 import { baseNavConfig as orgNavConfig } from '$features/ui/navigation/org-navigation';
 import type { SearchResultItem } from './types';
 
@@ -68,12 +68,12 @@ export function buildLmsStaticCatalog(
 ): SearchResultItem[] {
   const items: SearchResultItem[] = [];
 
-  for (const navItem of lmsNavConfig) {
+  for (const navItem of getActiveLmsNavConfig()) {
     if (navItem.show && !navItem.show(currentOrg)) {
       continue;
     }
 
-    const url = navItem.path === '' ? '/lms' : `/lms${navItem.path}`;
+    const url = lmsUrlFor(navItem.path);
 
     if (!navItem.useHashUrl) {
       items.push({

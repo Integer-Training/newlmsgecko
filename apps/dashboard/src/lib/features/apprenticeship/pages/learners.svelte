@@ -13,12 +13,13 @@
   import { APPR_PROGRESS_STATUSES, type ApprProgressStatus } from '@cio/utils/constants/apprenticeship';
   import { currentOrg, isOrgAdmin } from '$lib/utils/store/org';
   import { apprenticeshipsBase } from '../utils/paths';
-  import { enrolmentsApi, tutorNames } from '../api/enrolments.svelte';
+  import { enrolmentsApi } from '../api/enrolments.svelte';
   import AddLearnerDialog from '../components/learners/add-learner-dialog.svelte';
   import ProgressBar from '../components/shared/progress-bar.svelte';
   import StatusChip from '../components/shared/status-chip.svelte';
   import StageChip from '../components/shared/stage-chip.svelte';
-  import { fmtMinutes, fmtPct, STATUS_LABEL } from '../components/shared/format';
+  import TutorCell from '../components/shared/tutor-cell.svelte';
+  import { fmtDate, fmtMinutes, fmtPct, STATUS_LABEL } from '../components/shared/format';
 
   // Gecko Apprenticeships — the learners table. One row per enrolment: qualification progress against where the
   // learner should be, off-the-job hours, RAG status, tutor and how much is waiting to be marked. Filters and the
@@ -30,6 +31,8 @@
   let programmeId = $state('');
   let tutorId = $state('');
   let status = $state<ApprProgressStatus | ''>('');
+  let noTutor = $state(false);
+  let onboardingIncomplete = $state(false);
   let searchValue = $state('');
   let debouncedSearch = $state('');
   let page = $state(1);
@@ -39,7 +42,9 @@
   const base = $derived(apprenticeshipsBase(appPage.url.pathname, $currentOrg.siteName));
   const list = $derived(enrolmentsApi.list);
   const totalPages = $derived(list ? Math.max(1, Math.ceil(list.total / list.pageSize)) : 1);
-  const hasFilters = $derived(!!programmeId || !!tutorId || !!status || !!debouncedSearch);
+  const hasFilters = $derived(
+    !!programmeId || !!tutorId || !!status || !!debouncedSearch || noTutor || onboardingIncomplete
+  );
 
   onMount(() => {
     enrolmentsApi.loadOptions($isOrgAdmin === true);
@@ -55,7 +60,7 @@
   // Any filter change goes back to page 1 and refetches; so does paging.
   let lastKey = '';
   $effect(() => {
-    const key = JSON.stringify([programmeId, tutorId, status, debouncedSearch]);
+    const key = JSON.stringify([programmeId, tutorId, status, debouncedSearch, noTutor, onboardingIncomplete]);
     let p = page;
     if (key !== lastKey) {
       if (lastKey !== '' && p !== 1) {
@@ -70,6 +75,8 @@
       tutorId: tutorId || undefined,
       status: status || undefined,
       search: debouncedSearch || undefined,
+      noTutor: noTutor || undefined,
+      onboarding: onboardingIncomplete ? ('incomplete' as const) : undefined,
       page: p,
       pageSize: PAGE_SIZE
     };
@@ -80,6 +87,8 @@
     programmeId = '';
     tutorId = '';
     status = '';
+    noTutor = false;
+    onboardingIncomplete = false;
     searchValue = '';
     debouncedSearch = '';
   }
@@ -182,6 +191,28 @@
           <span class="text-xs text-(--muted-foreground)">Search</span>
           <Search placeholder="Learner name or email" class="ui:max-w-[260px]" bind:value={searchValue} />
         </div>
+        <div class="flex gap-2" role="group" aria-label="Quick filters">
+          <button
+            type="button"
+            aria-pressed={noTutor}
+            class="rounded-full border px-3 py-1 text-sm {noTutor
+              ? 'border-(--primary) bg-(--primary) text-(--primary-foreground)'
+              : 'hover:bg-(--muted)'}"
+            onclick={() => (noTutor = !noTutor)}
+          >
+            No tutor
+          </button>
+          <button
+            type="button"
+            aria-pressed={onboardingIncomplete}
+            class="rounded-full border px-3 py-1 text-sm {onboardingIncomplete
+              ? 'border-(--primary) bg-(--primary) text-(--primary-foreground)'
+              : 'hover:bg-(--muted)'}"
+            onclick={() => (onboardingIncomplete = !onboardingIncomplete)}
+          >
+            Onboarding incomplete
+          </button>
+        </div>
         {#if hasFilters}
           <Button variant="ghost" onclick={reset}>Reset filters</Button>
         {/if}
@@ -218,6 +249,7 @@
                 <Table.Head class="min-w-52">Off-the-job</Table.Head>
                 <Table.Head>Status</Table.Head>
                 <Table.Head>Tutor</Table.Head>
+                <Table.Head>Onboarding</Table.Head>
                 <Table.Head class="text-right">To mark</Table.Head>
                 <Table.Head><span class="sr-only">Actions</span></Table.Head>
               </Table.Row>
@@ -227,7 +259,13 @@
                 <Table.Row class="cursor-pointer" onclick={() => open(r.id)}>
                   <Table.Cell>
                     <p class="font-medium">{r.learner.name}</p>
+                    {#if r.learner.email}
+                      <p class="text-xs text-(--muted-foreground)">{r.learner.email}</p>
+                    {/if}
                     <p class="text-xs text-(--muted-foreground)">{r.programmeTitle}</p>
+                    <p class="text-xs text-(--muted-foreground)">
+                      {fmtDate(r.startDate)} → {fmtDate(r.plannedEndDate)}
+                    </p>
                     {#if (r.overdueTaskCount ?? 0) > 0 || r.reviewOverdue}
                       <div class="mt-1 flex flex-wrap gap-1">
                         {#if (r.overdueTaskCount ?? 0) > 0}
@@ -275,7 +313,23 @@
                       <StageChip stage={r.stage} label={r.stageLabel} />
                     </div>
                   </Table.Cell>
-                  <Table.Cell class="text-sm">{tutorNames(r.tutors)}</Table.Cell>
+                  <Table.Cell><TutorCell tutors={r.tutors} /></Table.Cell>
+                  <Table.Cell>
+                    {#if !r.onboarding || r.onboarding.required === 0}
+                      <span class="text-(--muted-foreground)">—</span>
+                    {:else if r.onboarding.approved >= r.onboarding.required}
+                      <span
+                        class="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium whitespace-nowrap text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300"
+                        aria-label="Onboarding complete">✓ Complete</span
+                      >
+                    {:else}
+                      <span
+                        class="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium whitespace-nowrap text-amber-800 dark:bg-amber-500/20 dark:text-amber-300"
+                        aria-label="Onboarding {r.onboarding.approved} of {r.onboarding.required} approved"
+                        >{r.onboarding.approved}/{r.onboarding.required}</span
+                      >
+                    {/if}
+                  </Table.Cell>
                   <Table.Cell class="text-right">
                     {#if r.toMark > 0}
                       <span

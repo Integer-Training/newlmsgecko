@@ -1,7 +1,7 @@
 <script lang="ts">
-  import MyApprenticeship from '$features/apprenticeship/pages/my-apprenticeship.svelte';
+  import ApprenticeDashboard from '$features/apprenticeship/pages/apprentice-dashboard.svelte';
 </script>
 
 <svelte:head><title>My apprenticeship</title></svelte:head>
 
-<MyApprenticeship />
+<ApprenticeDashboard />

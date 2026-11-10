@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@cio/db/queries/apprenticeship', () => ({
   isProgrammeTutor: vi.fn(async () => false),
+  countOnboardingTypes: vi.fn(async () => 1),
   listUploadsForCleanup: vi.fn(),
   listReferencedUploadKeys: vi.fn(async () => new Set<string>()),
   markUploadsAttached: vi.fn(async () => undefined),
