@@ -9,6 +9,7 @@ vi.mock('@cio/db/queries/allocation', () => ({
   listTutorsForLearnerInOrg: vi.fn(async () => [])
 }));
 vi.mock('@cio/db/queries/apprenticeship', () => ({
+  isProgrammeTutor: vi.fn(async () => false),
   listOrgAdminIds: vi.fn(async () => []),
   releaseGatewayReady: vi.fn(async () => undefined)
 }));

@@ -1,6 +1,7 @@
 import * as schema from '@db/schema';
 
 import { and, asc, db, desc, eq, inArray, sql, type DbOrTxClient, type SQL } from '@db/drizzle';
+import { tutorReachSql } from './tutors';
 import { profileDisplayName } from './names';
 
 // Gecko Apprenticeships — evidence reads/writes. No access control here: services resolve the actor and the enrolment
@@ -220,7 +221,7 @@ export async function listEvidenceForCriterion(
 export interface ToMarkScope {
   organizationId: string;
   programmeId?: string;
-  /** TUTOR actor: only learners allocated to this tutor. */
+  /** TUTOR actor: only rows this tutor reaches (named tutor or programme tutor). */
   restrictToTutorId?: string;
 }
 
@@ -235,7 +236,7 @@ export async function listToMark(
   if (scope.programmeId) conditions.push(eq(ev.programmeId, scope.programmeId));
   if (scope.restrictToTutorId) {
     conditions.push(
-      sql`exists (select 1 from tutor_allocation ta where ta.learner_id = ${sql.raw('"appr_evidence"."learner_id"')} and ta.tutor_id = ${scope.restrictToTutorId})`
+      tutorReachSql('"appr_evidence"."learner_id"', '"appr_evidence"."programme_id"', scope.restrictToTutorId)
     );
   }
   return client

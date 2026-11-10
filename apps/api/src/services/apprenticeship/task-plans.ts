@@ -11,6 +11,7 @@ import { recordAudit } from '@cio/db/audit';
 import { runInTransaction } from '@cio/db/drizzle';
 import {
   countPlanTasksWithEvidence,
+  isProgrammeTutor,
   isTutorAllocatedToPlanLearner,
   markUploadsRemoved,
   deleteAllPlannedPlanTasks,
@@ -157,8 +158,14 @@ export async function signPlanDownloads(actor: Actor, planId: string, keys: stri
   }
   const plan = await getTaskPlan(planId);
   if (!plan || plan.organizationId !== a.orgId) throw notFound();
-  // A tutor sees a plan brief only through a learner they are allocated to who holds a task from it.
-  if (a.role === 'TUTOR' && !(await isTutorAllocatedToPlanLearner(plan.id, a.userId))) throw notFound();
+  // A tutor sees a plan brief as a tutor of the plan's programme, or through a learner they reach who holds a task from it.
+  if (
+    a.role === 'TUTOR' &&
+    !(await isProgrammeTutor(plan.programmeId, a.userId)) &&
+    !(await isTutorAllocatedToPlanLearner(plan.id, a.userId))
+  ) {
+    throw notFound();
+  }
   const items = await listPlanItems(plan.id);
   const owned = new Set([...plan.files, ...items.flatMap((i) => i.files)].map((f) => f.key));
   if (!keys.every((k) => owned.has(k))) {

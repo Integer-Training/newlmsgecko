@@ -125,7 +125,8 @@ export function toBriefFiles(files: EvidenceFileInput[], existing: ApprTaskFile[
 async function loadTaskForActor(actor: Actor, taskId: string): Promise<ApprTaskRow> {
   requireAuthed(actor);
   const task = await getApprTask(taskId);
-  if (!task || !(await canAccessLearner(actor, task.organizationId, task.learnerId))) throw notFound();
+  if (!task || !(await canAccessLearner(actor, task.organizationId, task.learnerId, task.programmeId)))
+    throw notFound();
   return task;
 }
 

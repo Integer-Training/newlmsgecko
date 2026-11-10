@@ -5,6 +5,7 @@ import type { Actor } from '@cio/db/actor';
 // (start date + the programme's review interval), in the same transaction; the interval is tunable per programme.
 
 vi.mock('@cio/db/queries/apprenticeship', () => ({
+  isProgrammeTutor: vi.fn(async () => false),
   getApprProgramme: vi.fn(),
   getApprEnrolmentByProgrammeLearner: vi.fn(async () => null),
   getApprProgrammeStructure: vi.fn(async () => ({ qualifications: [], units: [{ id: 'u1' }], criteria: [] })),

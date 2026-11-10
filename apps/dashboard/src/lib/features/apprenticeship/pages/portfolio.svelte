@@ -7,7 +7,7 @@
   import { BackButton } from '@cio/ui/custom/back-button';
   import { page as appPage } from '$app/state';
   import { replaceState } from '$app/navigation';
-  import { currentOrg, isOrgTeamMember } from '$lib/utils/store/org';
+  import { currentOrg, isOrgAdmin, isOrgTeamMember } from '$lib/utils/store/org';
   import { apprenticeshipsBase } from '../utils/paths';
   import { PortfolioStore } from '../stores/portfolio.svelte';
   import SummaryStrip from '../components/portfolio/summary-strip.svelte';
@@ -20,6 +20,7 @@
   import TasksTab from '../components/portfolio/tasks-tab.svelte';
   import ReviewsTab from '../components/portfolio/reviews-tab.svelte';
   import DatesDialog from '../components/portfolio/dates-dialog.svelte';
+  import TutorsDialog from '../components/portfolio/tutors-dialog.svelte';
   import SpreadDialog from '../components/portfolio/spread-dialog.svelte';
   import EvidenceSheet from '../components/evidence/evidence-sheet.svelte';
 
@@ -38,6 +39,7 @@
   // svelte-ignore state_referenced_locally
   const store = new PortfolioStore(enrolmentId);
   let datesOpen = $state(false);
+  let tutorsOpen = $state(false);
   let spreadOpen = $state(false);
 
   onMount(() => {
@@ -111,7 +113,12 @@
         </div>
       {:else if store.data}
         <div class="space-y-4">
-          <SummaryStrip {store} onEditDates={() => (datesOpen = true)} onSpread={() => (spreadOpen = true)} />
+          <SummaryStrip
+            {store}
+            onEditDates={() => (datesOpen = true)}
+            onSpread={() => (spreadOpen = true)}
+            onTutors={() => (tutorsOpen = true)}
+          />
           {#if store.evidenceBlocked}
             <p
               role="status"
@@ -164,6 +171,7 @@
 
         {#if isStaffViewer}
           <DatesDialog bind:open={datesOpen} {store} />
+          {#if $isOrgAdmin}<TutorsDialog bind:open={tutorsOpen} {store} />{/if}
           <SpreadDialog bind:open={spreadOpen} {store} />
         {/if}
         <EvidenceSheet

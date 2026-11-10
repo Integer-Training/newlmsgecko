@@ -5136,3 +5136,41 @@ export const apprGlhLog = pgTable(
     index('idx_appr_glh_log_enrolment').on(table.enrolmentId)
   ]
 );
+
+// Programme-level tutor assignment (like a course's tutors): an assigned TUTOR may see and mark every enrolment of the
+// programme. The learner's NAMED tutor stays the tutor_allocation pair (alerts + review sign-off go to named tutors).
+export const apprProgrammeTutor = pgTable(
+  'appr_programme_tutor',
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    organizationId: uuid('organization_id').notNull(),
+    programmeId: uuid('programme_id').notNull(),
+    tutorId: uuid('tutor_id').notNull(),
+    createdBy: uuid('created_by'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId],
+      foreignColumns: [organization.id],
+      name: 'appr_programme_tutor_organization_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.programmeId],
+      foreignColumns: [apprProgramme.id],
+      name: 'appr_programme_tutor_programme_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.tutorId],
+      foreignColumns: [profile.id],
+      name: 'appr_programme_tutor_tutor_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.createdBy],
+      foreignColumns: [profile.id],
+      name: 'appr_programme_tutor_created_by_fkey'
+    }).onDelete('set null'),
+    unique('appr_programme_tutor_unique').on(table.programmeId, table.tutorId),
+    index('idx_appr_programme_tutor_tutor').on(table.tutorId)
+  ]
+);

@@ -15,6 +15,7 @@ import {
   type DbOrTxClient,
   type SQL
 } from '@db/drizzle';
+import { tutorReachSql } from './tutors';
 import { profileDisplayName } from './names';
 
 // Gecko Apprenticeships — task plans, plan items and learner tasks. No access control here: services resolve the actor
@@ -337,17 +338,12 @@ export async function lockApprTask(tx: DbOrTxClient, taskId: string) {
   await tx.select({ id: t.id }).from(t).where(eq(t.id, taskId)).for('update');
 }
 
-/** Is this tutor allocated to any learner holding a task from the plan? (plan-brief download access) */
+/** Does this tutor reach (named or programme tutor) any learner holding a task from the plan? (plan-brief download) */
 export async function isTutorAllocatedToPlanLearner(planId: string, tutorId: string, client: DbOrTxClient = db) {
   const [row] = await client
     .select({ n: sql<number>`1` })
     .from(t)
-    .where(
-      and(
-        eq(t.planId, planId),
-        sql`exists (select 1 from tutor_allocation ta where ta.learner_id = ${sql.raw('"appr_task"."learner_id"')} and ta.tutor_id = ${tutorId})`
-      )
-    )
+    .where(and(eq(t.planId, planId), tutorReachSql('"appr_task"."learner_id"', '"appr_task"."programme_id"', tutorId)))
     .limit(1);
   return Boolean(row);
 }
@@ -375,7 +371,7 @@ export async function setApprTaskStatus(tx: DbOrTxClient, taskId: string, status
 export interface OverdueTaskScope {
   organizationId: string;
   programmeId?: string;
-  /** TUTOR actor: only learners allocated to this tutor. */
+  /** TUTOR actor: only rows this tutor reaches (named tutor or programme tutor). */
   restrictToTutorId?: string;
 }
 
@@ -393,9 +389,7 @@ export async function listOverdueTasks(
   ];
   if (scope.programmeId) conditions.push(eq(t.programmeId, scope.programmeId));
   if (scope.restrictToTutorId) {
-    conditions.push(
-      sql`exists (select 1 from tutor_allocation ta where ta.learner_id = ${sql.raw('"appr_task"."learner_id"')} and ta.tutor_id = ${scope.restrictToTutorId})`
-    );
+    conditions.push(tutorReachSql('"appr_task"."learner_id"', '"appr_task"."programme_id"', scope.restrictToTutorId));
   }
   return client
     .select({

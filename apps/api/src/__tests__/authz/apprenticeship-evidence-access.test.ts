@@ -11,6 +11,7 @@ import type { AuthSession } from '@api/types/auth';
 // later phases only have to open routes.
 
 vi.mock('@cio/db/queries/apprenticeship', () => ({
+  isProgrammeTutor: vi.fn(async () => false),
   getApprProgramme: vi.fn(),
   getApprEnrolment: vi.fn(),
   getApprEnrolmentByProgrammeLearner: vi.fn(async () => null),

@@ -50,8 +50,9 @@ AUDIT note (who, what, status at the time); GENERAL notes are comments. Files: p
 
 ## Access (one helper)
 
-`apps/api/src/services/apprenticeship/access.ts`: ADMIN = whole org · TUTOR = only learners allocated to them ·
-LEARNER = self. Anything not visible is a 404. Phase A routes are admin-only; B/C only open routes.
+`apps/api/src/services/apprenticeship/access.ts`: ADMIN = whole org · TUTOR = learners allocated to them (NAMED tutor)
+OR every enrolment of a programme they are assigned to (PROGRAMME tutor, per enrolment — never the same learner on
+another programme) · LEARNER = self. Anything not visible is a 404. Phase A routes are admin-only; B/C only open routes.
 
 ## Data
 
@@ -176,6 +177,25 @@ Migration `0030_appr_glh_gateway.sql` (additive): `appr_glh_log`; `appr_enrolmen
 - Verified: API 1064 pass / 15 known baseline failures; independent review (no HIGH; 2 MEDIUM + 4 LOW fixed); local
   E2E 51 pass / 0 fail (GLH, checklist, ticks, ready alert once, confirm, learner lock, EPA rules, reopen, scan) and the
   Deploy 1 script re-run 58 pass.
+
+## Programme tutors + named tutors (2026-11-10)
+
+Owner decision: tutors are assigned to apprenticeship programmes the way they are assigned to courses, AND each
+apprentice keeps a named tutor.
+
+- **Programme tutor** — `appr_programme_tutor` (migration `0031_appr_programme_tutor.sql`). Set per tutor in Tutor
+  Management › **Apprenticeships** (exact-set save, admin only; archived programmes listed only while assigned). Sees and
+  marks every apprentice on the programme (portfolio, lists, To mark, tasks, reviews, plan briefs) but gets no alerts.
+- **Named tutor** — the existing `tutor_allocation` pair, picked at Add learner and now changeable on the portfolio
+  (**Tutors** button, admin): add / remove, programme tutors shown read-only. Gets every tutor alert (evidence, overdue
+  tasks, review due/sign, gateway ready). The pair is provider-wide, so removing one also ends that tutor's diploma
+  allocation to the learner and archives their message thread (existing de-allocation behaviour). With no named tutor,
+  tutor alerts reach nobody — the dialog warns.
+- Any tutor who reaches the enrolment may sign a review as the tutor (cover).
+- Learners list Tutor column / filter = named tutors.
+- API: `GET|PUT /apprenticeship/tutors/:tutorId/programmes` (admin), `GET /apprenticeship/enrolments/:id/tutors`
+  (anyone who can see the portfolio), `POST /…/tutors`, `DELETE /…/tutors/:tutorId` (admin). One SQL helper
+  `tutorReachSql` scopes every tutor list. Tests `apprenticeship-tutors.test.ts`; local E2E 22 pass.
 
 ## Known gaps / next
 

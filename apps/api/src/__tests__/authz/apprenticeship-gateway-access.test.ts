@@ -8,6 +8,7 @@ import type { AuthSession } from '@api/types/auth';
 // allocated learners only (404 otherwise); an admin of another org gets 404 on every id; programme checklist is ADMIN only.
 
 vi.mock('@cio/db/queries/apprenticeship', () => ({
+  isProgrammeTutor: vi.fn(async () => false),
   getApprEnrolment: vi.fn(),
   getApprProgramme: vi.fn(),
   getApprSettings: vi.fn(async () => ({ concernGapPct: 15, otjFactor: 0.2, otjWeeklyCapHours: 30 })),

@@ -4,6 +4,7 @@
   import DownloadIcon from '@lucide/svelte/icons/download';
   import PlusIcon from '@lucide/svelte/icons/plus';
   import SplitIcon from '@lucide/svelte/icons/git-fork';
+  import UsersIcon from '@lucide/svelte/icons/users';
   import { isOrgAdmin, isOrgTeamMember } from '$lib/utils/store/org';
   import { enrolmentsApi, tutorNames } from '../../api/enrolments.svelte';
   import type { PortfolioStore } from '../../stores/portfolio.svelte';
@@ -16,8 +17,9 @@
     store: PortfolioStore;
     onEditDates: () => void;
     onSpread: () => void;
+    onTutors: () => void;
   }
-  let { store, onEditDates, onSpread }: Props = $props();
+  let { store, onEditDates, onSpread, onTutors }: Props = $props();
 
   const d = $derived(store.data);
   let exporting = $state(false);
@@ -51,6 +53,9 @@
         {#if $isOrgAdmin}
           <Button variant="outline" size="sm" onclick={onEditDates}>
             <CalendarIcon size={14} class="mr-1" /> Edit dates &amp; hours
+          </Button>
+          <Button variant="outline" size="sm" onclick={onTutors}>
+            <UsersIcon size={14} class="mr-1" /> Tutors
           </Button>
         {/if}
         {#if $isOrgTeamMember}

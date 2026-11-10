@@ -1,6 +1,7 @@
 import * as schema from '@db/schema';
 
 import { and, asc, db, eq, ilike, inArray, or, sql, type DbOrTxClient, type SQL } from '@db/drizzle';
+import { tutorReachSql } from './tutors';
 import { profileDisplayName } from './names';
 
 // Gecko Apprenticeships — enrolment reads/writes. No access control here: services resolve the actor first and pass
@@ -21,10 +22,10 @@ const tutorsOf = sql<
 export interface EnrolmentListScope {
   organizationId: string;
   programmeId?: string;
-  /** Admin filter: only learners allocated to this tutor. */
+  /** Admin filter: only learners whose NAMED tutor (allocation) is this tutor. */
   tutorId?: string;
   search?: string;
-  /** TUTOR actor: only learners allocated to this tutor (the access rule). */
+  /** TUTOR actor: only enrolments this tutor reaches — named tutor OR programme tutor (the access rule). */
   restrictToTutorId?: string;
   /** LEARNER actor: only this learner. */
   restrictToLearnerId?: string;
@@ -66,7 +67,7 @@ export async function listEnrolmentRows(scope: EnrolmentListScope, client: DbOrT
   }
   if (scope.restrictToTutorId) {
     conditions.push(
-      sql`exists (select 1 from tutor_allocation ta where ta.learner_id = ${sql.raw('"appr_enrolment"."learner_id"')} and ta.tutor_id = ${scope.restrictToTutorId})`
+      tutorReachSql('"appr_enrolment"."learner_id"', '"appr_enrolment"."programme_id"', scope.restrictToTutorId)
     );
   }
   if (scope.restrictToLearnerId) conditions.push(eq(e.learnerId, scope.restrictToLearnerId));

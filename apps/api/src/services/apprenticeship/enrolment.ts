@@ -362,7 +362,15 @@ export async function createEnrolment(actor: Actor, input: EnrolmentCreateInput)
 async function loadPortfolio(actor: Actor, enrolmentId: string, now: Date = new Date()) {
   requireAuthed(actor);
   const overview = await getEnrolmentOverview(enrolmentId, undefined, todayIso(now));
-  if (!overview || !(await canAccessLearner(actor, overview.enrolment.organizationId, overview.enrolment.learnerId))) {
+  if (
+    !overview ||
+    !(await canAccessLearner(
+      actor,
+      overview.enrolment.organizationId,
+      overview.enrolment.learnerId,
+      overview.enrolment.programmeId
+    ))
+  ) {
     throw notFound();
   }
   const { enrolment } = overview;

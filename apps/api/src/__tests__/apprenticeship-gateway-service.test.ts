@@ -5,6 +5,7 @@ import type { Actor } from '@cio/db/actor';
 // DB queries mocked; the rules module and the real progress/recompute service are used.
 
 vi.mock('@cio/db/queries/apprenticeship', () => ({
+  isProgrammeTutor: vi.fn(async () => false),
   getApprEnrolment: vi.fn(),
   getApprProgramme: vi.fn(),
   getApprSettings: vi.fn(async () => ({ concernGapPct: 15, otjFactor: 0.2, otjWeeklyCapHours: 30 })),

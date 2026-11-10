@@ -9,3 +9,4 @@ export * from './tasks';
 export * from './reviews';
 export * from './glh';
 export * from './gateway';
+export * from './tutors';

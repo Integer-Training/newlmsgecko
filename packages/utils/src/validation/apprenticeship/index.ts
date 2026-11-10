@@ -10,3 +10,4 @@ export * from './enrolment';
 export * from './tasks';
 export * from './reviews';
 export * from './gateway';
+export * from './tutors';

@@ -12,6 +12,7 @@
   import LogInIcon from '@lucide/svelte/icons/log-in';
   import UsersIcon from '@lucide/svelte/icons/users';
   import BookIcon from '@lucide/svelte/icons/book-open';
+  import GraduationCapIcon from '@lucide/svelte/icons/graduation-cap';
   import { loginAsMember } from '$lib/utils/functions/impersonation';
   import { currentOrg } from '$lib/utils/store/org';
   import { downloadCsv } from '$features/admin-dashboard/utils/export-csv';
@@ -19,6 +20,7 @@
   import CreateTutorDialog from '$features/tutor-management/components/create-tutor-dialog.svelte';
   import ResetPasswordDialog from '$features/tutor-management/components/reset-password-dialog.svelte';
   import ManageCoursesDialog from '$features/tutor-management/components/manage-courses-dialog.svelte';
+  import ManageProgrammesDialog from '$features/apprenticeship/components/tutors/manage-programmes-dialog.svelte';
 
   // Admin Tutor-management. Roster of tutors with taught/caseload courses + learner counts, tutor creation,
   // course assignment, "Reset Password" (regenerate + reveal), and suspend/reactivate. Admin-only (API-enforced).
@@ -29,6 +31,16 @@
   let coursesMemberId = $state<number | null>(null);
   let coursesTutorName = $state('');
   let search = $state('');
+  // Gecko Apprenticeships: the programmes a tutor teaches (dialog lives in the apprenticeship feature).
+  let showProgrammes = $state(false);
+  let programmesTutorId = $state<string | null>(null);
+  let programmesTutorName = $state('');
+
+  function openProgrammes(row: TutorMgmtRow) {
+    programmesTutorId = row.userId;
+    programmesTutorName = row.name ?? 'this tutor';
+    showProgrammes = true;
+  }
 
   function openCourses(row: TutorMgmtRow) {
     coursesMemberId = row.memberId;
@@ -187,6 +199,9 @@
                         <Button variant="outline" size="sm" onclick={() => openCourses(row)}>
                           <BookIcon class="size-4" /> Courses
                         </Button>
+                        <Button variant="outline" size="sm" onclick={() => openProgrammes(row)}>
+                          <GraduationCapIcon class="size-4" /> Apprenticeships
+                        </Button>
                         <Button
                           variant="outline"
                           size="sm"
@@ -228,3 +243,4 @@
 <CreateTutorDialog bind:open={showCreate} />
 <ResetPasswordDialog bind:open={showReveal} />
 <ManageCoursesDialog bind:open={showCourses} memberId={coursesMemberId} tutorName={coursesTutorName} />
+<ManageProgrammesDialog bind:open={showProgrammes} tutorId={programmesTutorId} tutorName={programmesTutorName} />

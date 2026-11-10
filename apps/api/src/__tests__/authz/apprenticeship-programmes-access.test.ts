@@ -8,6 +8,7 @@ import type { AuthSession } from '@api/types/auth';
 // programme id; a nested id that does not chain up to the programme gets 404.
 
 vi.mock('@cio/db/queries/apprenticeship', () => ({
+  isProgrammeTutor: vi.fn(async () => false),
   getApprProgramme: vi.fn(),
   getApprQualificationInProgramme: vi.fn(async () => null),
   getApprUnitInProgramme: vi.fn(async () => null),

@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // never touches a key a live record still lists; the scans claim before notifying so a rerun notifies nobody twice.
 
 vi.mock('@cio/db/queries/apprenticeship', () => ({
+  isProgrammeTutor: vi.fn(async () => false),
   listUploadsForCleanup: vi.fn(),
   listReferencedUploadKeys: vi.fn(async () => new Set<string>()),
   markUploadsAttached: vi.fn(async () => undefined),

@@ -51,7 +51,11 @@ async function loadReview(actor: Actor, reviewId: string) {
   requireAuthed(actor);
   const review = await getApprReview(reviewId);
   const enrolment = review ? await getApprEnrolment(review.enrolmentId) : null;
-  if (!review || !enrolment || !(await canAccessLearner(actor, enrolment.organizationId, enrolment.learnerId))) {
+  if (
+    !review ||
+    !enrolment ||
+    !(await canAccessLearner(actor, enrolment.organizationId, enrolment.learnerId, enrolment.programmeId))
+  ) {
     throw notFound();
   }
   return { review, enrolment };

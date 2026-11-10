@@ -5,6 +5,7 @@ import type { Actor } from '@cio/db/actor';
 // who may sign as whom, completion (snapshot + next review), and optimistic-concurrency 409s. DB queries mocked.
 
 vi.mock('@cio/db/queries/apprenticeship', () => ({
+  isProgrammeTutor: vi.fn(async () => false),
   getApprEnrolment: vi.fn(),
   getApprProgramme: vi.fn(),
   getApprReview: vi.fn(),

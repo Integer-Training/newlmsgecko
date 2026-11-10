@@ -106,7 +106,8 @@ function asStatus(value: string): ApprEvidenceStatus {
 async function loadEvidenceForActor(actor: Actor, evidenceId: string): Promise<ApprEvidenceRow> {
   requireAuthed(actor);
   const evidence = await getApprEvidence(evidenceId);
-  if (!evidence || !(await canAccessLearner(actor, evidence.organizationId, evidence.learnerId))) throw notFound();
+  if (!evidence || !(await canAccessLearner(actor, evidence.organizationId, evidence.learnerId, evidence.programmeId)))
+    throw notFound();
   return evidence;
 }
 

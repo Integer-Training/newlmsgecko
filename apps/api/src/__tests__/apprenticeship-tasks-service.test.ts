@@ -5,6 +5,7 @@ import type { Actor } from '@cio/db/actor';
 // transitions through the evidence loop). DB queries mocked; the rules module is the real one.
 
 vi.mock('@cio/db/queries/apprenticeship', () => ({
+  isProgrammeTutor: vi.fn(async () => false),
   getApprEnrolment: vi.fn(),
   getApprEnrolmentByProgrammeLearner: vi.fn(async () => null),
   getApprProgramme: vi.fn(),
