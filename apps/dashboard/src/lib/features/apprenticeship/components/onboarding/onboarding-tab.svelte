@@ -315,7 +315,11 @@
 
               {#if offerNotHeld(item) && !doc?.notHeld}
                 <label class="flex items-center gap-2 text-sm">
-                  <Checkbox bind:checked={notHeldDraft[id]} aria-label="I don't have this" />
+                  <!-- getter/setter: the draft starts unset, and Checkbox rejects bind:checked={undefined} -->
+                  <Checkbox
+                    bind:checked={() => notHeldDraft[id] ?? false, (v) => (notHeldDraft[id] = v)}
+                    aria-label="I don't have this"
+                  />
                   I don't have this
                 </label>
                 {#if notHeldDraft[id]}

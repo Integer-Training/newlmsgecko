@@ -32,7 +32,8 @@
   let tutorId = $state('');
   let status = $state<ApprProgressStatus | ''>('');
   let noTutor = $state(false);
-  let onboardingIncomplete = $state(false);
+  // ?onboarding=incomplete (the Summary card) opens the list already filtered.
+  let onboardingIncomplete = $state(appPage.url.searchParams.get('onboarding') === 'incomplete');
   let searchValue = $state('');
   let debouncedSearch = $state('');
   let page = $state(1);

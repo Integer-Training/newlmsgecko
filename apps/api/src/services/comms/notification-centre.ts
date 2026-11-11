@@ -119,6 +119,15 @@ function enrich(
         link: evidenceLink(row, evidence, isStaff)
       };
     }
+    case 'appr.iqa.outcome': {
+      // Sent to the assessor (staff) when the IQA decides on their sampled evidence: opens that evidence's sheet.
+      const ev = row.entityId ? evidence.get(row.entityId) : undefined;
+      return {
+        ...base,
+        subject: `IQA feedback on your assessment — ${ev?.title ?? 'apprenticeship evidence'}`,
+        link: evidenceLink(row, evidence, isStaff)
+      };
+    }
     case 'appr.task.assigned': {
       const task = row.entityId ? appr.tasks.get(row.entityId) : undefined;
       return {

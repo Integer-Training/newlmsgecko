@@ -177,9 +177,19 @@ export const baseNavConfig: NavItemConfig[] = [
         matchPattern: '^/org/[^/]+/apprenticeships(/learners/.*)?/?$'
       },
       {
+        titleKey: 'Summary',
+        path: '/apprenticeships/summary',
+        matchPattern: '^/org/[^/]+/apprenticeships/summary(/.*)?$'
+      },
+      {
         titleKey: 'To mark',
         path: '/apprenticeships/to-mark',
         matchPattern: '^/org/[^/]+/apprenticeships/to-mark(/.*)?$'
+      },
+      {
+        titleKey: 'IQA',
+        path: '/apprenticeships/iqa',
+        matchPattern: '^/org/[^/]+/apprenticeships/iqa(/.*)?$'
       },
       {
         titleKey: 'Task plans',

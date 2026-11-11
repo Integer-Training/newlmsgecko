@@ -31,7 +31,8 @@ export const NOTIFICATION_TYPES = [
   // Onboarding documents: uploaded (-> org admins), reviewed (-> apprentice), all required approved (-> named tutors + admins).
   'appr.onboarding.submitted',
   'appr.onboarding.reviewed',
-  'appr.onboarding.complete'
+  'appr.onboarding.complete',
+  'appr.iqa.outcome'
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
@@ -67,7 +68,8 @@ export const NOTIFICATION_TYPE_CATEGORY: Record<NotificationType, NotificationCa
   'appr.gateway.ready': 'coursework',
   'appr.onboarding.submitted': 'coursework',
   'appr.onboarding.reviewed': 'coursework',
-  'appr.onboarding.complete': 'coursework'
+  'appr.onboarding.complete': 'coursework',
+  'appr.iqa.outcome': 'coursework'
 };
 
 export function categoryForNotificationType(type: NotificationType): NotificationCategory {

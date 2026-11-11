@@ -23,6 +23,7 @@
   import DatesDialog from '../components/portfolio/dates-dialog.svelte';
   import TutorsDialog from '../components/portfolio/tutors-dialog.svelte';
   import SpreadDialog from '../components/portfolio/spread-dialog.svelte';
+  import PdfDownloadButton from '../components/shared/pdf-download-button.svelte';
   import EvidenceSheet from '../components/evidence/evidence-sheet.svelte';
 
   // Gecko Apprenticeships — one learner's portfolio on a single page. Everything opens in place (units expand,
@@ -97,6 +98,9 @@
       {/if}
       <Page.Title>{isStaffViewer ? 'Portfolio' : 'My apprenticeship'}</Page.Title>
     </Page.HeaderContent>
+    {#if store.data}
+      <Page.Action><PdfDownloadButton {enrolmentId} /></Page.Action>
+    {/if}
   </Page.Header>
 
   <Page.Body>

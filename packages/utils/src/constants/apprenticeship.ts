@@ -243,3 +243,19 @@ export const APPR_DEFAULT_ONBOARDING_DOC_TYPES: readonly {
     allowNotHeld: false
   }
 ];
+
+// ── Round 2 Deploy 3: IQA sampling ──
+
+/** IQA sample outcome. DISAGREE never changes the evidence status; an admin may refer the evidence separately. */
+export const APPR_IQA_OUTCOMES = ['PENDING', 'AGREE', 'DISAGREE'] as const;
+export type ApprIqaOutcome = (typeof APPR_IQA_OUTCOMES)[number];
+export const APPR_IQA_OUTCOME_LABELS: Record<ApprIqaOutcome, string> = {
+  PENDING: 'Pending',
+  AGREE: 'Agree',
+  DISAGREE: 'Disagree'
+};
+/** Default share of each assessor's accepted evidence to sample (appr_settings.iqa_target_pct). */
+export const APPR_IQA_TARGET_PCT_DEFAULT = 10;
+/** Most samples one "Suggest sample" run may create. */
+export const APPR_IQA_SUGGEST_MAX = 100;
+export const APPR_IQA_FEEDBACK_MAX = 5000;

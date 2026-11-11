@@ -10,6 +10,7 @@
   import { PortfolioStore } from '../stores/portfolio.svelte';
   import ProgressBar from '../components/shared/progress-bar.svelte';
   import StatusChip from '../components/shared/status-chip.svelte';
+  import PdfDownloadButton from '../components/shared/pdf-download-button.svelte';
   import StageChip from '../components/shared/stage-chip.svelte';
   import { fmtDate, fmtMinutes, fmtPct } from '../components/shared/format';
 
@@ -77,6 +78,9 @@
     <Page.HeaderContent>
       <Page.Title>My apprenticeship</Page.Title>
     </Page.HeaderContent>
+    {#if d}
+      <Page.Action><PdfDownloadButton {enrolmentId} /></Page.Action>
+    {/if}
   </Page.Header>
 
   <Page.Body>

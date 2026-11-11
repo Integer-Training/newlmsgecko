@@ -199,7 +199,6 @@ apprentice keeps a named tutor.
 
 ## Known gaps / next
 
-- Round 2 Deploy 3: IQA sampling, PDF portfolio, summary dashboard.
 - Employer access: design only (`docs/APPRENTICESHIP-EMPLOYER.md`). Email notifications when email is on.
 
 Closed 2026-11-09: To mark shows the evidence Type and can add files; tutors marking from To mark get the criteria
@@ -241,3 +240,40 @@ on the incomplete → complete transition). Admin: portfolio Onboarding tab; App
 documents (types in use can only be deactivated). Endpoints under `/apprenticeship`: `GET|DELETE|PUT
 /enrolments/:id/onboarding[/:docTypeId]`, `POST .../presign`, `.../:docTypeId/review`, `.../:docTypeId/download`,
 `GET|POST /onboarding-types`, `PATCH|DELETE /onboarding-types/:typeId`, `PUT /onboarding-types/order`.
+
+## Round 2 — Deploy 3 (2026-11-11): IQA sampling, summary dashboard, PDF portfolio
+
+**IQA sampling (migration 0033).** `appr_iqa_sample` (one per evidence, unique): assessor = `appr_evidence.reviewed_by`
+at sampling time, outcome PENDING | AGREE | DISAGREE, feedback, decided by / at, acknowledged at.
+`appr_settings.iqa_target_pct` (default 10). A DISAGREE NEVER changes the evidence status (refer it from the portfolio
+if needed). Admin › Apprenticeships › **IQA**: target editor; coverage per assessor (accepted, sampled, %, pending /
+agree / disagree, awaiting acknowledgement) and per unit (accepted evidence mapped to the unit's criteria); % and the
+Suggest quota count only samples whose evidence is still ACCEPTED, so a later referral frees the slot. **Suggest
+sample**: per assessor ceil(accepted × target%) − already sampled, random unsampled ACCEPTED evidence, capped at `max`;
+preview first, and Confirm sends the previewed `evidenceIds` (re-checked server side) so what is saved is what was
+shown. Manual "Sample for IQA" in the evidence sheet (ACCEPTED or REFERRED evidence with a reviewer; 409 if already
+sampled). Decide is optimistic on outcome + `decided_at` the admin saw (409 = changed by someone else; feedback
+required for DISAGREE) and notifies the assessor (`appr.iqa.outcome`, not when they decided it themselves); each save
+resets the acknowledgement. The assessor acknowledges the decision they saw (`decidedAt`, 409 if it changed since) from
+the evidence sheet or Caseload › Apprenticeships › **IQA feedback**. Delete only while PENDING. Access: admin
+everything; tutor only samples where they are the assessor (+ the sample on evidence of a learner they reach);
+learners never (404); managers none. Endpoints under `/apprenticeship`: `GET /iqa/coverage`, `GET|POST /iqa/samples`,
+`POST /iqa/suggest`, `POST /iqa/samples/:sampleId/{decide,acknowledge}`, `DELETE /iqa/samples/:sampleId`,
+`PUT /iqa/target`, `GET /evidence/:evidenceId/iqa`.
+
+**Summary dashboard.** Admin › Apprenticeships › **Summary** (org, optional programme) and Caseload › Apprenticeships ›
+**Summary** (tutor reach). `GET /apprenticeship/summary`: learner status split, OTJ status split + minutes, to mark,
+evidence and task counts, overdue tasks (top 10), overdue / upcoming (14 days) reviews, gateway chips, onboarding
+incomplete, IQA pending / awaiting acknowledgement (a tutor: their own as assessor). Counts come from the learners-list
+rows and rules, so they always equal the lists (verified locally). Learners 403.
+
+**PDF portfolio.** `GET /apprenticeship/enrolments/:id/portfolio-report` (admin, tutor in reach, learner self; else
+404; audit `appr.portfolio.report`) → one JSON payload; the dashboard renders it with jsPDF
+(`utils/portfolio-pdf.ts`, loaded on click): learner + programme, tutors, progress / OTJ / GLH, units with criteria
+met, evidence list (file NAMES only), tasks, progress reviews with signatures, gateway + EPA. No IQA data, onboarding
+files, storage keys or URLs. "Download PDF" on the staff portfolio and the apprentice dashboard.
+
+Verified locally: API suite 1146 pass / 15 known baseline failures; IQA + summary unit tests; local E2E 43 checks
+(access matrix, suggest preview / confirm, stale decide / acknowledge, notification once, summary = list counts,
+report scoping); browser: Summary, evidence IQA panel, 14-page PDF. Also fixed: onboarding "I don't have this"
+checkbox crashed the Onboarding tab (`bind:checked` on an unset draft).

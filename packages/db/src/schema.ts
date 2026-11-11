@@ -4847,6 +4847,7 @@ export const apprSettings = pgTable(
     concernGapPct: integer('concern_gap_pct').default(15).notNull(),
     otjFactor: doublePrecision('otj_factor').default(0.2).notNull(),
     otjWeeklyCapHours: doublePrecision('otj_weekly_cap_hours').default(30).notNull(),
+    iqaTargetPct: integer('iqa_target_pct').default(10).notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull()
   },
   (table) => [
@@ -5260,5 +5261,63 @@ export const apprOnboardingDoc = pgTable(
     }).onDelete('set null'),
     unique('appr_onboarding_doc_unique').on(table.enrolmentId, table.docTypeId),
     index('idx_appr_onboarding_doc_org_status').on(table.organizationId, table.status)
+  ]
+);
+
+// ── Round 2 Deploy 3: IQA sampling ──
+
+// One IQA sample per piece of evidence. assessor = who accepted the evidence at sampling time (appr_evidence.reviewed_by).
+// outcome PENDING|AGREE|DISAGREE; a DISAGREE never changes the evidence status (an admin may refer it separately).
+// The assessor acknowledges the feedback (acknowledged_at). Unit coverage is derived via the evidence's criteria.
+export const apprIqaSample = pgTable(
+  'appr_iqa_sample',
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    organizationId: uuid('organization_id').notNull(),
+    enrolmentId: uuid('enrolment_id').notNull(),
+    evidenceId: uuid('evidence_id').notNull(),
+    assessorId: uuid('assessor_id'),
+    sampledBy: uuid('sampled_by'),
+    outcome: varchar().default('PENDING').notNull(),
+    feedback: text(),
+    decidedBy: uuid('decided_by'),
+    decidedAt: timestamp('decided_at', { withTimezone: true, mode: 'string' }),
+    acknowledgedAt: timestamp('acknowledged_at', { withTimezone: true, mode: 'string' }),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId],
+      foreignColumns: [organization.id],
+      name: 'appr_iqa_sample_organization_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.enrolmentId],
+      foreignColumns: [apprEnrolment.id],
+      name: 'appr_iqa_sample_enrolment_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.evidenceId],
+      foreignColumns: [apprEvidence.id],
+      name: 'appr_iqa_sample_evidence_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.assessorId],
+      foreignColumns: [profile.id],
+      name: 'appr_iqa_sample_assessor_id_fkey'
+    }).onDelete('set null'),
+    foreignKey({
+      columns: [table.sampledBy],
+      foreignColumns: [profile.id],
+      name: 'appr_iqa_sample_sampled_by_fkey'
+    }).onDelete('set null'),
+    foreignKey({
+      columns: [table.decidedBy],
+      foreignColumns: [profile.id],
+      name: 'appr_iqa_sample_decided_by_fkey'
+    }).onDelete('set null'),
+    unique('appr_iqa_sample_evidence_unique').on(table.evidenceId),
+    index('idx_appr_iqa_sample_org_outcome').on(table.organizationId, table.outcome),
+    index('idx_appr_iqa_sample_assessor').on(table.assessorId)
   ]
 );

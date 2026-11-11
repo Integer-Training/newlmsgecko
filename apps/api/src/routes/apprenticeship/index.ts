@@ -9,6 +9,8 @@ import { settingsRouter } from '@api/routes/apprenticeship/settings';
 import { taskPlansRouter } from '@api/routes/apprenticeship/task-plans';
 import { tasksRouter } from '@api/routes/apprenticeship/tasks';
 import { tutorsRouter } from '@api/routes/apprenticeship/tutors';
+import { iqaRouter } from '@api/routes/apprenticeship/iqa';
+import { summaryRouter } from '@api/routes/apprenticeship/summary';
 
 // Gecko Apprenticeships API, mounted at /apprenticeship in app.ts.
 export const apprenticeshipRouter = new Hono()
@@ -21,4 +23,6 @@ export const apprenticeshipRouter = new Hono()
   .route('/reviews', reviewsRouter)
   .route('/', gatewayRouter)
   .route('/', tutorsRouter)
-  .route('/', onboardingRouter);
+  .route('/', onboardingRouter)
+  .route('/', iqaRouter)
+  .route('/', summaryRouter);

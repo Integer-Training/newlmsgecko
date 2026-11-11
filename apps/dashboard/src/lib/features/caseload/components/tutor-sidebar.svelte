@@ -11,6 +11,8 @@
   import MessagesSquareIcon from '@lucide/svelte/icons/messages-square';
   import GraduationCapIcon from '@lucide/svelte/icons/graduation-cap';
   import ClipboardCheckIcon from '@lucide/svelte/icons/clipboard-check';
+  import ChartColumnIcon from '@lucide/svelte/icons/chart-column';
+  import ShieldCheckIcon from '@lucide/svelte/icons/shield-check';
   import { SidebarLogoutButton } from '$features/ui/sidebar/footer';
 
   // Tutor shell nav (PearlLMS Phase 8). Flat items; active state is derived from the current pathname.
@@ -34,13 +36,27 @@
       icon: GraduationCapIcon,
       isActive:
         page.url.pathname.startsWith('/caseload/apprenticeships') &&
-        !page.url.pathname.startsWith('/caseload/apprenticeships/to-mark')
+        !page.url.pathname.startsWith('/caseload/apprenticeships/to-mark') &&
+        !page.url.pathname.startsWith('/caseload/apprenticeships/summary') &&
+        !page.url.pathname.startsWith('/caseload/apprenticeships/iqa')
+    },
+    {
+      title: 'Summary',
+      url: '/caseload/apprenticeships/summary',
+      icon: ChartColumnIcon,
+      isActive: page.url.pathname.startsWith('/caseload/apprenticeships/summary')
     },
     {
       title: 'To mark',
       url: '/caseload/apprenticeships/to-mark',
       icon: ClipboardCheckIcon,
       isActive: page.url.pathname.startsWith('/caseload/apprenticeships/to-mark')
+    },
+    {
+      title: 'IQA feedback',
+      url: '/caseload/apprenticeships/iqa',
+      icon: ShieldCheckIcon,
+      isActive: page.url.pathname.startsWith('/caseload/apprenticeships/iqa')
     },
     {
       title: 'Messages',

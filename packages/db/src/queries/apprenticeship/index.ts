@@ -11,3 +11,6 @@ export * from './glh';
 export * from './gateway';
 export * from './tutors';
 export * from './onboarding';
+export * from './iqa';
+export * from './summary';
+export * from './report';

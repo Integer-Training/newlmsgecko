@@ -7,6 +7,8 @@
   import { evidenceApi, type EvidenceDetail, type PickerQualification } from '../../api/evidence.svelte';
   import EvidenceForm from './evidence-form.svelte';
   import EvidenceReview from './evidence-review.svelte';
+  import EvidenceIqaPanel from './evidence-iqa-panel.svelte';
+  import { isOrgAdmin, isOrgTeamMember } from '$lib/utils/store/org';
 
   // The evidence side-sheet, reused by the portfolio (add / view / edit) and the marking queue (review). It loads the
   // detail itself; the criteria tree comes from the caller (the portfolio payload) or, when absent (the queue), from
@@ -183,6 +185,13 @@
                 if (detail) detail = { ...detail, notes: [...detail.notes, n] };
               }}
             />
+            {#if $isOrgTeamMember === true}
+              <EvidenceIqaPanel
+                evidenceId={detail.evidence.id}
+                evidenceStatus={detail.evidence.status}
+                isAdmin={$isOrgAdmin === true}
+              />
+            {/if}
           {/if}
         {/key}
       {/if}

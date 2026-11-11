@@ -12,3 +12,4 @@ export * from './reviews';
 export * from './gateway';
 export * from './tutors';
 export * from './onboarding';
+export * from './iqa';
