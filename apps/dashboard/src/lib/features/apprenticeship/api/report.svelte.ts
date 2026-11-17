@@ -42,7 +42,8 @@ export interface PortfolioReport {
     qualificationTitle: string;
     glh: number | null;
     completePct: number | null;
-    criteria: { ref: string | null; title: string; met: boolean }[];
+    achievedAt: string | null;
+    criteria: { ref: string | null; title: string; met: boolean; achievedAt: string | null }[];
   }[];
   evidence: {
     title: string;

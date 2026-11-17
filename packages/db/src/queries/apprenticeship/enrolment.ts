@@ -244,6 +244,24 @@ export async function listAcceptedEvidenceTitles(programmeId: string, learnerId:
 }
 
 /**
+ * ACCEPTED evidence dates per criterion (ascending ISO UTC strings): coalesce(reviewed_at, updated_at). Feeds the
+ * criterion / unit achieved date. Scoped to the learner's enrolment programme like the other portfolio reads.
+ */
+export async function listCriterionAcceptedDates(programmeId: string, learnerId: string, client: DbOrTxClient = db) {
+  const ev = schema.apprEvidence;
+  const acceptedAt = sql<string>`to_char(coalesce(${ev.reviewedAt}, ${ev.updatedAt}) at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
+  const rows = await client
+    .select({ criterionId: schema.apprEvidenceCriterion.criterionId, acceptedAt })
+    .from(schema.apprEvidenceCriterion)
+    .innerJoin(ev, eq(ev.id, schema.apprEvidenceCriterion.evidenceId))
+    .where(and(eq(ev.programmeId, programmeId), eq(ev.learnerId, learnerId), eq(ev.status, 'ACCEPTED')))
+    .orderBy(sql`coalesce(${ev.reviewedAt}, ${ev.updatedAt}) asc`, asc(ev.id));
+  const map = new Map<string, string[]>();
+  for (const r of rows) map.set(r.criterionId, [...(map.get(r.criterionId) ?? []), r.acceptedAt]);
+  return map;
+}
+
+/**
  * Add-learner pickers: the org's tutors (role 2) and learners (role 3) with their FULL name (user.name, falling back to
  * the profile handle) + email, in one statement. Ordered by role then name. No KPI payload.
  */

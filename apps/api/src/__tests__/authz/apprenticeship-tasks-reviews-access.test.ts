@@ -28,6 +28,9 @@ vi.mock('@cio/db/queries/apprenticeship', () => ({
   countPlanTasksWithEvidence: vi.fn(async () => 0),
   deleteAllPlannedPlanTasks: vi.fn(async () => undefined),
   listPlanAssignees: vi.fn(async () => []),
+  lockTaskPlan: vi.fn(async () => ({ id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' })),
+  listPlanTaskCells: vi.fn(async () => []),
+  deletePlannedPlanItemTasks: vi.fn(async () => []),
   listPlanItems: vi.fn(async () => []),
   getPlanItem: vi.fn(),
   nextPlanItemSequence: vi.fn(async () => 0),
@@ -216,7 +219,17 @@ const PLAN_ROUTES: Route[] = [
   { method: 'PUT', path: `${P}/${PLAN}/items/reorder`, body: { orderedIds: [ITEM] } },
   { method: 'POST', path: `${P}/${PLAN}/assign`, body: { enrolmentIds: [ENR] } },
   { method: 'POST', path: `${P}/${PLAN}/unassign`, body: { enrolmentIds: [ENR] } },
-  { method: 'POST', path: `${P}/${PLAN}/sync` }
+  { method: 'POST', path: `${P}/${PLAN}/sync` },
+  // per-item bodies (every route above keeps working with its old body)
+  {
+    method: 'POST',
+    path: `${P}/${PLAN}/assign`,
+    body: { enrolmentIds: [ENR], itemIds: [ITEM], dueDate: '2026-09-01' }
+  },
+  { method: 'POST', path: `${P}/${PLAN}/unassign`, body: { enrolmentIds: [ENR], itemIds: [ITEM] } },
+  { method: 'POST', path: `${P}/${PLAN}/sync`, body: { itemIds: [ITEM] } },
+  { method: 'POST', path: `${P}/${PLAN}/sync`, body: {} },
+  { method: 'POST', path: `${P}/${PLAN}/items`, body: { title: 'T', typeKey: 'assignment', assignTo: 'WHOLE_PLAN' } }
 ];
 // Routes that resolve an id (cross-org must 404); list / create / presign are org-scoped or programme-bound instead.
 const PLAN_ID_ROUTES = PLAN_ROUTES.filter((r) => r.path.includes(PLAN));
@@ -236,9 +249,25 @@ const TASK_PRESIGN: Route = {
   body: { enrolmentId: ENR, files: [{ name: 'a.pdf', type: 'application/pdf' }] }
 };
 const TASK_OVERDUE: Route = { method: 'GET', path: `${T}/overdue` };
+// "Add from plan": staff + reach (a tutor for an allocated learner); the plan pages themselves stay admin-only
+const PLAN_ITEMS: Route = { method: 'GET', path: `${T}/enrolments/${ENR}/plan-items` };
+const FROM_PLAN: Route = {
+  method: 'POST',
+  path: `${T}/enrolments/${ENR}/tasks/from-plan`,
+  body: { planId: PLAN, itemIds: [ITEM] }
+};
 // staff-only task routes (ADMIN or the allocated TUTOR)
-const TASK_STAFF_ROUTES = [TASK_CREATE, TASK_PATCH, TASK_DELETE, TASK_PRESIGN];
-const TASK_ID_ROUTES = [TASK_READ, TASK_CREATE, TASK_PATCH, TASK_DELETE, TASK_DOWNLOAD, TASK_PRESIGN];
+const TASK_STAFF_ROUTES = [TASK_CREATE, TASK_PATCH, TASK_DELETE, TASK_PRESIGN, PLAN_ITEMS, FROM_PLAN];
+const TASK_ID_ROUTES = [
+  TASK_READ,
+  TASK_CREATE,
+  TASK_PATCH,
+  TASK_DELETE,
+  TASK_DOWNLOAD,
+  TASK_PRESIGN,
+  PLAN_ITEMS,
+  FROM_PLAN
+];
 
 const REVIEW_READ: Route = { method: 'GET', path: `${R}/enrolments/${ENR}/reviews` };
 const REVIEW_CREATE: Route = {
@@ -297,6 +326,7 @@ const noWrites = () => {
     q.deletePlanItem,
     q.insertApprTasksSkippingExisting,
     q.deletePlannedPlanTasks,
+    q.deletePlannedPlanItemTasks,
     q.insertApprTask,
     q.updateApprTask,
     q.deleteApprTask,
@@ -391,6 +421,58 @@ describe('task plans — admin only', () => {
     expect(await status(PLAN_ROUTES[10], 'admin')).toBe(404);
   });
 
+  it('assign / unassign / sync / item-create validate the new body fields (400) and an item of another plan is a 404', async () => {
+    const assign = (body: unknown): Route => ({ method: 'POST', path: `${P}/${PLAN}/assign`, body });
+    const unassign = (body: unknown): Route => ({ method: 'POST', path: `${P}/${PLAN}/unassign`, body });
+    const sync = (body: unknown): Route => ({ method: 'POST', path: `${P}/${PLAN}/sync`, body });
+    expect(await status(assign({ enrolmentIds: [ENR], itemIds: [] }), 'admin')).toBe(400);
+    expect(await status(assign({ enrolmentIds: [ENR], itemIds: ['nope'] }), 'admin')).toBe(400);
+    expect(await status(assign({ enrolmentIds: [ENR], dueDate: '2026-02-30' }), 'admin')).toBe(400);
+    expect(await status(assign({ enrolmentIds: [ENR], dueDate: '01/09/2026' }), 'admin')).toBe(400);
+    expect(await status(unassign({ enrolmentIds: [ENR], itemIds: [] }), 'admin')).toBe(400);
+    expect(await status(sync({ itemIds: ['nope'] }), 'admin')).toBe(400);
+    expect(
+      await status(
+        {
+          method: 'POST',
+          path: `${P}/${PLAN}/items`,
+          body: { title: 'T', typeKey: 'assignment', assignTo: 'EVERYONE' }
+        },
+        'admin'
+      )
+    ).toBe(400);
+    // malformed JSON on the optional sync body is a 400, an empty body is fine
+    const malformed = await app.request(`${P}/${PLAN}/sync`, {
+      method: 'POST',
+      headers: { 'x-test-actor': 'admin', 'content-type': 'application/json' },
+      body: '{not json'
+    });
+    expect(malformed.status).toBe(400);
+    const empty = await app.request(`${P}/${PLAN}/sync`, {
+      method: 'POST',
+      headers: { 'x-test-actor': 'admin', 'content-type': 'application/json' }
+    });
+    expect(empty.status).toBe(200);
+    // a valid-looking item id that is not on THIS plan → 404 and nothing is written
+    const foreign = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+    expect(await status(assign({ enrolmentIds: [ENR], itemIds: [foreign] }), 'admin')).toBe(404);
+    expect(await status(unassign({ enrolmentIds: [ENR], itemIds: [foreign] }), 'admin')).toBe(404);
+    expect(await status(sync({ itemIds: [foreign] }), 'admin')).toBe(404);
+    expect(q.insertApprTasksSkippingExisting).not.toHaveBeenCalled();
+    expect(q.deletePlannedPlanItemTasks).not.toHaveBeenCalled();
+    expect(q.updateApprTask).not.toHaveBeenCalled();
+  });
+
+  it('an override date before the learner start is a 400 on assign (nothing created)', async () => {
+    expect(
+      await status(
+        { method: 'POST', path: `${P}/${PLAN}/assign`, body: { enrolmentIds: [ENR], dueDate: '2025-12-31' } },
+        'admin'
+      )
+    ).toBe(400);
+    expect(q.insertApprTasksSkippingExisting).not.toHaveBeenCalled();
+  });
+
   it('a plan brief can be downloaded by staff of the org only for keys on that plan (tutor only via an allocated learner; learner/other org never)', async () => {
     const ok: Route = {
       method: 'POST',
@@ -442,6 +524,39 @@ describe('tasks — role guard + scoping', () => {
       expect(s, `allocated ${r.method} ${r.path}`).toBeLessThan(300);
     }
     for (const r of TASK_ID_ROUTES) expect(await status(r, 'admin'), r.path).toBeLessThan(300);
+  });
+
+  it('add from plan: staff + reach only — tutor of an allocated learner and admin get 2xx; the apprentice 403; plan of another programme 404; bad body 400', async () => {
+    vi.mocked(isTutorAllocatedToLearner).mockResolvedValue(true);
+    for (const who of ['admin', 'tutor']) {
+      expect(await status(PLAN_ITEMS, who), `${who} plan-items`).toBe(200);
+      expect(await status(FROM_PLAN, who), `${who} from-plan`).toBe(200);
+    }
+    expect(await status(PLAN_ITEMS, 'learner')).toBe(403);
+    expect(await status(FROM_PLAN, 'learner')).toBe(403);
+    vi.mocked(q.getTaskPlan).mockResolvedValue({ ...PLAN_ROW, programmeId: OTHER_PROG } as never);
+    expect(await status(FROM_PLAN, 'tutor')).toBe(404);
+    vi.mocked(q.getTaskPlan).mockResolvedValue({ ...PLAN_ROW, organizationId: 'org-2' } as never);
+    expect(await status(FROM_PLAN, 'admin')).toBe(404);
+    vi.mocked(q.getTaskPlan).mockResolvedValue(PLAN_ROW as never);
+    expect(await status({ ...FROM_PLAN, body: { planId: PLAN, itemIds: [] } }, 'tutor')).toBe(400);
+    expect(await status({ ...FROM_PLAN, body: { planId: 'nope', itemIds: [ITEM] } }, 'tutor')).toBe(400);
+    expect(
+      await status({ ...FROM_PLAN, body: { planId: PLAN, itemIds: [ITEM], dueDate: '2026-02-30' } }, 'tutor')
+    ).toBe(400);
+    // an item of another plan → 404, and an unreached learner is 404 before the plan is even read
+    expect(
+      await status({ ...FROM_PLAN, body: { planId: PLAN, itemIds: ['ffffffff-ffff-4fff-8fff-ffffffffffff'] } }, 'tutor')
+    ).toBe(404);
+    vi.mocked(isTutorAllocatedToLearner).mockResolvedValue(false);
+    vi.mocked(q.getTaskPlan).mockClear();
+    expect(await status(FROM_PLAN, 'tutor')).toBe(404);
+    expect(q.getTaskPlan).not.toHaveBeenCalled();
+  });
+
+  it('a tutor still cannot reach any plan route, with the new bodies either (403, no query)', async () => {
+    for (const r of PLAN_ROUTES.slice(15)) expect(await status(r, 'tutor'), `${r.method} ${r.path}`).toBe(403);
+    expect(q.getTaskPlan).not.toHaveBeenCalled();
   });
 
   it('an admin of another org gets 404 on every task id and nothing is written', async () => {

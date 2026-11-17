@@ -87,8 +87,8 @@
           <PlanTasks planId={current.plan.id} items={current.items} {tree} onchanged={() => load(planId)} />
           <PlanLearners
             plan={current.plan}
-            taskCount={current.items.length}
             assignees={current.assignees}
+            items={current.items}
             onchanged={() => load(planId)}
           />
         </div>

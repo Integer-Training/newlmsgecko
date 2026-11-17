@@ -1,0 +1,1 @@
+ALTER TABLE "appr_task" ADD COLUMN "due_manual" boolean DEFAULT false NOT NULL;

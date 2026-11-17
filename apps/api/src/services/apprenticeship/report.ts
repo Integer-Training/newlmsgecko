@@ -83,7 +83,8 @@ export async function getPortfolioReport(actor: Actor, enrolmentId: string, now:
         qualificationTitle: q.title,
         glh: glhByUnit.get(u.id) ?? null,
         completePct: u.actualPct,
-        criteria: u.criteria.map((c) => ({ ref: c.code, title: c.text, met: c.met }))
+        achievedAt: u.achievedAt,
+        criteria: u.criteria.map((c) => ({ ref: c.code, title: c.text, met: c.met, achievedAt: c.achievedAt }))
       }))
     ),
     evidence: evidence.map((ev) => ({

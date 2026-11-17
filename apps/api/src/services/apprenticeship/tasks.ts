@@ -319,13 +319,18 @@ export async function updateTask(actor: Actor, taskId: string, input: TaskUpdate
   // Dropped files start their clean-up grace; a key the plan (or another record) still lists is protected by the job.
   const droppedKeys = files ? task.files.map((f) => f.key).filter((k) => !keptKeys.includes(k)) : [];
   const dueChanged = input.dueDate !== undefined && input.dueDate !== task.dueDate;
+  // A plan task's due date edited by staff is the task's own from now on (due_manual: sync and a start-date change keep
+  // it). CLEARING it (null) hands it back to the plan's rule (start + offset): due_manual false, so the next sync / rebase
+  // can restore the rule date. Individual tasks have no rule, so the flag is left alone.
+  const dueManualPatch = dueChanged && task.planId !== null ? { dueManual: input.dueDate !== null } : {};
 
   const updated = await runInTransaction(async (tx) => {
     const row = await updateApprTask(tx, taskId, {
       ...fields,
       ...(files ? { files: toBriefFiles(files, task.files, a.userId) } : {}),
       // A moved due date re-arms the overdue notification.
-      ...(dueChanged ? { overdueNotifiedAt: null } : {})
+      ...(dueChanged ? { overdueNotifiedAt: null } : {}),
+      ...dueManualPatch
     });
     if (!row) throw notFound();
     if (criterionIds) await replaceTaskCriteria(tx, taskId, criterionIds);

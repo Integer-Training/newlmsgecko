@@ -159,15 +159,15 @@ export async function downloadPortfolioPdf(report: PortfolioReport): Promise<voi
   for (const u of report.units) {
     ensure(24);
     para(
-      `${u.ref ? `${u.ref}  ` : ''}${u.title}  (${pct(u.completePct)} complete${u.glh !== null ? `, ${u.glh} GLH` : ''})`,
+      `${u.ref ? `${u.ref}  ` : ''}${u.title}  (${pct(u.completePct)} complete${u.achievedAt ? `, achieved ${date(u.achievedAt)}` : ''}${u.glh !== null ? `, ${u.glh} GLH` : ''})`,
       { bold: true }
     );
     autoTable(doc, {
       ...tableStyle,
       startY: y - 1,
       head: [['Criterion', 'Description', 'Met']],
-      body: u.criteria.map((c) => [text(c.ref), c.title, c.met ? 'Yes' : dash]),
-      columnStyles: { 0: { cellWidth: 24 }, 2: { cellWidth: 14 } }
+      body: u.criteria.map((c) => [text(c.ref), c.title, c.met ? (c.achievedAt ? date(c.achievedAt) : 'Yes') : dash]),
+      columnStyles: { 0: { cellWidth: 24 }, 2: { cellWidth: 24 } }
     });
     afterTable(3);
   }

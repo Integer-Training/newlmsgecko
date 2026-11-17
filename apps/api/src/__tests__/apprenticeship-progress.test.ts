@@ -24,7 +24,11 @@ import {
   glhDoneMinutes,
   glhExpectedMinutes,
   gatewayState,
-  apprStage
+  apprStage,
+  criterionAchievedAt,
+  unitAchievedAt,
+  compareUnitsBySchedule,
+  sortUnitsBySchedule
 } from '@cio/utils/functions/apprenticeship-progress';
 
 // Gecko Apprenticeships rules module. Every screen, the cache recompute and the CSV export read these functions,
@@ -320,5 +324,85 @@ describe('round 2 deploy 2: GLH + gateway', () => {
     expect(apprStage({ ...s, gatewayPassedAt: 'x', epaBookedDate: '2027-01-01' })).toBe('EPA_BOOKED');
     expect(apprStage({ ...s, epaResult: 'MERIT' })).toBe('ACHIEVED');
     expect(apprStage({ ...s, epaResult: 'FAIL' })).toBe('EPA_FAILED');
+  });
+});
+
+describe('criterionAchievedAt', () => {
+  const dates = ['2026-01-01T10:00:00.000Z', '2026-02-01T10:00:00.000Z', '2026-03-01T10:00:00.000Z'];
+  it('required 1 -> earliest accepted date', () => {
+    expect(criterionAchievedAt(dates, 1)).toBe(dates[0]);
+  });
+  it('required 3 -> the third-earliest', () => {
+    expect(criterionAchievedAt(dates, 3)).toBe(dates[2]);
+  });
+  it('not enough accepted evidence -> null', () => {
+    expect(criterionAchievedAt(dates.slice(0, 2), 3)).toBeNull();
+    expect(criterionAchievedAt([], 1)).toBeNull();
+  });
+  it('required 0 behaves as 1', () => {
+    expect(criterionAchievedAt(dates, 0)).toBe(dates[0]);
+    expect(criterionAchievedAt([], 0)).toBeNull();
+  });
+});
+
+describe('unitAchievedAt', () => {
+  it('no criteria -> null', () => {
+    expect(unitAchievedAt([])).toBeNull();
+  });
+  it('any unmet criterion -> null', () => {
+    expect(unitAchievedAt([{ achievedAt: '2026-01-01T00:00:00.000Z' }, { achievedAt: null }])).toBeNull();
+  });
+  it('all met -> the latest date', () => {
+    expect(
+      unitAchievedAt([
+        { achievedAt: '2026-01-05T00:00:00.000Z' },
+        { achievedAt: '2026-03-01T00:00:00.000Z' },
+        { achievedAt: '2026-02-01T00:00:00.000Z' }
+      ])
+    ).toBe('2026-03-01T00:00:00.000Z');
+  });
+});
+
+describe('sortUnitsBySchedule', () => {
+  const u = (id: string, startDate: string | null, targetDate: string | null) => ({ id, startDate, targetDate });
+  const ids = (list: { id: string }[]) => list.map((x) => x.id);
+
+  it('sorts by start date ascending', () => {
+    const out = sortUnitsBySchedule([u('c', '2026-03-01', '2026-04-01'), u('a', '2026-01-01', '2026-02-01')]);
+    expect(ids(out)).toEqual(['a', 'c']);
+  });
+  it('same start -> earlier target first, null target last', () => {
+    const out = sortUnitsBySchedule([
+      u('x', '2026-01-01', null),
+      u('y', '2026-01-01', '2026-03-01'),
+      u('z', '2026-01-01', '2026-02-01')
+    ]);
+    expect(ids(out)).toEqual(['z', 'y', 'x']);
+  });
+  it('target-only units sort by target', () => {
+    const out = sortUnitsBySchedule([
+      u('b', null, '2026-05-01'),
+      u('a', '2026-02-01', null),
+      u('c', null, '2026-01-15')
+    ]);
+    expect(ids(out)).toEqual(['c', 'a', 'b']);
+  });
+  it('undated units go last in input (programme) order', () => {
+    const out = sortUnitsBySchedule([u('n1', null, null), u('d', '2026-01-01', null), u('n2', null, null)]);
+    expect(ids(out)).toEqual(['d', 'n1', 'n2']);
+  });
+  it('is stable for equal keys and does not mutate the input', () => {
+    const input = [
+      u('p', '2026-01-01', '2026-02-01'),
+      u('q', '2026-01-01', '2026-02-01'),
+      u('r', '2026-01-01', '2026-02-01')
+    ];
+    const copy = [...input];
+    expect(ids(sortUnitsBySchedule(input))).toEqual(['p', 'q', 'r']);
+    expect(input).toEqual(copy);
+  });
+  it('compareUnitsBySchedule orders dated before undated', () => {
+    expect(compareUnitsBySchedule(u('a', '2026-01-01', null), u('b', null, null))).toBeLessThan(0);
+    expect(compareUnitsBySchedule(u('a', null, null), u('b', null, null))).toBe(0);
   });
 });

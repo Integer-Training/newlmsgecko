@@ -1,6 +1,7 @@
 <script lang="ts">
   import { isOrgTeamMember } from '$lib/utils/store/org';
   import { SvelteSet } from 'svelte/reactivity';
+  import { flip } from 'svelte/animate';
   import { Button } from '@cio/ui/base/button';
   import { Input } from '@cio/ui/base/input';
   import CheckIcon from '@lucide/svelte/icons/check';
@@ -72,10 +73,11 @@
         </p>
       {/if}
 
+      {#if qual.units.length > 1}<p class="mb-1 text-xs text-(--muted-foreground)">Sorted by start date</p>{/if}
       <ul class="divide-y rounded-lg border">
         {#each qual.units as unit (unit.id)}
           {@const isOpen = open.has(unit.id)}
-          <li>
+          <li animate:flip={{ duration: 250 }}>
             <div
               class="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 px-3 py-2.5 md:grid-cols-[minmax(0,1fr)_6.5rem_15rem_10rem]"
             >
@@ -142,7 +144,11 @@
               <div class="col-span-2 md:col-span-1">
                 <ProgressBar actual={unit.actualPct} expected={unit.expectedPct} label="{unit.title} progress" />
                 <p class="mt-0.5 text-xs whitespace-nowrap text-(--muted-foreground)">
-                  {fmtPct(unit.actualPct)}{unit.expectedPct !== null ? ` · expected ${unit.expectedPct}%` : ''}
+                  {#if unit.status === 'COMPLETE' && unit.achievedAt}100% · achieved {fmtDate(
+                      unit.achievedAt
+                    )}{:else}{fmtPct(unit.actualPct)}{unit.expectedPct !== null
+                      ? ` · expected ${unit.expectedPct}%`
+                      : ''}{/if}
                 </p>
               </div>
             </div>
@@ -163,7 +169,9 @@
                       </p>
                       <div class="text-xs">
                         <span class={c.met ? 'font-medium text-emerald-600' : 'text-(--muted-foreground)'}>
-                          {c.met ? 'Met' : 'Not met'} · {c.acceptedCount}/{c.requiredCount}
+                          {c.met ? 'Met' : 'Not met'} · {c.acceptedCount}/{c.requiredCount}{c.met && c.achievedAt
+                            ? ` · ${fmtDate(c.achievedAt)}`
+                            : ''}
                         </span>
                         <ProgressBar
                           class="mt-0.5"

@@ -48,7 +48,13 @@
                 <CircleCheckIcon size={16} class="shrink-0 text-emerald-600" />
                 <span class="truncate">{u.code ? `${u.code} · ` : ''}{u.title}</span>
               </span>
-              <span class="whitespace-nowrap text-(--muted-foreground)">Target {fmtDate(u.targetDate)}</span>
+              <span class="text-right whitespace-nowrap">
+                {#if u.achievedAt}<span class="font-medium text-emerald-700 dark:text-emerald-400"
+                    >Achieved {fmtDate(u.achievedAt)}</span
+                  >
+                  <span class="block text-xs text-(--muted-foreground)">Target {fmtDate(u.targetDate)}</span>
+                {:else}<span class="text-(--muted-foreground)">Target {fmtDate(u.targetDate)}</span>{/if}
+              </span>
             </li>
           {/each}
         </ul>

@@ -34,6 +34,7 @@ import {
   updateApprTask,
   insertEnrolmentUnits,
   listAcceptedEvidenceTitles,
+  listCriterionAcceptedDates,
   listApprPickerPeople,
   listEnrolmentRows,
   listEnrolmentUnitRows,
@@ -50,6 +51,7 @@ import { isUniqueConstraintViolation } from '@cio/utils/errors';
 import {
   averagePct,
   computeEnrolmentProgress,
+  criterionAchievedAt,
   criterionMet,
   expectedPct,
   firstReviewDate,
@@ -58,9 +60,11 @@ import {
   otjExpectedMinutes,
   otjTargetMinutes,
   progressStatus,
+  sortUnitsBySchedule,
   spreadUnitDates,
   taskDueDate,
   toDayNumber,
+  unitAchievedAt,
   type ApprUnitInput
 } from '@cio/utils/functions/apprenticeship-progress';
 import type {
@@ -381,13 +385,14 @@ async function loadPortfolio(actor: Actor, enrolmentId: string, now: Date = new 
     throw notFound();
   }
   const { enrolment } = overview;
-  const [structure, counts, totals, unitRows, settings, loggedGlh] = await Promise.all([
+  const [structure, counts, totals, unitRows, settings, loggedGlh, acceptedDates] = await Promise.all([
     getApprProgrammeStructure(enrolment.programmeId),
     countEvidenceByCriterion(enrolment.programmeId, enrolment.learnerId),
     getEvidenceTotals(enrolment.programmeId, enrolment.learnerId),
     listEnrolmentUnitRows(enrolment.id),
     getApprSettings(enrolment.organizationId),
-    sumGlhLogMinutes(enrolment.id)
+    sumGlhLogMinutes(enrolment.id),
+    listCriterionAcceptedDates(enrolment.programmeId, enrolment.learnerId)
   ]);
 
   const datesByUnit = new Map(unitRows.map((r) => [r.unitId, r]));
@@ -417,10 +422,30 @@ async function loadPortfolio(actor: Actor, enrolmentId: string, now: Date = new 
   const progressByUnit = new Map(progress.units.map((u) => [u.unitId, u]));
 
   const qualifications = structure.qualifications.map((q) => {
-    const units = structure.units
+    const unsorted = structure.units
       .filter((u) => u.qualificationId === q.id)
       .map((u) => {
         const p = progressByUnit.get(u.id);
+        const status = p?.status ?? ('NOT_SET' as ApprProgressStatus);
+        const criteria = (criteriaByUnit.get(u.id) ?? []).map((c) => {
+          const n = counts.get(c.id) ?? { accepted: 0, submitted: 0 };
+          const met = criterionMet(n.accepted, c.requiredCount);
+          return {
+            id: c.id,
+            code: c.code,
+            text: c.text,
+            groupLabel: c.groupLabel,
+            requiredCount: c.requiredCount,
+            acceptedCount: n.accepted,
+            met,
+            // When the Nth accepted piece was accepted (N = required count); null while not met. Counts and dates are
+            // two parallel reads (no shared snapshot): evidence accepted BETWEEN them can make a unit read COMPLETE with a
+            // null date for that one response. Accepted: it self-corrects on the next load and the date is display-only.
+            achievedAt: met ? criterionAchievedAt(acceptedDates.get(c.id) ?? [], c.requiredCount) : null,
+            evidenceCount: n.accepted + n.submitted,
+            pendingCount: n.submitted
+          };
+        });
         return {
           id: u.id,
           code: u.code,
@@ -429,23 +454,14 @@ async function loadPortfolio(actor: Actor, enrolmentId: string, now: Date = new 
           targetDate: datesByUnit.get(u.id)?.targetDate ?? null,
           actualPct: p?.actualPct ?? null,
           expectedPct: p?.expectedPct ?? null,
-          status: p?.status ?? ('NOT_SET' as ApprProgressStatus),
-          criteria: (criteriaByUnit.get(u.id) ?? []).map((c) => {
-            const n = counts.get(c.id) ?? { accepted: 0, submitted: 0 };
-            return {
-              id: c.id,
-              code: c.code,
-              text: c.text,
-              groupLabel: c.groupLabel,
-              requiredCount: c.requiredCount,
-              acceptedCount: n.accepted,
-              met: criterionMet(n.accepted, c.requiredCount),
-              evidenceCount: n.accepted + n.submitted,
-              pendingCount: n.submitted
-            };
-          })
+          status,
+          // Latest criterion date, only for a COMPLETE unit with at least one criterion.
+          achievedAt: status === 'COMPLETE' ? unitAchievedAt(criteria) : null,
+          criteria
         };
       });
+    // Units in schedule order (dated first by start then target; undated keep programme order).
+    const units = sortUnitsBySchedule(unsorted);
     return {
       id: q.id,
       title: q.title,
@@ -548,6 +564,7 @@ async function rebaseOnStartDate(tx: TxClient, enrolmentId: string, startDate: s
   }
   for (const task of await listPlannedPlanTasksForEnrolment(enrolmentId, tx)) {
     const due = taskDueDate(startDate, task.monthOffset);
+    if (task.dueManual) continue; // a hand-set / batch-override date is protected
     if (due !== task.dueDate) await updateApprTask(tx, task.id, { dueDate: due, overdueNotifiedAt: null }, 'PLANNED');
   }
 }
@@ -662,6 +679,14 @@ export function csvCell(value: string | number | boolean | null | undefined): st
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
+const ukDayFormat = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' });
+/** YYYY-MM-DD in UK time (en-CA formats as ISO); blank when there is no date. */
+function ukDay(iso: string | null | undefined) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : ukDayFormat.format(d);
+}
+
 export async function exportPortfolioCsv(actor: Actor, enrolmentId: string, unitId?: string) {
   const portfolio = await loadPortfolio(actor, enrolmentId);
   if (unitId && !portfolio.qualifications.some((q) => q.units.some((u) => u.id === unitId))) {
@@ -680,7 +705,9 @@ export async function exportPortfolioCsv(actor: Actor, enrolmentId: string, unit
     'Evidence',
     'GLH target (h)',
     'GLH done (h)',
-    'GLH expected (h)'
+    'GLH expected (h)',
+    'Criterion met on',
+    'Unit achieved on'
   ];
   // Learner-level GLH, repeated on each row; blank when the programme has no unit GLH (null-safe).
   const hours = (minutes: number | null | undefined) =>
@@ -707,7 +734,9 @@ export async function exportPortfolioCsv(actor: Actor, enrolmentId: string, unit
             c.acceptedCount,
             c.met ? 'Yes' : 'No',
             (titles.get(c.id) ?? []).join('; '),
-            ...glhCells
+            ...glhCells,
+            ukDay(c.achievedAt),
+            ukDay(u.achievedAt)
           ]
             .map(csvCell)
             .join(',')

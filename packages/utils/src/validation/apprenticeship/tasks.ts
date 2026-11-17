@@ -82,6 +82,8 @@ const itemFields = {
 
 export const ZTaskPlanItemCreate = z.object({
   ...itemFields,
+  /** WHOLE_PLAN = also create the task for learners who currently hold every item of the plan. */
+  assignTo: z.enum(['NONE', 'WHOLE_PLAN']).default('NONE'),
   details: itemFields.details.default(''),
   sequence: itemFields.sequence.optional(),
   monthOffset: itemFields.monthOffset.default(0),
@@ -99,8 +101,33 @@ export type TaskPlanItemUpdateInput = z.infer<typeof ZTaskPlanItemUpdate>;
 
 export const ZTaskPlanReorder = z.object({ orderedIds: z.array(z.uuid()).min(1).max(500) });
 
-export const ZTaskPlanAssign = z.object({ enrolmentIds: z.array(z.uuid()).min(1).max(500) });
+const planItemIds = z.array(z.uuid()).min(1).max(500);
+
+export const ZTaskPlanAssign = z.object({
+  enrolmentIds: z.array(z.uuid()).min(1).max(500),
+  /** Omit = the whole plan. */
+  itemIds: planItemIds.optional(),
+  /** Optional due date for this batch; protected from later syncs / start-date changes. */
+  dueDate: isoDate.nullish()
+});
 export type TaskPlanAssignInput = z.infer<typeof ZTaskPlanAssign>;
+
+export const ZTaskPlanUnassign = z.object({
+  enrolmentIds: z.array(z.uuid()).min(1).max(500),
+  /** Omit = the whole plan. */
+  itemIds: planItemIds.optional()
+});
+export type TaskPlanUnassignInput = z.infer<typeof ZTaskPlanUnassign>;
+
+export const ZTaskPlanSync = z.object({ itemIds: planItemIds.optional() });
+export type TaskPlanSyncInput = z.infer<typeof ZTaskPlanSync>;
+
+export const ZTaskFromPlan = z.object({
+  planId: z.uuid(),
+  itemIds: planItemIds,
+  dueDate: isoDate.nullish()
+});
+export type TaskFromPlanInput = z.infer<typeof ZTaskFromPlan>;
 
 // ── Tasks ──
 

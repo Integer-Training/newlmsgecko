@@ -4,18 +4,21 @@
   import { Button } from '@cio/ui/base/button';
   import { Empty } from '@cio/ui/custom/empty';
   import PlusIcon from '@lucide/svelte/icons/plus';
+  import ListPlusIcon from '@lucide/svelte/icons/list-plus';
   import { isOrgTeamMember } from '$lib/utils/store/org';
   import { evidenceApi } from '../../api/evidence.svelte';
   import type { TaskItem } from '../../api/tasks.svelte';
   import type { PortfolioStore } from '../../stores/portfolio.svelte';
   import TaskDialog from '../tasks/task-dialog.svelte';
+  import AddFromPlanDialog from '../task-plans/add-from-plan-dialog.svelte';
   import TaskPanel from '../tasks/task-panel.svelte';
   import TaskStatusChip from '../shared/task-status-chip.svelte';
   import { fmtDate } from '../shared/format';
 
   // Tasks tab (admin, tutor and the apprentice): the learner's tasks grouped Overdue / Due soon / Planned /
   // Submitted / Referred / Complete. Status and "overdue" are the API's; only the "due soon" grouping looks at today's
-  // date. A row opens the task panel; staff can add an individual task here.
+  // date. A row opens the task panel; staff can add an individual task here, or add tasks from a task plan of the
+  // programme ("Add from plan", staff only — the apprentice never sees it).
 
   interface Props {
     store: PortfolioStore;
@@ -29,6 +32,7 @@
   let panelOpen = $state(false);
   let dialogOpen = $state(false);
   let editing = $state<TaskItem | null>(null);
+  let fromPlanOpen = $state(false);
 
   onMount(() => {
     evidenceApi.loadTypes();
@@ -82,7 +86,12 @@
       {/if}
     </p>
     {#if isStaff}
-      <Button size="sm" onclick={newTask}><PlusIcon size={14} class="mr-1" /> New individual task</Button>
+      <div class="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="outline" onclick={() => (fromPlanOpen = true)}>
+          <ListPlusIcon size={14} class="mr-1" /> Add from plan
+        </Button>
+        <Button size="sm" onclick={newTask}><PlusIcon size={14} class="mr-1" /> New individual task</Button>
+      </div>
     {/if}
   </div>
 
@@ -95,7 +104,7 @@
     <Empty
       title="No tasks yet"
       description={isStaff
-        ? 'Assign a task plan from Apprenticeships › Task plans, or add an individual task for this learner.'
+        ? 'Add tasks from a task plan, or add an individual task for this learner.'
         : 'Tasks set by your tutor will appear here.'}
     />
   {:else}
@@ -152,9 +161,18 @@
       </section>
     {/each}
   {/if}
-</div>
 
-<TaskPanel bind:open={panelOpen} task={selected} {store} onEdit={editTask} />
-{#if isStaff}
-  <TaskDialog bind:open={dialogOpen} {store} task={editing} />
-{/if}
+  <!-- The side sheet and dialogs render into a portal. Keeping them INSIDE this one root element (not as loose
+       siblings after it, behind a root-level {#if}) means the component's DOM range is a single element, so Svelte
+       never has to walk a sibling range whose end node a portal has moved to <body>. -->
+  <TaskPanel bind:open={panelOpen} task={selected} {store} onEdit={editTask} />
+  {#if isStaff}
+    <TaskDialog bind:open={dialogOpen} {store} task={editing} />
+    <AddFromPlanDialog
+      bind:open={fromPlanOpen}
+      enrolmentId={store.enrolmentId}
+      startDate={store.data?.enrolment.startDate ?? null}
+      onadded={() => store.refresh()}
+    />
+  {/if}
+</div>

@@ -8,6 +8,8 @@ import {
   ZTaskPlanListQuery,
   ZTaskPlanPresign,
   ZTaskPlanReorder,
+  ZTaskPlanSync,
+  ZTaskPlanUnassign,
   ZTaskPlanUpdate
 } from '@cio/utils/validation/apprenticeship';
 import {
@@ -29,9 +31,26 @@ import {
 
 import { Hono } from '@api/utils/hono';
 import type { Actor } from '@cio/db/actor';
-import { handleError } from '@api/utils/errors';
+import { AppError, ErrorCodes, handleError } from '@api/utils/errors';
 import { requireAdmin } from '@api/middlewares/guards';
 import { zValidator } from '@hono/zod-validator';
+
+/** Read the sync body leniently: none / empty / whitespace = {}; anything else must be valid JSON matching ZTaskPlanSync. */
+async function parseOptionalSyncBody(request: Request) {
+  const text = (await request.text()).trim();
+  if (text === '') return ZTaskPlanSync.parse({});
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    throw new AppError('Malformed JSON in request body', ErrorCodes.VALIDATION_ERROR, 400);
+  }
+  const parsed = ZTaskPlanSync.safeParse(raw ?? {});
+  if (!parsed.success) {
+    throw new AppError(parsed.error.issues[0]?.message ?? 'Invalid request', ErrorCodes.VALIDATION_ERROR, 400);
+  }
+  return parsed.data;
+}
 
 // Gecko Apprenticeships — task plans (templates). ADMIN only on every route (tutors and learners meet plans only as
 // the tasks assigned from them). The services re-check the org on every id (another org's plan 404s). Static paths are
@@ -181,7 +200,7 @@ export const taskPlansRouter = new Hono()
     '/:id/unassign',
     requireAdmin,
     zValidator('param', ZTaskPlanIdParam),
-    zValidator('json', ZTaskPlanAssign),
+    zValidator('json', ZTaskPlanUnassign),
     async (c) => {
       try {
         const data = await unassignPlan(c.get('actor') as Actor, c.req.valid('param').id, c.req.valid('json'));
@@ -193,7 +212,9 @@ export const taskPlansRouter = new Hono()
   )
   .post('/:id/sync', requireAdmin, zValidator('param', ZTaskPlanIdParam), async (c) => {
     try {
-      const data = await syncPlan(c.get('actor') as Actor, c.req.valid('param').id);
+      // The body is optional ({ itemIds? }): a missing / empty body means "every task of the plan".
+      const input = await parseOptionalSyncBody(c.req.raw);
+      const data = await syncPlan(c.get('actor') as Actor, c.req.valid('param').id, input);
       return c.json({ success: true, data }, 200);
     } catch (error) {
       return handleError(c, error, 'Failed to update assigned tasks');

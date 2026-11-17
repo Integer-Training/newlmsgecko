@@ -2,6 +2,7 @@ import axios from 'axios';
 import { classroomio } from '$lib/utils/services/api';
 import { snackbar } from '$features/ui/snackbar/store';
 import { call, type CallResult } from './call';
+import type { ApprTaskStatus } from '@cio/utils/constants/apprenticeship';
 import type { EnrolmentRow, TutorsInput } from './enrolments.svelte';
 
 // Gecko Apprenticeships — admin client for task plans (templates): list / detail / edit / archive / delete, their
@@ -50,6 +51,18 @@ export interface TaskPlanItem {
   expectedMinutes: number;
   files: BriefFile[];
   criteria: { id: string; code: string }[];
+  /** Learners who currently hold this task (a task row exists for them). */
+  assignedCount: number;
+}
+
+/** One task a learner holds from this plan. */
+export interface TaskPlanAssigneeItem {
+  itemId: string;
+  taskId: string;
+  status: ApprTaskStatus;
+  dueDate: string | null;
+  /** True when the due date was set by hand (a batch date); sync keeps it. */
+  dueManual: boolean;
 }
 
 export interface TaskPlanAssignee {
@@ -59,14 +72,22 @@ export interface TaskPlanAssignee {
   startDate: string | null;
   taskCount: number;
   completeCount: number;
-  overdueCount?: number;
-  tutors?: TutorsInput;
+  overdueCount: number;
+  tutors: TutorsInput;
+  /** The plan's tasks this learner holds. */
+  items: TaskPlanAssigneeItem[];
+  /** How many of the plan's current tasks this learner holds. */
+  heldCount: number;
+  /** True when the learner holds a task for every current item of the plan. */
+  wholePlan: boolean;
 }
 
 export interface TaskPlanDetail {
   plan: TaskPlan;
   items: TaskPlanItem[];
   assignees: TaskPlanAssignee[];
+  /** Learners who hold every current task of the plan. */
+  wholePlanCount: number;
 }
 
 export interface TaskPlanItemBody {
@@ -79,11 +100,82 @@ export interface TaskPlanItemBody {
   criterionIds: string[];
 }
 
+export interface TaskPlanAssignBody {
+  enrolmentIds: string[];
+  /** Omit = the whole plan. */
+  itemIds?: string[];
+  /** Optional due date for this batch (kept even if the task or the start date changes later). */
+  dueDate?: string | null;
+}
+
+export interface TaskPlanAutoAssigned {
+  created: number;
+  learners: number;
+  /** Set when the task was added but could not be given to learners. */
+  skippedReason?: 'ARCHIVED' | 'OUTSIDE_WINDOW';
+}
+
+export type TaskPlanItemAdded = Omit<TaskPlanItem, 'assignedCount'> & { assigned: TaskPlanAutoAssigned };
+
+/** What an assign / add-from-plan call reports (assign and from-plan share this shape). */
+export interface TaskPlanAssignResult {
+  created: number;
+  /** (learner, task) pairs that already existed. */
+  skipped: number;
+  learners: number;
+  /** New tasks already past their due date. */
+  pastDue: number;
+  /** New tasks with no due date (no start date and no batch date). */
+  undated: number;
+  /** The batch due date that was applied, if any. */
+  dueOverride: string | null;
+  /** The batch due date is in the past. */
+  overrideInPast: boolean;
+}
+
+/** The warnings worth showing after tasks were created ('' when there are none). */
+export function assignWarnings(r: Pick<TaskPlanAssignResult, 'pastDue' | 'undated' | 'overrideInPast'>): string {
+  const parts: string[] = [];
+  if (r.overrideInPast) parts.push('the due date you chose is in the past');
+  if (r.pastDue > 0) parts.push(`${r.pastDue} task${r.pastDue === 1 ? ' is' : 's are'} already overdue`);
+  if (r.undated > 0) parts.push(`${r.undated} task${r.undated === 1 ? ' has' : 's have'} no due date`);
+  return parts.length ? `Heads up: ${parts.join('; ')}.` : '';
+}
+
+/**
+ * A batch due date earlier than a learner's start date is refused by the server for the WHOLE batch (a task due before
+ * the learner began is a wrong flow). Check it up front so nothing is sent: returns a message naming the first few
+ * learners (and how many more), or null when the date is fine. Pass only the learners who would receive a NEW task —
+ * a learner who already holds everything is skipped by the server and must not block the batch.
+ */
+export function dueBeforeStartProblem(
+  dueDate: string | null,
+  learners: readonly { name: string; startDate: string | null }[]
+): string | null {
+  if (!dueDate) return null;
+  const early = learners.filter((l) => !!l.startDate && dueDate < l.startDate.slice(0, 10));
+  if (early.length === 0) return null;
+  const shown = early.slice(0, 3).map((l) => l.name);
+  const more = early.length - shown.length;
+  const names = shown.join(', ') + (more > 0 ? ` and ${more} more` : '');
+  const count = `${early.length} selected learner${early.length === 1 ? '' : 's'}`;
+  return `That due date is before the start date of ${count} (${names}). Choose a later date or untick them.`;
+}
+
 // Only the fields the API accepts (the server rows also carry uploadedBy / uploadedAt).
 const toFile = (f: BriefFile): BriefFile => ({ key: f.key, name: f.name, size: f.size, type: f.type });
 const toFiles = (files: BriefFile[] | undefined) => (files ? { files: files.map(toFile) } : {});
 
+/** Max enrolments the API takes per assign / unassign call (callers with more must batch). */
+export const PLAN_BATCH_SIZE = 500;
+
 const base = () => classroomio.apprenticeship['task-plans'];
+
+// The sync route reads its optional { itemIds } body by hand (no validator), so the generated type has no `json`.
+const syncRoute = () =>
+  base()[':id'].sync as unknown as {
+    $post: (args: { param: { id: string }; json: { itemIds?: string[] } }) => Promise<Response>;
+  };
 
 class TaskPlansApi {
   list(query: { programmeId?: string; status?: TaskPlanStatus } = {}) {
@@ -137,9 +229,10 @@ class TaskPlansApi {
 
   // ── Tasks (plan items) ──
 
-  addItem(planId: string, body: TaskPlanItemBody) {
-    return call<TaskPlanItem>(
-      () => base()[':id'].items.$post({ param: { id: planId }, json: { ...body, ...toFiles(body.files) } }),
+  /** `assignTo: 'WHOLE_PLAN'` also gives the new task to learners who hold every other task of the plan. */
+  addItem(planId: string, body: TaskPlanItemBody, assignTo: 'NONE' | 'WHOLE_PLAN' = 'NONE') {
+    return call<TaskPlanItemAdded>(
+      () => base()[':id'].items.$post({ param: { id: planId }, json: { ...body, ...toFiles(body.files), assignTo } }),
       'Could not add the task.'
     );
   }
@@ -171,23 +264,37 @@ class TaskPlansApi {
 
   // ── Learners ──
 
-  assign(planId: string, enrolmentIds: string[]) {
-    return call<{ created: number; skipped: number }>(
-      () => base()[':id'].assign.$post({ param: { id: planId }, json: { enrolmentIds } }),
+  assign(planId: string, body: TaskPlanAssignBody) {
+    const json = {
+      enrolmentIds: body.enrolmentIds,
+      ...(body.itemIds ? { itemIds: body.itemIds } : {}),
+      ...(body.dueDate ? { dueDate: body.dueDate } : {})
+    };
+    return call<TaskPlanAssignResult>(
+      () => base()[':id'].assign.$post({ param: { id: planId }, json }),
       'Could not assign the task plan.'
     );
   }
 
-  unassign(planId: string, enrolmentIds: string[]) {
-    return call<{ removed: number }>(
-      () => base()[':id'].unassign.$post({ param: { id: planId }, json: { enrolmentIds } }),
+  /** Removes planned tasks nobody has answered; `kept` = tasks left because evidence or progress exists. */
+  unassign(planId: string, enrolmentIds: string[], itemIds?: string[]) {
+    return call<{ removed: number; kept: number }>(
+      () =>
+        base()[':id'].unassign.$post({
+          param: { id: planId },
+          json: { enrolmentIds, ...(itemIds ? { itemIds } : {}) }
+        }),
       'Could not unassign the learners.'
     );
   }
 
-  sync(planId: string) {
-    return call<{ updated: number }>(
-      () => base()[':id'].sync.$post({ param: { id: planId } }),
+  /**
+   * Copies the plan's current task details onto assigned learners' not-yet-started tasks (optionally only some
+   * tasks). `manualDueKept` = tasks whose hand-set due date differed from the rule and was left alone.
+   */
+  sync(planId: string, itemIds?: string[]) {
+    return call<{ updated: number; manualDueKept: number }>(
+      () => syncRoute().$post({ param: { id: planId }, json: itemIds ? { itemIds } : {} }),
       'Could not update the assigned learners.'
     );
   }

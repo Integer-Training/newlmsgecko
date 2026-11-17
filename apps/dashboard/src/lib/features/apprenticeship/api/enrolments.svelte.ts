@@ -101,6 +101,7 @@ export interface PortfolioCriterion {
   met: boolean;
   evidenceCount: number;
   pendingCount: number;
+  achievedAt: string | null;
 }
 
 export interface PortfolioUnit {
@@ -111,6 +112,7 @@ export interface PortfolioUnit {
   targetDate: string | null;
   actualPct: number | null;
   expectedPct: number | null;
+  achievedAt: string | null;
   status: ApprProgressStatus;
   criteria: PortfolioCriterion[];
 }

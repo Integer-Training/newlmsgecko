@@ -23,6 +23,7 @@ import {
 import type { ApprSettings } from '@cio/utils/constants/apprenticeship';
 import {
   computeEnrolmentProgress,
+  todayIso as sharedTodayIso,
   type ApprEnrolmentProgress,
   type ApprUnitInput
 } from '@cio/utils/functions/apprenticeship-progress';
@@ -32,10 +33,8 @@ import {
 // the portfolio and the CSV export can never disagree. Expected % and status are date-dependent and therefore always
 // computed at read time; only action-driven values (actual %, OTJ minutes, counts) are cached.
 
-/** Today as 'YYYY-MM-DD' (UK provider; date boundaries in UTC are within an hour of local and only shift expected %). */
-export function todayIso(now: Date = new Date()): string {
-  return now.toISOString().slice(0, 10);
-}
+/** Today as 'YYYY-MM-DD' in UTC (UK provider; within an hour of local). The rule lives in @cio/utils so the dashboard previews match. */
+export const todayIso = sharedTodayIso;
 
 export interface EnrolmentProgressDetail extends ApprEnrolmentProgress {
   enrolmentId: string;

@@ -277,3 +277,31 @@ Verified locally: API suite 1146 pass / 15 known baseline failures; IQA + summar
 (access matrix, suggest preview / confirm, stale decide / acknowledge, notification once, summary = list counts,
 report scoping); browser: Summary, evidence IQA panel, 14-page PDF. Also fixed: onboarding "I don't have this"
 checkbox crashed the Onboarding tab (`bind:checked` on an unset draft).
+
+## Unit achieved dates, unit date order, per-task plan assignment (2026-11-17)
+
+**Unit achieved date.** A criterion's met date = `reviewed_at` (fallback `updated_at`) of the Nth-earliest ACCEPTED
+evidence mapped to it (N = required count); a unit's achieved date = the latest criterion date, only when every
+criterion is met and the unit has at least one. Derived on read (`criterionAchievedAt` / `unitAchievedAt` in
+`apprenticeship-progress.ts`, dates from `listCriterionAcceptedDates`), never stored, so refer / reopen / added
+criteria self-correct. Shown in the Achieved tab, Units tab, CSV (end columns "Criterion met on", "Unit achieved on",
+Europe/London dates) and the PDF.
+
+**Unit order.** `loadPortfolio` sorts each qualification's units with `sortUnitsBySchedule`: dated first by
+start (or target) date, then target date, then programme order; undated last. Every view (staff tabs, criteria map,
+evidence picker, apprentice Units page, CSV, PDF) follows; date edits and Spread return the re-sorted portfolio.
+
+**Task plans — per-task assignment (migration 0034 `appr_task.due_manual`).** Assign the whole plan or chosen tasks
+to one or many learners (ad-hoc multi-select with search / tutor / start-month / "missing these tasks" filters; no
+saved groups). Assignment state = the `appr_task` row; "whole plan" is derived (learner holds every current item).
+Re-assigning is idempotent (no duplicate, no extra alert); one `appr.task.assigned` per learner per call. Optional
+"Due date for this batch" sets `due_manual` (also set when staff hand-edit a plan task's due date; clearing it
+returns to the rule) — sync and start-date rebase never overwrite a manual due date. The dialog checks the batch
+date against each receiving learner's start date before sending. Unassign (whole or chosen tasks) removes only
+Planned tasks with no evidence and reports what was kept. New task: "Also give to the N learners who have the whole
+plan" (ticked by default); edit: "Update N learners who haven't started it" (ticked). Archived / out-of-window plans
+refuse assignment. Every plan write locks the plan row first; bulk inserts are chunked (500). Plan pages stay
+admin-only; tutors use "Add from plan" on the portfolio Tasks tab of a learner they reach
+(`GET /apprenticeship/tasks/enrolments/:id/plan-items`, `POST …/tasks/from-plan`). Learners: 403.
+Verified: API 1226 pass / 15 known baseline failures; independent review (no HIGH; 3 MEDIUM + 3 LOW fixed); local
+E2E 18/18 + re-test of the fixes.

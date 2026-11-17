@@ -4,6 +4,7 @@ import { classroomio } from '$lib/utils/services/api';
 import { snackbar } from '$features/ui/snackbar/store';
 import { call, type CallResult } from './call';
 import type { UploadedFile } from './evidence.svelte';
+import type { TaskPlanAssignResult } from './task-plans.svelte';
 
 // Gecko Apprenticeships — client for a learner's tasks (plan-assigned or individual). Shapes mirror
 // apps/api/src/services/apprenticeship/tasks.ts. Status / overdue are the API's; nothing is recomputed here.
@@ -52,6 +53,39 @@ export interface TaskBody {
   criterionIds: string[];
 }
 
+/** One task of a plan, as offered on a learner's "Add from plan" list. */
+export interface PlanItemOption {
+  id: string;
+  title: string;
+  typeKey: string;
+  sequence: number;
+  monthOffset: number;
+  expectedMinutes: number;
+  /** What the rule would give this learner (start + offset); null when they have no start date. */
+  dueDate: string | null;
+  /** The learner already holds this task. */
+  held: boolean;
+  /** The learner's task from this item (null when not held). */
+  taskId: string | null;
+  status: ApprTaskStatus | null;
+}
+
+/** An active plan of the learner's programme that can be assigned today, with its tasks. */
+export interface PlanItemsPlan {
+  id: string;
+  title: string;
+  validFrom: string | null;
+  validTo: string | null;
+  items: PlanItemOption[];
+}
+
+export interface TaskFromPlanBody {
+  planId: string;
+  itemIds: string[];
+  /** Optional due date for these tasks (kept even if the task or the start date changes later). */
+  dueDate?: string | null;
+}
+
 class TasksApi {
   forEnrolment(enrolmentId: string) {
     return call<TaskList>(() =>
@@ -62,6 +96,29 @@ class TasksApi {
   create(enrolmentId: string, body: TaskBody): Promise<CallResult<{ id: string }>> {
     return call(() =>
       classroomio.apprenticeship.tasks.enrolments[':id'].tasks.$post({ param: { id: enrolmentId }, json: body })
+    );
+  }
+
+  /** Active, in-window plans of the learner's programme with their tasks (each flagged held / not held). */
+  async planItems(enrolmentId: string): Promise<CallResult<PlanItemsPlan[]>> {
+    const res = await call<{ startDate: string | null; plans: PlanItemsPlan[] }>(
+      () => classroomio.apprenticeship.tasks.enrolments[':id']['plan-items'].$get({ param: { id: enrolmentId } }),
+      'Could not load the task plans.'
+    );
+    if (!res.ok) return res;
+    return { ok: true, data: res.data.plans };
+  }
+
+  /** Create the chosen plan tasks for this learner (idempotent: tasks they already hold are skipped). */
+  fromPlan(enrolmentId: string, body: TaskFromPlanBody) {
+    const json = { planId: body.planId, itemIds: body.itemIds, ...(body.dueDate ? { dueDate: body.dueDate } : {}) };
+    return call<TaskPlanAssignResult & { taskIds: string[] }>(
+      () =>
+        classroomio.apprenticeship.tasks.enrolments[':id'].tasks['from-plan'].$post({
+          param: { id: enrolmentId },
+          json
+        }),
+      'Could not add the tasks from the plan.'
     );
   }
 

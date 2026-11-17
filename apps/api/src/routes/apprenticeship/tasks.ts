@@ -2,6 +2,7 @@ import {
   ZEnrolmentIdParam,
   ZTaskCreate,
   ZTaskDownload,
+  ZTaskFromPlan,
   ZTaskIdParam,
   ZTaskOverdueQuery,
   ZTaskPresign,
@@ -16,7 +17,11 @@ import {
   signTaskDownloads,
   updateTask
 } from '@api/services/apprenticeship/tasks';
-import { signPlanDownloads } from '@api/services/apprenticeship/task-plans';
+import {
+  createTasksFromPlan,
+  listPlanItemsForEnrolment,
+  signPlanDownloads
+} from '@api/services/apprenticeship/task-plans';
 
 import { Hono } from '@api/utils/hono';
 import type { Actor } from '@cio/db/actor';
@@ -26,7 +31,9 @@ import { zValidator } from '@hono/zod-validator';
 
 // Gecko Apprenticeships — learner tasks. Readable by ADMIN, the allocated TUTOR and the apprentice themselves (the
 // services scope every call through access.ts; anything else 404s); created / edited / deleted by staff only.
-// Static paths are registered before '/:id'. Mounted at /apprenticeship/tasks.
+// Staff (ADMIN, or a TUTOR for a learner they reach) can also give ONE learner chosen tasks of an active plan
+// (from-plan); the plan routes themselves stay admin-only. Static paths are registered before '/:id'.
+// Mounted at /apprenticeship/tasks.
 const requireApprMember = requireRole('ADMIN', 'TUTOR', 'LEARNER');
 
 export const tasksRouter = new Hono()
@@ -49,6 +56,28 @@ export const tasksRouter = new Hono()
         return c.json({ success: true, data }, 201);
       } catch (error) {
         return handleError(c, error, 'Failed to add task');
+      }
+    }
+  )
+  .get('/enrolments/:id/plan-items', requireStaff, zValidator('param', ZEnrolmentIdParam), async (c) => {
+    try {
+      const data = await listPlanItemsForEnrolment(c.get('actor') as Actor, c.req.valid('param').id);
+      return c.json({ success: true, data }, 200);
+    } catch (error) {
+      return handleError(c, error, 'Failed to load plan tasks');
+    }
+  })
+  .post(
+    '/enrolments/:id/tasks/from-plan',
+    requireStaff,
+    zValidator('param', ZEnrolmentIdParam),
+    zValidator('json', ZTaskFromPlan),
+    async (c) => {
+      try {
+        const data = await createTasksFromPlan(c.get('actor') as Actor, c.req.valid('param').id, c.req.valid('json'));
+        return c.json({ success: true, data }, 200);
+      } catch (error) {
+        return handleError(c, error, 'Failed to add tasks from plan');
       }
     }
   )

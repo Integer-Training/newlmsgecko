@@ -8,14 +8,17 @@
   import ArrowUpIcon from '@lucide/svelte/icons/arrow-up';
   import ArrowDownIcon from '@lucide/svelte/icons/arrow-down';
   import PaperclipIcon from '@lucide/svelte/icons/paperclip';
+  import UserPlusIcon from '@lucide/svelte/icons/user-plus';
   import { snackbar } from '$features/ui/snackbar/store';
   import { evidenceApi, type PickerQualification } from '../../api/evidence.svelte';
   import { taskPlansApi, type TaskPlanItem } from '../../api/task-plans.svelte';
   import { fmtMinutes } from '../shared/format';
   import ConfirmDeleteDialog from '../programme/confirm-delete-dialog.svelte';
   import TaskItemDialog from './task-item-dialog.svelte';
+  import AssignDialog from './assign-dialog.svelte';
 
-  // The plan's tasks, sorted by sequence (move up / down saves the new order), with add / edit / delete.
+  // The plan's tasks, sorted by sequence (move up / down saves the new order), with add / edit / delete. Each task
+  // shows how many learners hold it and can be assigned on its own.
   interface Props {
     planId: string;
     items: TaskPlanItem[];
@@ -33,6 +36,8 @@
   let deleteOpen = $state(false);
   let deleteBusy = $state(false);
   let moving = $state(false);
+  let assignOpen = $state(false);
+  let assignItemIds = $state<string[]>([]);
 
   const sorted = $derived([...items].sort((a, b) => a.sequence - b.sequence));
   const typeLabel = (key: string) => evidenceApi.types.find((t) => t.key === key)?.label ?? key;
@@ -49,6 +54,11 @@
   function openEdit(item: TaskPlanItem) {
     editing = item;
     dialogOpen = true;
+  }
+
+  function openAssign(item: TaskPlanItem) {
+    assignItemIds = [item.id];
+    assignOpen = true;
   }
 
   async function move(item: TaskPlanItem, dir: -1 | 1) {
@@ -124,6 +134,14 @@
               <span class="text-(--muted-foreground)">
                 · {item.criteria.length} criteri{item.criteria.length === 1 ? 'on' : 'a'}
               </span>
+              <span
+                class="inline-flex items-center rounded-full px-2 py-0.5 font-medium whitespace-nowrap {item.assignedCount >
+                0
+                  ? 'bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-300'
+                  : 'bg-(--muted) text-(--muted-foreground)'}"
+              >
+                {item.assignedCount} learner{item.assignedCount === 1 ? '' : 's'}
+              </span>
               {#if item.files.length > 0}
                 <span class="inline-flex items-center gap-0.5 text-(--muted-foreground)">
                   · <PaperclipIcon size={12} />{item.files.length} file{item.files.length === 1 ? '' : 's'}
@@ -132,6 +150,9 @@
             </div>
           </div>
           <div class="flex shrink-0 items-center gap-1">
+            <Button variant="outline" size="sm" onclick={() => openAssign(item)}>
+              <UserPlusIcon class="size-4" /> Assign
+            </Button>
             <Button
               variant="ghost"
               size="icon-sm"
@@ -172,6 +193,8 @@
 </section>
 
 <TaskItemDialog bind:open={dialogOpen} {planId} item={editing} {tree} onsaved={onchanged} />
+
+<AssignDialog bind:open={assignOpen} {planId} preselectItemIds={assignItemIds} onassigned={onchanged} />
 
 <ConfirmDeleteDialog
   bind:open={deleteOpen}

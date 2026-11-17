@@ -4991,6 +4991,7 @@ export const apprTask = pgTable(
     expectedMinutes: integer('expected_minutes').default(0).notNull(),
     files: jsonb().default([]).$type<ApprFile[]>().notNull(),
     status: varchar().default('PLANNED').notNull(),
+    dueManual: boolean('due_manual').default(false).notNull(),
     overdueNotifiedAt: timestamp('overdue_notified_at', { withTimezone: true, mode: 'string' }),
     createdBy: uuid('created_by'),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull(),

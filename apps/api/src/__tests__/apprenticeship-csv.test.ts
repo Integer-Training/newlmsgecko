@@ -1,6 +1,39 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { parseCsv, parseCsvWithHeader } from '@cio/utils/functions/csv';
 import { planStructureImport, splitUnitCode } from '@api/services/apprenticeship/programme-import';
+import type { Actor } from '@cio/db/actor';
+
+vi.mock('@cio/db/queries/apprenticeship', () => ({
+  isProgrammeTutor: vi.fn(async () => false),
+  getApprEnrolment: vi.fn(),
+  getApprSettings: vi.fn(async () => ({ concernGapPct: 15, otjFactor: 0.2, otjWeeklyCapHours: 30 })),
+  getEnrolmentOverview: vi.fn(),
+  getApprProgrammeStructure: vi.fn(),
+  countEvidenceByCriterion: vi.fn(async () => new Map()),
+  listCriterionAcceptedDates: vi.fn(async () => new Map()),
+  getEvidenceTotals: vi.fn(async () => ({ submitted: 0, accepted: 0, referred: 0, otjMinutes: 0 })),
+  listEnrolmentUnitRows: vi.fn(async () => []),
+  sumGlhLogMinutes: vi.fn(async () => 0),
+  listAcceptedEvidenceTitles: vi.fn(async () => new Map())
+}));
+vi.mock('@cio/db/queries/allocation', () => ({
+  isTutorAllocatedToLearner: vi.fn(async () => false),
+  isCourseTutorForLearner: vi.fn(async () => false),
+  isCourseTutor: vi.fn(async () => false)
+}));
+vi.mock('@cio/db/audit', () => ({ recordAudit: vi.fn(async () => undefined) }));
+vi.mock('@cio/db/drizzle', () => ({
+  runInTransaction: (fn: (t: unknown) => unknown) => fn({}),
+  sql: (strings: TemplateStringsArray) => strings.join('?')
+}));
+vi.mock('@api/services/apprenticeship/onboarding', () => ({ ensureOnboardingTypes: vi.fn(async () => undefined) }));
+vi.mock('@api/services/organization/users', () => ({ createOrgUser: vi.fn() }));
+vi.mock('@api/services/organization/allocation', () => ({ createTutorAllocation: vi.fn() }));
+vi.mock('@api/services/apprenticeship/notifications', () => ({ notifyGatewayReadyOrRelease: vi.fn() }));
+vi.mock('@api/middlewares/guards/ownership', () => ({ isAllocatedTutor: vi.fn(async () => false) }));
+
+import * as q from '@cio/db/queries/apprenticeship';
+import { exportPortfolioCsv } from '@api/services/apprenticeship/enrolment';
 
 // Gecko Apprenticeships — the pure CSV parser and the structure-import planner (preview and apply share this plan).
 
@@ -277,5 +310,119 @@ describe('optional glh column (guided learning hours per unit)', () => {
       '"X/1","U1 Talking","1.1","Say",0,1'
     ].join('\n');
     expect(planStructureImport(empty, sp).newUnits[0]).toMatchObject({ glh: null });
+  });
+});
+
+describe('exportPortfolioCsv achieved columns', () => {
+  const ORG = 'org-1';
+  const PROG = '11111111-1111-4111-8111-111111111111';
+  const LRN = '22222222-2222-4222-8222-222222222222';
+  const ENR = '33333333-3333-4333-8333-333333333333';
+  const admin = { authenticated: true, userId: 'u-admin', role: 'ADMIN', status: 'ACTIVE', orgId: ORG } as Actor;
+  const structure = {
+    qualifications: [{ id: 'q1', title: 'Diploma', reference: '603/1', awardingBody: 'NCFE', level: '2' }],
+    units: [{ id: 'u1', qualificationId: 'q1', code: 'U1', title: 'Communication', glh: null }],
+    criteria: [
+      { id: 'c1', unitId: 'u1', code: '1.1', text: 'Explain', groupLabel: null, requiredCount: 1 },
+      { id: 'c2', unitId: 'u1', code: '1.2', text: 'Listen', groupLabel: null, requiredCount: 1 }
+    ]
+  };
+  const run = async () => {
+    const { csv } = await exportPortfolioCsv(admin, ENR);
+    return csv
+      .replace(/^\uFEFF/, '')
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((l) => l.split(','));
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(q.getApprEnrolment).mockResolvedValue({
+      id: ENR,
+      organizationId: ORG,
+      programmeId: PROG,
+      learnerId: LRN
+    } as never);
+    vi.mocked(q.getEnrolmentOverview).mockResolvedValue({
+      enrolment: {
+        id: ENR,
+        organizationId: ORG,
+        programmeId: PROG,
+        learnerId: LRN,
+        startDate: '2026-01-01',
+        plannedEndDate: '2027-01-01',
+        contractedHoursWeek: 30,
+        otjTargetMinutesOverride: 1000,
+        achievedAt: null,
+        recomputedAt: null,
+        gatewayItems: {}
+      },
+      learnerName: 'Amy',
+      learnerEmail: 'amy@example.com',
+      programmeTitle: 'Adult Care',
+      programmeReference: null,
+      programmeLevel: '2',
+      tutors: [],
+      overdueTaskCount: 0,
+      nextReview: null,
+      gatewayChecklist: null
+    } as never);
+    vi.mocked(q.getApprProgrammeStructure).mockResolvedValue(structure as never);
+    vi.mocked(q.countEvidenceByCriterion).mockResolvedValue(
+      new Map([
+        ['c1', { accepted: 1, submitted: 0 }],
+        ['c2', { accepted: 1, submitted: 0 }]
+      ]) as never
+    );
+  });
+
+  it('keeps the existing columns first and appends the two date columns at the end', async () => {
+    vi.mocked(q.listCriterionAcceptedDates).mockResolvedValue(
+      new Map([
+        ['c1', ['2026-03-04T10:00:00.000Z']],
+        ['c2', ['2026-03-09T10:00:00.000Z']]
+      ]) as never
+    );
+    const rows = await run();
+    expect(rows[0]).toEqual([
+      'Qualification',
+      'Unit code',
+      'Unit title',
+      'Criterion code',
+      'Criterion',
+      'Required',
+      'Accepted',
+      'Met',
+      'Evidence',
+      'GLH target (h)',
+      'GLH done (h)',
+      'GLH expected (h)',
+      'Criterion met on',
+      'Unit achieved on'
+    ]);
+    expect(rows[1]!.slice(0, 9)).toEqual(['Diploma', 'U1', 'Communication', '1.1', 'Explain', '1', '1', 'Yes', '']);
+    expect(rows[1]!.slice(12)).toEqual(['2026-03-04', '2026-03-09']);
+    expect(rows[2]!.slice(12)).toEqual(['2026-03-09', '2026-03-09']);
+  });
+
+  it('formats the day in Europe/London, across midnight in summer and not in winter', async () => {
+    vi.mocked(q.listCriterionAcceptedDates).mockResolvedValue(
+      new Map([
+        ['c1', ['2026-06-30T23:30:00.000Z']], // BST: already 1 July in London
+        ['c2', ['2026-01-15T23:30:00.000Z']] // GMT: still 15 January
+      ]) as never
+    );
+    const rows = await run();
+    expect(rows[1]![12]).toBe('2026-07-01');
+    expect(rows[2]![12]).toBe('2026-01-15');
+    expect(rows[1]![13]).toBe('2026-07-01'); // unit = latest criterion
+  });
+
+  it('leaves both cells blank when nothing is met', async () => {
+    vi.mocked(q.countEvidenceByCriterion).mockResolvedValue(new Map());
+    const rows = await run();
+    expect(rows[1]!.slice(7, 8)).toEqual(['No']);
+    expect(rows[1]!.slice(12)).toEqual(['', '']);
   });
 });

@@ -24,6 +24,7 @@ vi.mock('@cio/db/queries/apprenticeship', () => ({
   getEvidenceTotals: vi.fn(async () => ({ submitted: 0, accepted: 0, referred: 0, otjMinutes: 0 })),
   listEnrolmentUnitRows: vi.fn(async () => []),
   listAcceptedEvidenceTitles: vi.fn(async () => new Map()),
+  listCriterionAcceptedDates: vi.fn(async () => new Map()),
   insertApprEnrolment: vi.fn(),
   insertEnrolmentUnits: vi.fn(),
   updateApprEnrolment: vi.fn(),
@@ -783,10 +784,11 @@ describe('CSV export carries GLH target / done / expected (null-safe)', () => {
     vi.mocked(q.getApprProgrammeStructure).mockResolvedValue(structure(10) as never);
     const withGlh = await lines();
     expect(withGlh[0]).toContain('GLH target (h),GLH done (h),GLH expected (h)');
-    expect(withGlh[1].split(',').slice(-3)[0]).toBe('10');
+    // GLH columns are followed by the two met-on / achieved-on columns.
+    expect(withGlh[1].split(',').slice(-5)[0]).toBe('10');
 
     vi.mocked(q.getApprProgrammeStructure).mockResolvedValue(structure(null) as never);
     const noGlh = await lines();
-    expect(noGlh[1].endsWith(',,,')).toBe(true);
+    expect(noGlh[1].endsWith(',,,,,')).toBe(true);
   });
 });

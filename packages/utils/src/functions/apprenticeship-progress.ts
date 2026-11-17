@@ -7,6 +7,14 @@ import { APPR_DEFAULT_SETTINGS, type ApprProgressStatus, type ApprSettings } fro
 
 const DAY_MS = 86_400_000;
 
+/**
+ * Today as 'YYYY-MM-DD' in UTC. The ONE 'today' rule: the API (overdue scans, due-date warnings) and the dashboard
+ * (live previews of those warnings) both use it, so a preview never disagrees with what the server then reports.
+ */
+export function todayIso(now: Date = new Date()): string {
+  return now.toISOString().slice(0, 10);
+}
+
 /** Parse 'YYYY-MM-DD' (or an ISO timestamp — only the date part is used) to a UTC day number; null if invalid. */
 export function toDayNumber(value: string | null | undefined): number | null {
   if (!value) return null;
@@ -373,4 +381,63 @@ export function apprStage(input: {
   if (input.gatewayPassedAt && input.epaBookedDate) return 'EPA_BOOKED';
   if (input.gatewayPassedAt) return 'AT_GATEWAY';
   return input.ready ? 'READY_FOR_GATEWAY' : 'IN_LEARNING';
+}
+
+// ── Unit achieved date + unit schedule order ──
+
+/**
+ * When a criterion was achieved: the date of the Nth-earliest ACCEPTED piece of evidence mapped to it, N = required
+ * count (min 1). `acceptedDatesAsc` must be ascending ISO strings. Null when not enough accepted evidence (not met).
+ */
+export function criterionAchievedAt(acceptedDatesAsc: readonly string[], requiredCount: number): string | null {
+  const needed = Math.max(1, requiredCount);
+  if (acceptedDatesAsc.length < needed) return null;
+  return acceptedDatesAsc[needed - 1] ?? null;
+}
+
+/**
+ * When a unit was achieved: the latest criterion achieved date, only when the unit has at least one criterion and
+ * every criterion is met. Otherwise null.
+ */
+export function unitAchievedAt(criteria: readonly { achievedAt: string | null }[]): string | null {
+  if (criteria.length === 0) return null;
+  let latest: string | null = null;
+  for (const c of criteria) {
+    if (!c.achievedAt) return null;
+    if (latest === null || Date.parse(c.achievedAt) > Date.parse(latest)) latest = c.achievedAt;
+  }
+  return latest;
+}
+
+/**
+ * Order units by schedule: units with a date first; key = (startDate ?? targetDate) ascending, then targetDate
+ * ascending (nulls last). Undated units compare equal (so a stable sort keeps their programme order, after dated).
+ */
+export function compareUnitsBySchedule(
+  a: { startDate: string | null; targetDate: string | null },
+  b: { startDate: string | null; targetDate: string | null }
+): number {
+  const aKey = toDayNumber(a.startDate) ?? toDayNumber(a.targetDate);
+  const bKey = toDayNumber(b.startDate) ?? toDayNumber(b.targetDate);
+  if (aKey === null || bKey === null) {
+    if (aKey === bKey) return 0;
+    return aKey === null ? 1 : -1;
+  }
+  if (aKey !== bKey) return aKey - bKey;
+  const aTarget = toDayNumber(a.targetDate);
+  const bTarget = toDayNumber(b.targetDate);
+  if (aTarget === bTarget) return 0;
+  if (aTarget === null) return 1;
+  if (bTarget === null) return -1;
+  return aTarget - bTarget;
+}
+
+/** Stable schedule sort (input = programme order, which breaks ties). Returns a new array. */
+export function sortUnitsBySchedule<T extends { startDate: string | null; targetDate: string | null }>(
+  units: readonly T[]
+): T[] {
+  return units
+    .map((unit, index) => ({ unit, index }))
+    .sort((a, b) => compareUnitsBySchedule(a.unit, b.unit) || a.index - b.index)
+    .map((entry) => entry.unit);
 }

@@ -8,6 +8,7 @@ import {
   eq,
   getTableColumns,
   inArray,
+  isNotNull,
   isNull,
   lt,
   ne,
@@ -30,7 +31,18 @@ const t = schema.apprTask;
 const plan = schema.apprTaskPlan;
 const item = schema.apprTaskPlanItem;
 
+/** Rows per bulk INSERT statement (14+ columns each → well under 65,535 bind parameters). */
+const INSERT_CHUNK = 500;
+/** Ids per UPDATE … WHERE id IN (…) (one bind parameter each; far below Postgres' 65,535 limit). */
+const BULK_UPDATE_CHUNK = 1000;
+
 // ── Plans ──
+
+/** Row-lock the plan so assign / unassign / sync / item changes on one plan run one after the other. */
+export async function lockTaskPlan(tx: DbOrTxClient, planId: string) {
+  const [row] = await tx.select({ id: plan.id }).from(plan).where(eq(plan.id, planId)).for('update');
+  return row ?? null;
+}
 
 export async function getTaskPlan(planId: string, client: DbOrTxClient = db) {
   const [row] = await client.select().from(plan).where(eq(plan.id, planId)).limit(1);
@@ -132,6 +144,21 @@ export async function listPlanAssignees(planId: string, client: DbOrTxClient = d
       schema.profile.id
     )
     .orderBy(asc(profileDisplayName));
+}
+
+/** Every (learner enrolment, plan item) task of the plan: which learner holds which item, its task id, status, due. */
+export async function listPlanTaskCells(planId: string, client: DbOrTxClient = db) {
+  return client
+    .select({
+      enrolmentId: t.enrolmentId,
+      itemId: t.planItemId,
+      taskId: t.id,
+      status: t.status,
+      dueDate: t.dueDate,
+      dueManual: t.dueManual
+    })
+    .from(t)
+    .where(and(eq(t.planId, planId), isNotNull(t.planItemId)));
 }
 
 // ── Plan items ──
@@ -244,12 +271,28 @@ export async function replaceTaskCriteria(tx: DbOrTxClient, taskId: string, crit
   await tx.insert(schema.apprTaskCriterion).values(criterionIds.map((criterionId) => ({ taskId, criterionId })));
 }
 
+/** The same criteria for many tasks at once (one delete + chunked inserts instead of a pair per task). */
+export async function replaceTaskCriteriaForTasks(tx: DbOrTxClient, taskIds: string[], criterionIds: string[]) {
+  for (let i = 0; i < taskIds.length; i += BULK_UPDATE_CHUNK) {
+    const chunk = taskIds.slice(i, i + BULK_UPDATE_CHUNK);
+    await tx.delete(schema.apprTaskCriterion).where(inArray(schema.apprTaskCriterion.taskId, chunk));
+  }
+  if (criterionIds.length === 0) return;
+  const rows = taskIds.flatMap((taskId) => criterionIds.map((criterionId) => ({ taskId, criterionId })));
+  await insertTaskCriteria(tx, rows);
+}
+
 export async function insertTaskCriteria(
   tx: DbOrTxClient,
   rows: { taskId: string; criterionId: string }[]
 ): Promise<void> {
-  if (rows.length === 0) return;
-  await tx.insert(schema.apprTaskCriterion).values(rows).onConflictDoNothing();
+  // Chunked so a big batch never exceeds Postgres' 65,535 bind-parameter limit; same transaction.
+  for (let i = 0; i < rows.length; i += INSERT_CHUNK) {
+    await tx
+      .insert(schema.apprTaskCriterion)
+      .values(rows.slice(i, i + INSERT_CHUNK))
+      .onConflictDoNothing();
+  }
 }
 
 /** Evidence linked to these tasks (newest activity first) — for the Tasks tab summary. */
@@ -263,14 +306,21 @@ export async function listEvidenceForTasks(taskIds: string[], client: DbOrTxClie
     .orderBy(desc(ev.updatedAt), desc(ev.id));
 }
 
-/** Insert tasks; (enrolment, plan item) pairs that already exist are skipped. Returns only the rows actually created. */
+/**
+ * Insert tasks; (enrolment, plan item) pairs that already exist are skipped. Returns only the rows actually created.
+ * Chunked (~500 rows per statement) inside the caller's transaction to stay under the bind-parameter limit.
+ */
 export async function insertApprTasksSkippingExisting(tx: DbOrTxClient, rows: (typeof t.$inferInsert)[]) {
-  if (rows.length === 0) return [];
-  return tx
-    .insert(t)
-    .values(rows)
-    .onConflictDoNothing({ target: [t.enrolmentId, t.planItemId] })
-    .returning();
+  const created: ApprTaskRow[] = [];
+  for (let i = 0; i < rows.length; i += INSERT_CHUNK) {
+    const inserted = await tx
+      .insert(t)
+      .values(rows.slice(i, i + INSERT_CHUNK))
+      .onConflictDoNothing({ target: [t.enrolmentId, t.planItemId] })
+      .returning();
+    created.push(...inserted);
+  }
+  return created;
 }
 
 export async function insertApprTask(tx: DbOrTxClient, values: typeof t.$inferInsert) {
@@ -284,7 +334,15 @@ export async function updateApprTask(
   patch: Partial<
     Pick<
       ApprTaskRow,
-      'title' | 'details' | 'typeKey' | 'dueDate' | 'expectedMinutes' | 'files' | 'status' | 'overdueNotifiedAt'
+      | 'title'
+      | 'details'
+      | 'typeKey'
+      | 'dueDate'
+      | 'dueManual'
+      | 'expectedMinutes'
+      | 'files'
+      | 'status'
+      | 'overdueNotifiedAt'
     >
   >,
   expectedStatus?: string
@@ -295,6 +353,34 @@ export async function updateApprTask(
     .where(expectedStatus ? and(eq(t.id, taskId), eq(t.status, expectedStatus)) : eq(t.id, taskId))
     .returning();
   return row ?? null;
+}
+
+/**
+ * One UPDATE for many tasks that get the SAME patch (e.g. a plan-wide sync). Conditional on expectedStatus like
+ * updateApprTask: a task whose status moved meanwhile is left alone. Returns the ids actually updated.
+ */
+export async function updateApprTasksBulk(
+  tx: DbOrTxClient,
+  taskIds: string[],
+  patch: Partial<
+    Pick<
+      ApprTaskRow,
+      'title' | 'details' | 'typeKey' | 'dueDate' | 'dueManual' | 'expectedMinutes' | 'files' | 'overdueNotifiedAt'
+    >
+  >,
+  expectedStatus?: string
+): Promise<string[]> {
+  const updatedIds: string[] = [];
+  for (let i = 0; i < taskIds.length; i += BULK_UPDATE_CHUNK) {
+    const chunk = taskIds.slice(i, i + BULK_UPDATE_CHUNK);
+    const rows = await tx
+      .update(t)
+      .set({ ...patch, updatedAt: new Date().toISOString() })
+      .where(expectedStatus ? and(inArray(t.id, chunk), eq(t.status, expectedStatus)) : inArray(t.id, chunk))
+      .returning({ id: t.id });
+    updatedIds.push(...rows.map((r) => r.id));
+  }
+  return updatedIds;
 }
 
 /** Detach evidence from a task that is being deleted (appr_evidence.task_id has no FK). Returns the evidence ids. */
@@ -323,6 +409,31 @@ export async function deletePlannedPlanTasks(tx: DbOrTxClient, planId: string, e
   return rows.length;
 }
 
+/**
+ * Remove PLANNED tasks (no evidence) of one plan, limited to some plan items, for some enrolments. Returns the removed
+ * task ids (grouped per learner by the caller); everything answered or started is left alone.
+ */
+export async function deletePlannedPlanItemTasks(
+  tx: DbOrTxClient,
+  planId: string,
+  enrolmentIds: string[],
+  itemIds: string[]
+): Promise<{ id: string; enrolmentId: string; planItemId: string | null }[]> {
+  if (enrolmentIds.length === 0 || itemIds.length === 0) return [];
+  return tx
+    .delete(t)
+    .where(
+      and(
+        eq(t.planId, planId),
+        inArray(t.enrolmentId, enrolmentIds),
+        inArray(t.planItemId, itemIds),
+        eq(t.status, 'PLANNED'),
+        noEvidence
+      )
+    )
+    .returning({ id: t.id, enrolmentId: t.enrolmentId, planItemId: t.planItemId });
+}
+
 /** Remove PLANNED tasks (no evidence) built from one plan item (the item is being deleted). */
 export async function deletePlannedItemTasks(tx: DbOrTxClient, planItemId: string) {
   const rows = await tx
@@ -338,12 +449,15 @@ export async function deleteAllPlannedPlanTasks(tx: DbOrTxClient, planId: string
 }
 
 /** Still-PLANNED tasks of a plan with the learner's start date (the due date is recomputed from it on sync). */
-export async function listPlannedPlanTasks(planId: string, client: DbOrTxClient = db) {
+export async function listPlannedPlanTasks(planId: string, client: DbOrTxClient = db, itemIds?: string[]) {
+  if (itemIds && itemIds.length === 0) return [];
+  const conditions: (SQL | undefined)[] = [eq(t.planId, planId), eq(t.status, 'PLANNED')];
+  if (itemIds) conditions.push(inArray(t.planItemId, itemIds));
   return client
     .select({ task: t, startDate: schema.apprEnrolment.startDate })
     .from(t)
     .innerJoin(schema.apprEnrolment, eq(schema.apprEnrolment.id, t.enrolmentId))
-    .where(and(eq(t.planId, planId), eq(t.status, 'PLANNED')));
+    .where(and(...conditions));
 }
 
 /** Take a row lock on the task so concurrent evidence writes recompute its status one after the other. */
@@ -487,7 +601,7 @@ export async function listApprEnrolmentsByIds(enrolmentIds: string[], client: Db
 /** Still-PLANNED plan tasks of one enrolment with their plan item's month offset (start-date change re-dates them). */
 export async function listPlannedPlanTasksForEnrolment(enrolmentId: string, client: DbOrTxClient = db) {
   return client
-    .select({ id: t.id, dueDate: t.dueDate, monthOffset: item.monthOffset })
+    .select({ id: t.id, dueDate: t.dueDate, dueManual: t.dueManual, monthOffset: item.monthOffset })
     .from(t)
     .innerJoin(item, eq(item.id, t.planItemId))
     .where(and(eq(t.enrolmentId, enrolmentId), eq(t.status, 'PLANNED')));
