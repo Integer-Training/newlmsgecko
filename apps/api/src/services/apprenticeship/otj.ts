@@ -1,5 +1,11 @@
 import { AppError, ErrorCodes } from '@api/utils/errors';
-import { assertStaff, getEnrolmentForActor, isStaff, requireAuthed } from '@api/services/apprenticeship/access';
+import {
+  assertEnrolmentWritable,
+  assertStaff,
+  getEnrolmentForActor,
+  isStaff,
+  requireAuthed
+} from '@api/services/apprenticeship/access';
 import { resolveApprenticeship } from '@api/services/apprenticeship/enrolment';
 import {
   notifyGatewayReadyOrRelease,
@@ -226,6 +232,7 @@ export async function getOtj(actor: Actor, enrolmentId: string, query: OtjListQu
 export async function createOtjLog(actor: Actor, enrolmentId: string, input: OtjLogCreateInput) {
   const a = requireAuthed(actor);
   const { carrier, component } = await resolveForActor(a, enrolmentId);
+  await assertEnrolmentWritable(carrier);
   assertLearnerMayWrite(a, carrier);
   assertNotFuture(input.logDate);
 
@@ -270,6 +277,7 @@ export async function createOtjLog(actor: Actor, enrolmentId: string, input: Otj
 export async function updateOtjLogEntry(actor: Actor, logId: string, input: OtjLogUpdateInput) {
   const a = requireAuthed(actor);
   const { row, carrier, component } = await loadLogForActor(a, logId);
+  await assertEnrolmentWritable(carrier);
   const staff = isStaff(a);
 
   if (!staff) {
@@ -341,6 +349,7 @@ export function otjReviewTransition(
 export async function reviewOtjLog(actor: Actor, logId: string, input: OtjLogReviewInput) {
   const a = assertStaff(actor);
   const { row, carrier } = await loadLogForActor(a, logId);
+  await assertEnrolmentWritable(carrier);
   const isAdmin = a.role === 'ADMIN';
   // Fail fast on a stale view; re-checked under the row lock below.
   if (row.status !== input.expectedStatus) throw staleReview();
@@ -383,6 +392,7 @@ export async function reviewOtjLog(actor: Actor, logId: string, input: OtjLogRev
 export async function deleteOtjLogEntry(actor: Actor, logId: string) {
   const a = requireAuthed(actor);
   const { row, carrier } = await loadLogForActor(a, logId);
+  await assertEnrolmentWritable(carrier);
   const staff = isStaff(a);
 
   // Learner: own, while SUBMITTED. Staff in reach: not VALIDATED (an admin may remove those).

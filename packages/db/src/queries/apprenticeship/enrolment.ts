@@ -4,6 +4,7 @@ import { and, asc, db, eq, ilike, inArray, isNull, or, sql, type DbOrTxClient, t
 import { noTutorSql, tutorReachSql, tutorsDisplaySql } from './tutors';
 import { onboardingCountsSql, onboardingIncompleteSql } from './onboarding';
 import { profileDisplayName } from './names';
+import { apprenticeshipClosedSql } from './withdrawn';
 
 // Gecko Apprenticeships — enrolment reads/writes. No access control here: services resolve the actor first and pass
 // the scope (organization / allocated tutor / self) in. Ids only; nothing here touches diploma tables.
@@ -27,6 +28,11 @@ export interface EnrolmentListScope {
   programmeId?: string;
   /** Programme type (DIPLOMA / STANDARD): matches the row's own programme OR its linked one. */
   type?: 'DIPLOMA' | 'STANDARD';
+  /**
+   * Withdrawn filter (default 'active'): 'active' hides CLOSED apprenticeships (carrier withdrawn and no active component),
+   * 'withdrawn' shows only those, 'all' shows both.
+   */
+  state?: 'active' | 'withdrawn' | 'all';
   /** Admin filter: only learners whose NAMED tutor (allocation) is this tutor. */
   tutorId?: string;
   search?: string;
@@ -74,10 +80,11 @@ export interface ApprLinkedRowRef {
   plannedEndDate: string | null;
   actualPct: number | null;
   achievedAt: string | null;
+  withdrawnAt: string | null;
 }
 const linkedOf = sql<ApprLinkedRowRef | null>`(select json_build_object('id', lc.id, 'programmeId', lc.programme_id, 'programmeTitle', lp.title,
   'programmeType', lp.type, 'startDate', lc.start_date, 'plannedEndDate', lc.planned_end_date, 'actualPct', lc.actual_pct,
-  'achievedAt', lc.achieved_at)
+  'achievedAt', lc.achieved_at, 'withdrawnAt', lc.withdrawn_at)
   from appr_enrolment lc join appr_programme lp on lp.id = lc.programme_id
   where lc.primary_enrolment_id = ${sql.raw('"appr_enrolment"."id"')} limit 1)`;
 
@@ -104,6 +111,9 @@ export async function listEnrolmentRows(scope: EnrolmentListScope, client: DbOrT
       )
     );
   }
+  const state = scope.state ?? 'active';
+  if (state === 'active') conditions.push(sql`not (${apprenticeshipClosedSql('"appr_enrolment"."id"')})`);
+  else if (state === 'withdrawn') conditions.push(apprenticeshipClosedSql('"appr_enrolment"."id"'));
   if (scope.tutorId) {
     conditions.push(
       sql`exists (select 1 from tutor_allocation ta where ta.learner_id = ${sql.raw('"appr_enrolment"."learner_id"')} and ta.tutor_id = ${scope.tutorId})`
@@ -144,6 +154,8 @@ export async function listEnrolmentRows(scope: EnrolmentListScope, client: DbOrT
       contractedHoursWeek: e.contractedHoursWeek,
       otjTargetMinutesOverride: e.otjTargetMinutesOverride,
       achievedAt: e.achievedAt,
+      withdrawnAt: e.withdrawnAt,
+      withdrawalReason: e.withdrawalReason,
       actualPct: e.actualPct,
       otjMinutes: e.otjMinutes,
       submittedCount: e.submittedCount,
@@ -177,7 +189,8 @@ const counterpartOf = sql<{
   programmeId: string;
   title: string;
   type: string;
-} | null>`(select json_build_object('enrolmentId', lc.id, 'programmeId', lc.programme_id, 'title', lp.title, 'type', lp.type)
+  withdrawnAt: string | null;
+} | null>`(select json_build_object('enrolmentId', lc.id, 'programmeId', lc.programme_id, 'title', lp.title, 'type', lp.type, 'withdrawnAt', lc.withdrawn_at)
   from appr_enrolment lc join appr_programme lp on lp.id = lc.programme_id
   where lc.primary_enrolment_id = ${sql.raw('"appr_enrolment"."id"')} or lc.id = ${sql.raw('"appr_enrolment"."primary_enrolment_id"')} limit 1)`;
 
@@ -403,6 +416,7 @@ export interface ApprLearnerEnrolmentRef {
   /** The enrolment linked to this one as its component, if this is a carrier. */
   componentId: string | null;
   achievedAt: string | null;
+  withdrawnAt: string | null;
   createdAt: string | null;
 }
 
@@ -440,6 +454,7 @@ export async function listLearnerEnrolments(
         string | null
       >`(select c.id from appr_enrolment c where c.primary_enrolment_id = ${e.id} limit 1)`,
       achievedAt: e.achievedAt,
+      withdrawnAt: e.withdrawnAt,
       createdAt: e.createdAt
     })
     .from(e)
@@ -541,6 +556,7 @@ export async function listCarrierEnrolmentsNeedingFirstReview(limit: number, cli
       and(
         isNull(e.achievedAt),
         isNull(e.primaryEnrolmentId),
+        sql`not (${apprenticeshipClosedSql('"appr_enrolment"."id"')})`,
         sql`${e.startDate} is not null`,
         sql`not exists (select 1 from appr_review x where x.enrolment_id = ${sql.raw('"appr_enrolment"."id"')})`
       )

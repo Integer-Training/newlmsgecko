@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { AppError, ErrorCodes } from '@api/utils/errors';
 import {
+  assertEnrolmentWritable,
   assertStaff,
   canAccessLearner,
   getEnrolmentForActor,
@@ -11,6 +12,7 @@ import {
   assertActiveType,
   assertAllowedFile,
   assertCriteriaInProgrammes,
+  assertCriteriaMappable,
   getPairProgrammes
 } from '@api/services/apprenticeship/checks';
 import { todayIso } from '@api/services/apprenticeship/progress';
@@ -210,6 +212,7 @@ export async function listOverdue(
 export async function presignTaskUploads(actor: Actor, input: TaskPresignInput) {
   const a = assertStaff(actor);
   const enrolment = await getEnrolmentForActor(actor, input.enrolmentId);
+  await assertEnrolmentWritable(enrolment);
 
   let taskId = input.taskId;
   if (taskId) {
@@ -263,12 +266,12 @@ const audit = (actor: Actor, action: string, entityId: string, metadata: Record<
 export async function createTask(actor: Actor, enrolmentId: string, input: TaskCreateInput) {
   const a = assertStaff(actor);
   const enrolment = await getEnrolmentForActor(actor, enrolmentId);
+  await assertEnrolmentWritable(enrolment);
   await assertActiveType(enrolment.organizationId, input.typeKey);
   // A task's criteria may come from either qualification of a linked pair (a task still belongs to one enrolment).
-  const criterionIds = await assertCriteriaInProgrammes(
-    (await getPairProgrammes(enrolment)).programmeIds,
-    input.criterionIds
-  );
+  const pair = await getPairProgrammes(enrolment);
+  const criterionIds = await assertCriteriaInProgrammes(pair.programmeIds, input.criterionIds);
+  await assertCriteriaMappable(enrolment, pair.programmeIds, criterionIds);
 
   if (input.files.length > 0 && !input.id) throw badRequest('Upload the files before saving', 'files');
   const taskId = input.id ?? randomUUID();
@@ -308,6 +311,7 @@ export async function createTask(actor: Actor, enrolmentId: string, input: TaskC
 export async function updateTask(actor: Actor, taskId: string, input: TaskUpdateInput) {
   const a = assertStaff(actor);
   const task = await loadTaskForActor(actor, taskId);
+  await assertEnrolmentWritable(task.enrolmentId);
   if (input.typeKey !== undefined && input.typeKey !== task.typeKey) {
     await assertActiveType(task.organizationId, input.typeKey);
   }
@@ -360,6 +364,7 @@ export async function updateTask(actor: Actor, taskId: string, input: TaskUpdate
 export async function deleteTask(actor: Actor, taskId: string) {
   assertStaff(actor);
   const task = await loadTaskForActor(actor, taskId);
+  await assertEnrolmentWritable(task.enrolmentId);
   const detached = await runInTransaction(async (tx) => {
     const evidenceIds = await clearEvidenceTaskId(tx, taskId);
     await deleteApprTask(tx, taskId);

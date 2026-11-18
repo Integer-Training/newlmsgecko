@@ -2,6 +2,7 @@ import * as schema from '@db/schema';
 
 import { and, db, eq, gt, inArray, isNotNull, isNull, sql, type DbOrTxClient } from '@db/drizzle';
 import { profileDisplayName } from './names';
+import { apprenticeshipClosedSql } from './withdrawn';
 import { ROLE } from '@cio/utils/constants';
 
 // Gecko Apprenticeships — gateway checklist ticks, gateway confirmation, EPA fields, and the "ready" notification flag.
@@ -157,8 +158,8 @@ export async function listGatewayReadyCandidates(limit: number, afterId?: string
       otjWeeklyCapHours: schema.apprSettings.otjWeeklyCapHours,
       // A carrier's AUTO_UNITS item counts units across BOTH qualifications of a linked pair: its own plus its
       // component's (rows whose primary_enrolment_id is this enrolment). A component is never scanned (the service drops it).
-      unitsTotal: sql<number>`(select count(*) from appr_enrolment_unit eu join appr_enrolment ee on ee.id = eu.enrolment_id where ee.id = ${sql.raw('"appr_enrolment"."id"')} or ee.primary_enrolment_id = ${sql.raw('"appr_enrolment"."id"')})::int`,
-      unitsComplete: sql<number>`(select count(*) from appr_enrolment_unit ec join appr_enrolment ce on ce.id = ec.enrolment_id where (ce.id = ${sql.raw('"appr_enrolment"."id"')} or ce.primary_enrolment_id = ${sql.raw('"appr_enrolment"."id"')}) and ec.completed_at is not null)::int`
+      unitsTotal: sql<number>`(select count(*) from appr_enrolment_unit eu join appr_enrolment ee on ee.id = eu.enrolment_id where (ee.id = ${sql.raw('"appr_enrolment"."id"')} or ee.primary_enrolment_id = ${sql.raw('"appr_enrolment"."id"')}) and ee.withdrawn_at is null)::int`,
+      unitsComplete: sql<number>`(select count(*) from appr_enrolment_unit ec join appr_enrolment ce on ce.id = ec.enrolment_id where (ce.id = ${sql.raw('"appr_enrolment"."id"')} or ce.primary_enrolment_id = ${sql.raw('"appr_enrolment"."id"')}) and ce.withdrawn_at is null and ec.completed_at is not null)::int`
     })
     .from(e)
     .innerJoin(p, eq(p.id, e.programmeId))
@@ -168,6 +169,7 @@ export async function listGatewayReadyCandidates(limit: number, afterId?: string
         isNull(e.gatewayPassedAt),
         isNull(e.gatewayReadyNotifiedAt),
         isNull(e.achievedAt),
+        sql`not (${apprenticeshipClosedSql('"appr_enrolment"."id"')})`,
         afterId ? gt(e.id, afterId) : undefined
       )
     )

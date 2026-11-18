@@ -29,6 +29,8 @@
   let { store, unitHref }: Props = $props();
 
   const portfolio = $derived(store.activePortfolio);
+  // A withdrawn qualification (or a closed apprenticeship) is read-only: no unit-date editing.
+  const datesLocked = $derived(store.readOnly || !!portfolio?.enrolment.withdrawnAt);
   const qualEnrolmentId = $derived(portfolio?.enrolment.id ?? store.enrolmentId);
 
   const open = new SvelteSet<string>();
@@ -162,7 +164,7 @@
                   <span class="whitespace-nowrap text-(--muted-foreground)">
                     {fmtDate(unit.startDate)} → {fmtDate(unit.targetDate)}
                   </span>
-                  {#if $isOrgTeamMember}
+                  {#if $isOrgTeamMember && !datesLocked}
                     <button
                       type="button"
                       class="p-1 text-(--muted-foreground) hover:text-(--foreground)"
@@ -172,7 +174,7 @@
                       <PencilIcon size={13} />
                     </button>
                   {/if}
-                {:else if $isOrgTeamMember}
+                {:else if $isOrgTeamMember && !datesLocked}
                   <Button variant="outline" size="sm" onclick={() => beginEdit(unit)}>Set dates</Button>
                 {:else}
                   <span class="text-(--muted-foreground)">Dates not set</span>

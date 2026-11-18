@@ -259,6 +259,26 @@ describe('assignPlan', () => {
     expect(new Set(learners)).toEqual(new Set([LRN, LRN2]));
   });
 
+  it('leaves a withdrawn apprenticeship out of the batch (no error) and reports how many were skipped', async () => {
+    vi.mocked(q.listApprEnrolmentsByIds).mockResolvedValue([
+      enrolment(ENR, LRN, '2026-01-01'),
+      enrolment(ENR2, LRN2, '2026-02-01', { withdrawnAt: '2026-05-01T00:00:00Z' })
+    ] as never);
+    const res = await assignPlan(admin, PLAN, { enrolmentIds: [ENR, ENR2] }, NOW);
+    expect(res).toMatchObject({ withdrawnSkipped: 1 });
+    const rows = vi.mocked(q.insertApprTasksSkippingExisting).mock.calls[0][1] as { enrolmentId: string }[];
+    expect(new Set(rows.map((r) => r.enrolmentId))).toEqual(new Set([ENR]));
+  });
+
+  it('a withdrawn CARRIER whose component is still active keeps receiving tasks (it is still the record)', async () => {
+    vi.mocked(q.listApprEnrolmentsByIds).mockResolvedValue([
+      enrolment(ENR, LRN, '2026-01-01', { withdrawnAt: '2026-05-01T00:00:00Z', primaryEnrolmentId: null })
+    ] as never);
+    vi.mocked(q.getLinkedEnrolment).mockResolvedValueOnce({ id: ENR2, withdrawnAt: null } as never);
+    const res = await assignPlan(admin, PLAN, { enrolmentIds: [ENR] }, NOW);
+    expect(res).toMatchObject({ withdrawnSkipped: 0 });
+  });
+
   it('refuses outside the valid window, for an archived plan, and for an empty plan', async () => {
     vi.mocked(q.getTaskPlan).mockResolvedValue(plan({ validTo: '2026-01-31' }) as never);
     await expect(assignPlan(admin, PLAN, { enrolmentIds: [ENR] }, NOW)).rejects.toMatchObject({ statusCode: 400 });
@@ -307,6 +327,22 @@ describe('unassignPlan / deletePlan', () => {
 });
 
 describe('syncPlan', () => {
+  it('leaves the planned tasks of a withdrawn apprenticeship untouched and counts them', async () => {
+    vi.mocked(q.listPlanItems).mockResolvedValue([item(ITEM1, 1, { title: 'Renamed' })] as never);
+    vi.mocked(q.listApprEnrolmentsByIds).mockResolvedValue([
+      enrolment(ENR, LRN, '2026-01-01'),
+      enrolment(ENR2, LRN2, '2026-01-01', { withdrawnAt: '2026-05-01T00:00:00Z' })
+    ] as never);
+    vi.mocked(q.listPlannedPlanTasks).mockResolvedValue([
+      { task: task({ id: 't-live', title: 'Old', enrolmentId: ENR }), startDate: '2026-01-01' },
+      { task: task({ id: 't-frozen', title: 'Old', enrolmentId: ENR2, learnerId: LRN2 }), startDate: '2026-01-01' }
+    ] as never);
+    const res = await syncPlan(admin, PLAN);
+    expect(res).toMatchObject({ updated: 1 });
+    expect(vi.mocked(recordAudit).mock.calls.at(-1)?.[0]).toMatchObject({ metadata: { withdrawnSkipped: 1 } });
+    expect(vi.mocked(q.updateApprTasksBulk).mock.calls.flatMap((c) => c[1])).toEqual(['t-live']);
+  });
+
   it('updates only changed PLANNED tasks, skips standalone ones, and counts a lost race as not updated', async () => {
     vi.mocked(q.listPlanItems).mockResolvedValue([item(ITEM1, 1, { title: 'Renamed' }), item(ITEM2, 0)] as never);
     vi.mocked(q.listPlannedPlanTasks).mockResolvedValue([

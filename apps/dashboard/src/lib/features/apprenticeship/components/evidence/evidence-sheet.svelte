@@ -76,6 +76,7 @@
       type: p.programme.type,
       enrolmentId: p.enrolment.id,
       programmeId: p.programme.id,
+      withdrawn: !!q.withdrawnAt,
       units: q.units.map((u) => ({
         id: u.id,
         code: u.code,

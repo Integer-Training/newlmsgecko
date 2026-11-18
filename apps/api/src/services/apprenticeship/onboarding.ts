@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { AppError, ErrorCodes } from '@api/utils/errors';
-import { canAccessLearner, requireAuthed } from '@api/services/apprenticeship/access';
+import { assertCarrierWritable, canAccessLearner, requireAuthed } from '@api/services/apprenticeship/access';
 import { assertAllowedFile } from '@api/services/apprenticeship/checks';
 import { ENROLMENT_ENTITY, notifySafely } from '@api/services/apprenticeship/notifications';
 import { emitNotification } from '@api/services/comms/notify';
@@ -224,6 +224,7 @@ function assertLearnerMayChange(viewer: Viewer, doc: ApprOnboardingDocRow | null
 
 export async function presignOnboardingUploads(actor: Actor, enrolmentId: string, input: OnboardingPresignInput) {
   const { a, enrolment, viewer } = await resolveOwnerOrAdmin(actor, enrolmentId);
+  await assertCarrierWritable(enrolment);
   await loadWritableType(enrolment, input.docTypeId);
   assertLearnerMayChange(viewer, await getOnboardingDoc(enrolment.id, input.docTypeId));
 
@@ -264,6 +265,7 @@ export async function saveOnboardingDoc(
   input: OnboardingDocSaveInput
 ) {
   const { a, enrolment, viewer } = await resolveOwnerOrAdmin(actor, enrolmentId);
+  await assertCarrierWritable(enrolment);
   const type = await loadWritableType(enrolment, docTypeId);
   if (input.notHeld && !type.allowNotHeld) {
     throw badRequest('This document must be uploaded', 'notHeld');
@@ -349,6 +351,7 @@ export async function saveOnboardingDoc(
 
 export async function withdrawOnboardingDoc(actor: Actor, enrolmentId: string, docTypeId: string) {
   const { a, enrolment, viewer } = await resolveOwnerOrAdmin(actor, enrolmentId);
+  await assertCarrierWritable(enrolment);
   const doc = await getOnboardingDoc(enrolment.id, docTypeId);
   if (!doc) throw notFound('Document');
   assertLearnerMayChange(viewer, doc);
@@ -380,6 +383,7 @@ export async function reviewOnboardingDocument(
   // A tutor (status-only) or stranger sees a 404; the learner reaches it but may not review (403).
   const { a, enrolment } = await resolveOwnerOrAdmin(actor, enrolmentId);
   assertAdmin(a);
+  await assertCarrierWritable(enrolment);
   const existing = await getOnboardingDoc(enrolment.id, docTypeId);
   if (!existing) throw notFound('Document');
   const status = input.decision === 'APPROVE' ? 'APPROVED' : 'REJECTED';

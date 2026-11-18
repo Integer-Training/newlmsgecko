@@ -20,12 +20,14 @@
     rows: OtjRow[];
     pendingMinutes: number;
     onAdd: () => void;
+    /** Withdrawn (closed) apprenticeship: hide Add log and row edit actions. */
+    readOnly?: boolean;
     onEdit: (row: OtjRow) => void;
     onReview: (row: OtjRow, decision: 'VALIDATE' | 'REJECT') => void;
     onViewEvidence: (id: string) => void;
     onChanged: () => void;
   }
-  let { rows, pendingMinutes, onAdd, onEdit, onReview, onViewEvidence, onChanged }: Props = $props();
+  let { rows, pendingMinutes, onAdd, onEdit, onReview, onViewEvidence, onChanged, readOnly = false }: Props = $props();
 
   const isStaff = $derived($isOrgTeamMember === true);
   const isAdmin = $derived($isOrgAdmin === true);
@@ -94,7 +96,7 @@
 <section class="space-y-3" aria-label="Off-the-job training log">
   <div class="flex flex-wrap items-end justify-between gap-2">
     <h3 class="font-semibold">Off-the-job training log</h3>
-    <Button size="sm" onclick={onAdd}>Add log</Button>
+    {#if !readOnly}<Button size="sm" onclick={onAdd}>Add log</Button>{/if}
   </div>
 
   <div class="flex flex-wrap items-end gap-3">

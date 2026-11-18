@@ -119,6 +119,17 @@
         </div>
       {:else if d}
         <div class="space-y-4">
+          {#if store.withdrawal}
+            <div
+              role="status"
+              class="flex flex-wrap items-center justify-between gap-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-300"
+            >
+              <p>
+                <strong>Withdrawn.</strong> This apprenticeship was withdrawn on {fmtDate(store.withdrawal.at)} — read only.
+                {#if store.withdrawal.reason}<span class="block">Reason: {store.withdrawal.reason}</span>{/if}
+              </p>
+            </div>
+          {/if}
           <div>
             <h2 class="text-xl font-semibold">{d.programme.title}</h2>
             <p class="text-sm text-(--muted-foreground)">

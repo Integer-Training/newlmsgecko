@@ -1,5 +1,6 @@
 import { AppError, ErrorCodes } from '@api/utils/errors';
 import {
+  assertEnrolmentWritable,
   assertStaff,
   canAccessLearner,
   getEnrolmentForActor,
@@ -11,6 +12,7 @@ import { nameGatewayActors } from '@api/services/apprenticeship/gateway-names';
 import { notifyGatewayReadyOrRelease } from '@api/services/apprenticeship/notifications';
 import { ensureOnboardingTypes } from '@api/services/apprenticeship/onboarding';
 import { lockEnrolmentsInOrder } from '@api/services/apprenticeship/pair-lock';
+import { countedHalves } from '@api/services/apprenticeship/withdrawn';
 import { recomputeEnrolment, todayIso, type EnrolmentProgressDetail } from '@api/services/apprenticeship/progress';
 import { createOrgUser } from '@api/services/organization/users';
 import { createTutorAllocation } from '@api/services/organization/allocation';
@@ -54,6 +56,8 @@ import {
   listLinkedUnitCounts,
   moveOtjLogs,
   updateApprEnrolment,
+  clearApprEnrolmentWithdrawn,
+  setApprEnrolmentWithdrawn,
   upsertEnrolmentUnitDates
 } from '@cio/db/queries/apprenticeship';
 import {
@@ -91,7 +95,9 @@ import type {
   EnrolmentCreateInput,
   EnrolmentLinkInput,
   EnrolmentListQuery,
+  EnrolmentReinstateInput,
   EnrolmentUpdateInput,
+  EnrolmentWithdrawInput,
   UnitDatesSpreadInput,
   UnitDatesUpdateInput
 } from '@cio/utils/validation/apprenticeship';
@@ -206,17 +212,49 @@ export function computeLinkedProgress(
  */
 export function overallRowStatus(
   row: RowProgressInput & {
-    linked?: { startDate: string | null; plannedEndDate: string | null; actualPct: number | null } | null;
+    withdrawnAt?: string | null;
+    linked?: {
+      startDate: string | null;
+      plannedEndDate: string | null;
+      actualPct: number | null;
+      withdrawnAt?: string | null;
+    } | null;
   },
   ownStatus: ApprProgressStatus,
   settings: ApprSettings,
   today: string
 ): ApprProgressStatus {
   if (!row.linked) return ownStatus;
-  return apprenticeshipRollup([
-    { actualPct: row.actualPct, status: ownStatus },
-    { actualPct: row.linked.actualPct, status: computeLinkedProgress(row.linked, settings, today).status }
-  ]).status;
+  // A withdrawn half is out of the roll-up (unless both are withdrawn: then the frozen numbers still show).
+  const halves = countedHalves(!!row.withdrawnAt, !!row.linked.withdrawnAt);
+  const parts: { actualPct: number | null; status: ApprProgressStatus }[] = [];
+  if (halves.own) parts.push({ actualPct: row.actualPct, status: ownStatus });
+  if (halves.linked) {
+    parts.push({ actualPct: row.linked.actualPct, status: computeLinkedProgress(row.linked, settings, today).status });
+  }
+
+  return apprenticeshipRollup(parts).status;
+}
+
+/**
+ * Units (total / complete) the gateway counts for a learners-table row: the carrier's own plus its component's, minus
+ * any WITHDRAWN half (see countedHalves). `linkedUnits` is that carrier's entry from listLinkedUnitCounts.
+ */
+export function gatewayUnitCounts(
+  row: {
+    unitsTotal?: number | null;
+    unitsComplete?: number | null;
+    withdrawnAt?: string | null;
+    linked?: { withdrawnAt?: string | null } | null;
+  },
+  linkedUnits: { total: number; complete: number } | undefined
+) {
+  const halves = countedHalves(!!row.withdrawnAt, row.linked ? !!row.linked.withdrawnAt : null);
+
+  return {
+    unitsTotal: (halves.own ? (row.unitsTotal ?? 0) : 0) + (halves.linked ? (linkedUnits?.total ?? 0) : 0),
+    unitsComplete: (halves.own ? (row.unitsComplete ?? 0) : 0) + (halves.linked ? (linkedUnits?.complete ?? 0) : 0)
+  };
 }
 
 /** Overdue = the earliest open review's date has passed (computed on read, never stored). */
@@ -236,6 +274,8 @@ export async function listEnrolments(actor: Actor, query: EnrolmentListQuery, no
     search: query.search || undefined,
     noTutor: query.noTutor,
     onboardingIncomplete: query.onboarding === 'incomplete',
+    // The apprentice always sees their own apprenticeship, withdrawn or not (read-only).
+    state: a.role === 'LEARNER' ? 'all' : query.state,
     today: todayIso(now)
   };
   if (a.role === 'TUTOR') scope.restrictToTutorId = a.userId;
@@ -253,11 +293,12 @@ export async function listEnrolments(actor: Actor, query: EnrolmentListQuery, no
 
   const computed = rows.map((r) => {
     const p = computeRowProgress(r, settings, today);
+    const units = gatewayUnitCounts(r, linkedUnits.get(r.id));
     const gateway = buildGatewayView({
       checklist: resolveChecklist(r.gatewayChecklist),
       manual: r.gatewayItems,
-      unitsTotal: (r.unitsTotal ?? 0) + (linkedUnits.get(r.id)?.total ?? 0),
-      unitsComplete: (r.unitsComplete ?? 0) + (linkedUnits.get(r.id)?.complete ?? 0),
+      unitsTotal: units.unitsTotal,
+      unitsComplete: units.unitsComplete,
       otjMinutes: r.otjMinutes,
       otjTargetMinutes: p.otjTargetMinutes,
       enrolment: {
@@ -281,15 +322,19 @@ export async function listEnrolments(actor: Actor, query: EnrolmentListQuery, no
             type: component.programmeType,
             actualPct: component.actualPct,
             expectedPct: linkedProgress.expectedPct,
-            status: linkedProgress.status
+            status: linkedProgress.status,
+            withdrawnAt: component.withdrawnAt ?? null
           }
         : null;
+    // A withdrawn half is out of the roll-up (both withdrawn: the frozen numbers still show).
+    const halves = countedHalves(!!r.withdrawnAt, linked ? !!linked.withdrawnAt : null);
+    const ownPart = { actualPct: r.actualPct, status: p.status };
     const overall = linked
       ? apprenticeshipRollup([
-          { actualPct: r.actualPct, status: p.status },
-          { actualPct: linked.actualPct, status: linked.status }
+          ...(halves.own ? [ownPart] : []),
+          ...(halves.linked ? [{ actualPct: linked.actualPct, status: linked.status }] : [])
         ])
-      : { actualPct: r.actualPct, status: p.status };
+      : ownPart;
     return {
       id: r.id,
       programmeId: r.programmeId,
@@ -303,6 +348,8 @@ export async function listEnrolments(actor: Actor, query: EnrolmentListQuery, no
       startDate: r.startDate,
       plannedEndDate: r.plannedEndDate,
       achievedAt: r.achievedAt,
+      withdrawnAt: r.withdrawnAt ?? null,
+      withdrawalReason: r.withdrawalReason ?? null,
       actualPct: r.actualPct,
       expectedPct: p.expectedPct,
       status: p.status,
@@ -481,7 +528,7 @@ async function enrolApprentice(
     for (const programme of programmes) {
       if (await getApprEnrolmentByProgrammeLearner(programme.id, learnerId)) throw alreadyEnrolled();
     }
-    const open = (await listLearnerEnrolments(a.orgId, learnerId)).filter((e) => !e.achievedAt);
+    const open = (await listLearnerEnrolments(a.orgId, learnerId)).filter((e) => !e.achievedAt && !e.withdrawnAt);
     const plan = planEnrolmentPairing(programmes, open);
     if ('error' in plan) throw badRequest(plan.error, programmeField);
   } else {
@@ -517,7 +564,7 @@ async function enrolApprentice(
       for (const programme of programmes) {
         if (await getApprEnrolmentByProgrammeLearner(programme.id, learnerId, tx)) throw alreadyEnrolled();
       }
-      const open = (await listLearnerEnrolments(a.orgId, learnerId, tx)).filter((e) => !e.achievedAt);
+      const open = (await listLearnerEnrolments(a.orgId, learnerId, tx)).filter((e) => !e.achievedAt && !e.withdrawnAt);
       const plan = planEnrolmentPairing(programmes, open);
       if ('error' in plan) throw badRequest(plan.error, programmeField);
 
@@ -660,6 +707,8 @@ export async function linkEnrolment(actor: Actor, enrolmentId: string, input: En
   const second = await getApprEnrolment(input.enrolmentId);
   if (!second || second.organizationId !== a.orgId) throw notFound();
   if (first.id === second.id) throw badRequest('Pick two different enrolments', 'enrolmentId');
+  await assertEnrolmentWritable(first);
+  await assertEnrolmentWritable(second);
   if (first.learnerId !== second.learnerId)
     throw badRequest('Both enrolments must belong to the same learner', 'enrolmentId');
 
@@ -740,6 +789,7 @@ export async function unlinkEnrolment(actor: Actor, enrolmentId: string) {
   await getEnrolmentForActor(a, enrolmentId);
   const { carrier, component } = await resolveApprenticeship(enrolmentId);
   if (!component) throw badRequest('This enrolment is not linked to another');
+  await assertEnrolmentWritable(carrier);
 
   // Under the pair lock (so no evidence write can add a cross-mapping between the check and the split), re-check, split,
   // and re-derive both caches: the halves stop sharing evidence counts, OTJ minutes and gateway units.
@@ -812,7 +862,7 @@ export async function checkLearner(actor: Actor, query: { learnerId?: string; em
       programmeTitle: e.programmeTitle,
       type: e.type,
       level: e.level,
-      state: e.achievedAt ? 'achieved' : 'active'
+      state: e.achievedAt ? 'achieved' : e.withdrawnAt ? 'withdrawn' : 'active'
     })),
     regularCourses
   };
@@ -826,6 +876,7 @@ interface Counterpart {
   programmeId: string;
   title: string;
   type: string;
+  withdrawnAt?: string | null;
 }
 
 function toPortfolioLinked(
@@ -844,7 +895,8 @@ function toPortfolioLinked(
       enrolmentId: counterpart.enrolmentId,
       programmeId: counterpart.programmeId,
       title: counterpart.title,
-      type: (counterpart.type === 'STANDARD' ? 'STANDARD' : 'DIPLOMA') as ApprProgrammeType
+      type: (counterpart.type === 'STANDARD' ? 'STANDARD' : 'DIPLOMA') as ApprProgrammeType,
+      withdrawnAt: counterpart.withdrawnAt ?? null
     }
   };
 }
@@ -867,6 +919,15 @@ async function loadPortfolio(actor: Actor, enrolmentId: string, now: Date = new 
   // Same learner-level numbers as buildEnrolmentProgress: a CARRIER counts both halves of a pair plus its validated OTJ logs.
   const isComponent = !!enrolment.primaryEnrolmentId;
   const pairComponent = isComponent ? null : await getLinkedEnrolment(enrolment.id);
+  // Withdrawn halves are out of the learner-level evidence totals and the gateway unit count (see countedHalves).
+  const halves = countedHalves(
+    !!enrolment.withdrawnAt,
+    overview.counterpart ? !!overview.counterpart.withdrawnAt : null
+  );
+  const totalsProgrammeIds = [
+    halves.own ? enrolment.programmeId : null,
+    halves.linked && pairComponent ? pairComponent.programmeId : null
+  ].filter((id): id is string => !!id);
   const [structure, counts, evidenceTotals, unitRows, settings, loggedGlh, acceptedDates, loggedOtj] =
     await Promise.all([
       getApprProgrammeStructure(enrolment.programmeId),
@@ -875,7 +936,7 @@ async function loadPortfolio(actor: Actor, enrolmentId: string, now: Date = new 
         enrolment.programmeId,
         enrolment.learnerId,
         undefined,
-        pairComponent ? { programmeIds: [enrolment.programmeId, pairComponent.programmeId] } : {}
+        pairComponent ? { programmeIds: totalsProgrammeIds } : {}
       ),
       listEnrolmentUnitRows(enrolment.id),
       getApprSettings(enrolment.organizationId),
@@ -959,6 +1020,8 @@ async function loadPortfolio(actor: Actor, enrolmentId: string, now: Date = new 
       awardingBody: q.awardingBody,
       level: q.level,
       actualPct: averagePct(units.map((u) => u.actualPct)),
+      // Set when this qualification is withdrawn: its criteria are hidden from the evidence picker.
+      withdrawnAt: enrolment.withdrawnAt ?? null,
       units
     };
   });
@@ -986,10 +1049,10 @@ async function loadPortfolio(actor: Actor, enrolmentId: string, now: Date = new 
   const gateway = buildGatewayView({
     checklist: resolveChecklist(overview.gatewayChecklist),
     manual: enrolment.gatewayItems,
-    unitsTotal: structure.units.length + counterpartUnits.length,
+    unitsTotal: (halves.own ? structure.units.length : 0) + (halves.linked ? counterpartUnits.length : 0),
     unitsComplete:
-      structure.units.filter((u) => progressByUnit.get(u.id)?.status === 'COMPLETE').length +
-      counterpartUnits.filter((u) => u.completedAt).length,
+      (halves.own ? structure.units.filter((u) => progressByUnit.get(u.id)?.status === 'COMPLETE').length : 0) +
+      (halves.linked ? counterpartUnits.filter((u) => u.completedAt).length : 0),
     otjMinutes: progress.otjMinutes,
     otjTargetMinutes: progress.otjTargetMinutes,
     enrolment
@@ -1005,7 +1068,11 @@ async function loadPortfolio(actor: Actor, enrolmentId: string, now: Date = new 
       contractedHoursWeek: enrolment.contractedHoursWeek,
       otjTargetMinutesOverride: enrolment.otjTargetMinutesOverride,
       achievedAt: enrolment.achievedAt,
-      recomputedAt: enrolment.recomputedAt
+      recomputedAt: enrolment.recomputedAt,
+      withdrawnAt: enrolment.withdrawnAt ?? null,
+      withdrawalReason: enrolment.withdrawalReason ?? null,
+      // Every half withdrawn: read-only for everyone (the learner still reads).
+      apprenticeshipClosed: halves.closed
     },
     learner: { id: enrolment.learnerId, name: overview.learnerName, email: overview.learnerEmail },
     programme: {
@@ -1072,6 +1139,7 @@ export async function updateEnrolment(actor: Actor, enrolmentId: string, patch: 
   if (a.role !== 'ADMIN')
     throw new AppError('Only an admin can change programme dates and hours', ErrorCodes.FORBIDDEN, 403);
   const enrolment = await getEnrolmentForActor(actor, enrolmentId);
+  await assertEnrolmentWritable(enrolment);
   const start = patch.startDate ?? enrolment.startDate;
   const end = patch.plannedEndDate ?? enrolment.plannedEndDate;
   const s = toDayNumber(start);
@@ -1107,6 +1175,7 @@ export async function updateEnrolment(actor: Actor, enrolmentId: string, patch: 
 export async function setUnitDates(actor: Actor, enrolmentId: string, input: UnitDatesUpdateInput) {
   assertStaff(actor);
   const enrolment = await getEnrolmentForActor(actor, enrolmentId);
+  await assertEnrolmentWritable(enrolment);
   const structure = await getApprProgrammeStructure(enrolment.programmeId);
   const known = new Set(structure.units.map((u) => u.id));
   if (!input.units.every((u) => known.has(u.unitId))) {
@@ -1127,6 +1196,7 @@ export async function setUnitDates(actor: Actor, enrolmentId: string, input: Uni
 export async function spreadEnrolmentUnitDates(actor: Actor, enrolmentId: string, input: UnitDatesSpreadInput) {
   assertStaff(actor);
   const enrolment = await getEnrolmentForActor(actor, enrolmentId);
+  await assertEnrolmentWritable(enrolment);
   const start = input.startDate ?? enrolment.startDate;
   const end = input.endDate ?? enrolment.plannedEndDate;
   if (
@@ -1258,4 +1328,125 @@ export async function exportPortfolioCsv(actor: Actor, enrolmentId: string, unit
     csv: `﻿${lines.join('\r\n')}\r\n`,
     filename: `${safe(portfolio.learner.name)}-${safe(portfolio.programme.title)}.csv`
   };
+}
+
+// ── Withdraw / reinstate (Deploy 5, migration 0038) ──
+
+const conflict = (message: string) => new AppError(message, ErrorCodes.CONFLICT, 409);
+
+/**
+ * POST /enrolments/:id/withdraw (admin). `scope` THIS withdraws just this enrolment (its units freeze and it leaves the
+ * roll-up and the gateway count; the rest of a pair carries on, and a withdrawn CARRIER row stays the apprenticeship's
+ * record for reviews / OTJ / onboarding / gateway). BOTH withdraws every half: the apprenticeship is CLOSED. A lone
+ * enrolment is always closed. Evidence mappings are kept. Both halves are locked in id order, then the survivors'
+ * numbers are re-derived in the same transaction.
+ */
+export async function withdrawEnrolment(actor: Actor, enrolmentId: string, input: EnrolmentWithdrawInput) {
+  const a = requireAuthed(actor);
+  if (a.role !== 'ADMIN') throw new AppError('Only an admin can withdraw an enrolment', ErrorCodes.FORBIDDEN, 403);
+  const target = await getEnrolmentForActor(a, enrolmentId);
+  const { carrier, component } = await resolveApprenticeship(target.id);
+  const halves = component ? [carrier, component] : [carrier];
+  const at = new Date().toISOString();
+
+  const result = await runInTransaction(async (tx) => {
+    const locked = await lockEnrolmentsInOrder(
+      tx,
+      halves.map((h) => h.id)
+    );
+    const fresh = new Map(locked.filter((r): r is NonNullable<typeof r> => !!r).map((r) => [r.id, r]));
+    const wanted = input.scope === 'BOTH' ? halves : [target];
+    const targets = wanted.filter((h) => !fresh.get(h.id)?.withdrawnAt);
+    if (targets.length === 0) throw conflict('This enrolment is already withdrawn');
+
+    for (const half of targets) {
+      await setApprEnrolmentWithdrawn(tx, half.id, { userId: a.userId, reason: input.reason, at });
+    }
+    // Re-derive the survivors (the roll-up, the gateway units and the OTJ / evidence totals changed). The recompute of a
+    // pair refreshes both halves; frozen halves keep their unit cache.
+    const detail = await recomputeEnrolment(tx, carrier.id, { claimGatewayReady: true });
+    const closed = halves.every((h) => targets.some((t) => t.id === h.id) || !!fresh.get(h.id)?.withdrawnAt);
+    return { ids: targets.map((t) => t.id), closed, claimed: !!detail?.gatewayReadyClaimed };
+  });
+
+  if (result.claimed) {
+    await notifyGatewayReadyOrRelease({
+      enrolmentId: carrier.id,
+      learnerId: carrier.learnerId,
+      organizationId: carrier.organizationId
+    });
+  }
+  await recordAudit({
+    actor,
+    action: 'appr.enrolment.withdrawn',
+    entityType: 'appr_enrolment',
+    entityId: target.id,
+    metadata: { scope: input.scope, enrolmentIds: result.ids, closed: result.closed, reason: input.reason }
+  });
+  return { enrolmentId: target.id, withdrawnIds: result.ids, closed: result.closed, withdrawnAt: at };
+}
+
+/**
+ * POST /enrolments/:id/reinstate (admin). Clears the withdrawn columns of this enrolment (scope THIS, the default) or of
+ * every withdrawn half (BOTH), re-checks the one-diploma + one-standard rule against the learner's CURRENT open
+ * enrolments (409 if reinstating would now violate it, e.g. they were enrolled on another diploma meanwhile), and
+ * recomputes. The only write that works on a closed apprenticeship.
+ */
+export async function reinstateEnrolment(actor: Actor, enrolmentId: string, input: EnrolmentReinstateInput) {
+  const a = requireAuthed(actor);
+  if (a.role !== 'ADMIN') throw new AppError('Only an admin can reinstate an enrolment', ErrorCodes.FORBIDDEN, 403);
+  const target = await getEnrolmentForActor(a, enrolmentId);
+  const { carrier, component } = await resolveApprenticeship(target.id);
+  const halves = component ? [carrier, component] : [carrier];
+
+  const result = await runInTransaction(async (tx) => {
+    // Same per-learner lock as enrol / link, so a concurrent enrolment cannot slip in between the check and the write.
+    await lockLearnerEnrolments(tx, target.learnerId);
+    const locked = await lockEnrolmentsInOrder(
+      tx,
+      halves.map((h) => h.id)
+    );
+    const fresh = new Map(locked.filter((r): r is NonNullable<typeof r> => !!r).map((r) => [r.id, r]));
+    const wanted = input.scope === 'BOTH' ? halves : [target];
+    const targets = wanted.filter((h) => fresh.get(h.id)?.withdrawnAt);
+    if (targets.length === 0) throw conflict('This enrolment is not withdrawn');
+
+    const targetIds = new Set(targets.map((t) => t.id));
+    const open = (await listLearnerEnrolments(a.orgId, target.learnerId, tx)).filter(
+      (e) => !e.achievedAt && !e.withdrawnAt && !targetIds.has(e.id)
+    );
+    const incoming: PlanProgramme[] = [];
+    for (const half of targets) {
+      const programme = await getApprProgramme(half.programmeId, tx);
+      if (!programme) throw notFound();
+      incoming.push({
+        id: programme.id,
+        title: programme.title,
+        type: programme.type,
+        pairedProgrammeId: programme.pairedProgrammeId
+      });
+    }
+    const plan = planEnrolmentPairing(incoming, open);
+    if ('error' in plan) throw conflict(plan.error);
+
+    for (const half of targets) await clearApprEnrolmentWithdrawn(tx, half.id);
+    const detail = await recomputeEnrolment(tx, carrier.id, { claimGatewayReady: true });
+    return { ids: targets.map((t) => t.id), claimed: !!detail?.gatewayReadyClaimed };
+  });
+
+  if (result.claimed) {
+    await notifyGatewayReadyOrRelease({
+      enrolmentId: carrier.id,
+      learnerId: carrier.learnerId,
+      organizationId: carrier.organizationId
+    });
+  }
+  await recordAudit({
+    actor,
+    action: 'appr.enrolment.reinstated',
+    entityType: 'appr_enrolment',
+    entityId: target.id,
+    metadata: { scope: input.scope, enrolmentIds: result.ids }
+  });
+  return { enrolmentId: target.id, reinstatedIds: result.ids };
 }

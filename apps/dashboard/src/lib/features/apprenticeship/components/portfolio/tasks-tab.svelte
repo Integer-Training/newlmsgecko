@@ -85,7 +85,7 @@
         · <strong class="text-rose-600">{store.overdueTaskCount} overdue</strong>
       {/if}
     </p>
-    {#if isStaff}
+    {#if isStaff && !store.readOnly}
       <div class="flex flex-wrap items-center gap-2">
         <Button size="sm" variant="outline" onclick={() => (fromPlanOpen = true)}>
           <ListPlusIcon size={14} class="mr-1" /> Add from plan

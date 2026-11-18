@@ -52,7 +52,7 @@
             <UsersIcon size={14} class="mr-1" /> Tutors
           </Button>
         {/if}
-        {#if $isOrgTeamMember}
+        {#if $isOrgTeamMember && !store.readOnly}
           <Button variant="outline" size="sm" onclick={onSpread}>
             <SplitIcon size={14} class="mr-1" /> Spread unit dates
           </Button>

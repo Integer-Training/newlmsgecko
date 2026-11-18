@@ -3,6 +3,7 @@ import * as schema from '@db/schema';
 import { and, asc, db, desc, eq, inArray, or, sql, type DbOrTxClient, type SQL } from '@db/drizzle';
 import { tutorReachSql, tutorsDisplaySql } from './tutors';
 import { profileDisplayName } from './names';
+import { apprenticeshipClosedByLearnerSql } from './withdrawn';
 
 // Gecko Apprenticeships — evidence reads/writes. No access control here: services resolve the actor and the enrolment
 // first. Writes take the transaction client so the status/mapping change and the progress recompute land together.
@@ -293,7 +294,12 @@ export async function listToMark(
   client: DbOrTxClient = db
 ) {
   const ev = schema.apprEvidence;
-  const conditions: (SQL | undefined)[] = [eq(ev.organizationId, scope.organizationId), eq(ev.status, 'SUBMITTED')];
+  const conditions: (SQL | undefined)[] = [
+    eq(ev.organizationId, scope.organizationId),
+    eq(ev.status, 'SUBMITTED'),
+    // A withdrawn (closed) apprenticeship has nothing left to mark.
+    sql`not (${apprenticeshipClosedByLearnerSql('"appr_evidence"."learner_id"', '"appr_evidence"."programme_id"')})`
+  ];
   if (scope.programmeId) {
     // Home programme, or mapped to one of its criteria (evidence homed on the other half of a pair shows in both queues).
     conditions.push(

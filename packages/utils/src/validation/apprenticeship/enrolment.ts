@@ -30,6 +30,8 @@ export const ZEnrolmentListQuery = z.object({
   // 'BOTH' → linked Diploma + Standard pairs only.
   type: z.enum([...APPR_PROGRAMME_TYPES, 'BOTH']).optional(),
   search: z.string().trim().max(100).optional(),
+  // Withdrawn apprenticeships are hidden by default; 'withdrawn' shows only them, 'all' shows both.
+  state: z.enum(['active', 'withdrawn', 'all']).default('active'),
   // 'true' → learners with neither a named tutor nor a programme tutor.
   noTutor: z
     .enum(['true', 'false'])
@@ -90,6 +92,17 @@ export type ApprenticeshipCreateInput = z.infer<typeof ZApprenticeshipCreate>;
 
 export const ZEnrolmentLink = z.object({ enrolmentId: z.uuid() });
 export type EnrolmentLinkInput = z.infer<typeof ZEnrolmentLink>;
+
+/** Withdraw an apprenticeship (Deploy 5). THIS = just this qualification; BOTH = the whole apprenticeship. */
+export const ZEnrolmentWithdraw = z.object({
+  reason: trimmed(2000),
+  scope: z.enum(['THIS', 'BOTH']).default('THIS')
+});
+export type EnrolmentWithdrawInput = z.infer<typeof ZEnrolmentWithdraw>;
+
+/** Reinstate (admin). THIS (default) = just this enrolment; BOTH = every withdrawn half of the apprenticeship. */
+export const ZEnrolmentReinstate = z.object({ scope: z.enum(['THIS', 'BOTH']).default('THIS') });
+export type EnrolmentReinstateInput = z.infer<typeof ZEnrolmentReinstate>;
 
 export const ZEnrolmentUpdate = z
   .object({

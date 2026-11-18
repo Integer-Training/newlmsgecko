@@ -17,7 +17,7 @@
   } from '@cio/utils/constants/apprenticeship';
   import { currentOrg, isOrgAdmin } from '$lib/utils/store/org';
   import { apprenticeshipsBase } from '../utils/paths';
-  import { enrolmentsApi, type EnrolmentRow } from '../api/enrolments.svelte';
+  import { enrolmentsApi, type EnrolmentRow, type EnrolmentState } from '../api/enrolments.svelte';
   import EnrolApprenticeDialog from '../components/learners/enrol-apprentice-dialog.svelte';
   import ProgrammeTypeChip from '../components/shared/programme-type-chip.svelte';
   import ProgressBar from '../components/shared/progress-bar.svelte';
@@ -43,6 +43,9 @@
     typeParam === 'DIPLOMA' || typeParam === 'STANDARD' || typeParam === 'BOTH' ? typeParam : ''
   );
   let tutorId = $state('');
+  // Deploy 5: default list = active; Withdrawn / All are opt-in.
+  const stateParam = q0.get('state');
+  let stateFilter = $state<EnrolmentState>(stateParam === 'withdrawn' || stateParam === 'all' ? stateParam : 'active');
   let status = $state<ApprProgressStatus | ''>(
     (APPR_PROGRESS_STATUSES as readonly string[]).includes(statusParam ?? '') ? (statusParam as ApprProgressStatus) : ''
   );
@@ -113,7 +116,14 @@
   const totalPages = $derived(list ? Math.max(1, Math.ceil(list.total / list.pageSize)) : 1);
   const totalShown = $derived(list?.total ?? 0);
   const hasFilters = $derived(
-    !!programmeId || !!typeFilter || !!tutorId || !!status || !!debouncedSearch || noTutor || onboardingIncomplete
+    !!programmeId ||
+      !!typeFilter ||
+      !!tutorId ||
+      !!status ||
+      !!debouncedSearch ||
+      noTutor ||
+      onboardingIncomplete ||
+      stateFilter !== 'active'
   );
 
   // The admin flag is unknown (null) on a hard load: load the pickers once it is known, not before.
@@ -145,7 +155,8 @@
       status,
       debouncedSearch,
       noTutor,
-      onboardingIncomplete
+      onboardingIncomplete,
+      stateFilter
     ]);
     let p = page;
     if (key !== lastKey) {
@@ -164,6 +175,7 @@
       search: debouncedSearch || undefined,
       noTutor: noTutor || undefined,
       onboarding: onboardingIncomplete ? ('incomplete' as const) : undefined,
+      state: stateFilter,
       page: p,
       pageSize: PAGE_SIZE
     };
@@ -177,6 +189,7 @@
     status = '';
     noTutor = false;
     onboardingIncomplete = false;
+    stateFilter = 'active';
     searchValue = '';
     debouncedSearch = '';
   }
@@ -229,7 +242,16 @@
 
 {#snippet learnerCell(r: EnrolmentRow)}
   <div class="min-w-0">
-    <p class="font-medium">{r.learner.name}</p>
+    <p class="flex flex-wrap items-center gap-1.5 font-medium">
+      {r.learner.name}
+      {#if r.withdrawnAt}
+        <span
+          class="{chipBase} bg-(--muted) text-(--muted-foreground)"
+          title={r.withdrawalReason ? `Reason: ${r.withdrawalReason}` : undefined}
+          >Withdrawn {fmtDate(r.withdrawnAt)}</span
+        >
+      {/if}
+    </p>
     {#if r.learner.email}
       <p class="text-xs break-all text-(--muted-foreground)">{r.learner.email}</p>
     {/if}
@@ -382,6 +404,19 @@
 
   <Page.Body>
     {#snippet child()}
+      <div class="mb-3 flex flex-wrap gap-2" role="group" aria-label="Filter by enrolment state">
+        {#each [['active', 'Active'], ['withdrawn', 'Withdrawn'], ['all', 'All']] as const as [value, label] (value)}
+          <button
+            type="button"
+            aria-pressed={stateFilter === value}
+            class="{pillBase} {stateFilter === value ? pillOn : 'hover:bg-(--muted)'}"
+            onclick={() => (stateFilter = value)}
+          >
+            {label}
+          </button>
+        {/each}
+      </div>
+
       <!-- Status quick chips with the API's counts -->
       <div class="mb-3 flex flex-wrap gap-2" role="group" aria-label="Filter by status">
         <button

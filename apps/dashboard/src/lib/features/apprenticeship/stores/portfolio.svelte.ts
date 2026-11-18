@@ -121,6 +121,7 @@ export class PortfolioStore {
       type: p?.programme.type,
       enrolmentId: p?.enrolment.id,
       programmeId: p?.programme.id,
+      withdrawn: !!q.withdrawnAt,
       units: q.units.map((u) => ({
         id: u.id,
         code: u.code,
@@ -147,7 +148,10 @@ export class PortfolioStore {
   /** The enrolment the evidence sheet saves to. */
   get sheetEnrolmentId(): string {
     if (this.sheet.mode !== 'add') return this.enrolmentId;
-    return this.sheet.qualEnrolmentId ?? this.activePortfolio?.enrolment.id ?? this.enrolmentId;
+    const chosen = this.sheet.qualEnrolmentId ?? this.activePortfolio?.enrolment.id ?? this.enrolmentId;
+    // A withdrawn qualification is read-only: a new piece is saved to the apprenticeship's carrier instead.
+    if (chosen !== this.enrolmentId && this.portfolioFor(chosen)?.enrolment.withdrawnAt) return this.enrolmentId;
+    return chosen;
   }
 
   /** Criteria already met in the programme the sheet is working on. */
@@ -353,9 +357,41 @@ export class PortfolioStore {
 
   /** The apprentice (not staff) may not add evidence once the gateway is confirmed. */
   get evidenceBlocked(): boolean {
-    return this.gatewayLocked && get(isOrgTeamMember) !== true;
+    return this.readOnly || (this.gatewayLocked && get(isOrgTeamMember) !== true);
   }
-  readonly blockedMessage = 'Your apprenticeship is at end-point assessment — speak to your tutor';
+  get blockedMessage(): string {
+    return this.readOnly
+      ? 'This apprenticeship has been withdrawn'
+      : 'Your apprenticeship is at end-point assessment — speak to your tutor';
+  }
+
+  /** Withdrawn (Deploy 5): the API says the whole apprenticeship is closed (also true for a lone withdrawn enrolment). */
+  get readOnly(): boolean {
+    return this.data?.enrolment.apprenticeshipClosed === true;
+  }
+
+  /** When the apprenticeship was withdrawn (the later of the two when paired) and why. */
+  get withdrawal(): { at: string; reason: string | null } | null {
+    if (!this.readOnly || !this.data) return null;
+    const halves = [this.data.enrolment, this.pair?.enrolment].filter((e) => !!e?.withdrawnAt);
+    const latest = halves.sort((a, b) => String(b?.withdrawnAt).localeCompare(String(a?.withdrawnAt)))[0];
+    const e = latest ?? this.data.enrolment;
+    return { at: (e.withdrawnAt ?? this.data.enrolment.withdrawnAt) as string, reason: e.withdrawalReason ?? null };
+  }
+
+  /** Admin: reinstate one qualification, then reload everything. */
+  async reinstate(enrolmentId: string): Promise<boolean> {
+    this.saving = true;
+    const res = await enrolmentsApi.reinstate(enrolmentId);
+    this.saving = false;
+    if (!res.ok) {
+      snackbar.error(res.error);
+      return false;
+    }
+    snackbar.success('Reinstated.');
+    await this.load();
+    return true;
+  }
 
   // ── Tasks / reviews ──
   get overdueTaskCount(): number {

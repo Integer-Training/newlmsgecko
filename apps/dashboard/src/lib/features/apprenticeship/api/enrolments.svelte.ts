@@ -53,6 +53,9 @@ export interface EnrolmentRow {
   programmeType?: ApprProgrammeType;
   linked?: EnrolmentLinked | null;
   overall?: OverviewRollup;
+  /** Deploy 5: set when withdrawn. */
+  withdrawnAt?: string | null;
+  withdrawalReason?: string | null;
 }
 
 export interface EnrolmentList {
@@ -62,6 +65,9 @@ export interface EnrolmentList {
   pageSize: number;
   statusCounts: Record<ApprProgressStatus, number>;
 }
+
+export type EnrolmentState = 'active' | 'withdrawn' | 'all';
+export type WithdrawScope = 'THIS' | 'BOTH';
 
 export interface EnrolmentFilters {
   programmeId?: string;
@@ -73,6 +79,8 @@ export interface EnrolmentFilters {
   noTutor?: boolean;
   /** 'incomplete' = required onboarding documents not all approved. */
   onboarding?: 'incomplete';
+  /** Deploy 5: default (omitted) = active. */
+  state?: EnrolmentState;
   page: number;
   pageSize: number;
 }
@@ -131,6 +139,8 @@ export interface PortfolioQualification {
   awardingBody: string | null;
   level: string | null;
   actualPct: number | null;
+  /** Deploy 5: set when this qualification is withdrawn (its criteria are not offered for new mappings). */
+  withdrawnAt?: string | null;
   units: PortfolioUnit[];
 }
 
@@ -145,6 +155,11 @@ export interface Portfolio {
     otjTargetMinutesOverride: number | null;
     achievedAt: string | null;
     recomputedAt: string | null;
+    /** Deploy 5 */
+    withdrawnAt?: string | null;
+    withdrawalReason?: string | null;
+    /** Every half of the apprenticeship is withdrawn (a lone enrolment, or both halves): read-only for everyone. */
+    apprenticeshipClosed?: boolean;
   };
   learner: { id: string; name: string; email: string | null };
   programme: { id: string; title: string; reference: string | null; level: string | null };
@@ -243,6 +258,7 @@ class EnrolmentsApi extends BaseApi {
     if (filters.search?.trim()) query.search = filters.search.trim();
     if (filters.noTutor) query.noTutor = 'true';
     if (filters.onboarding) query.onboarding = filters.onboarding;
+    if (filters.state && filters.state !== 'active') query.state = filters.state;
     this.isLoading = true;
     const res = await call<EnrolmentList>(() => classroomio.apprenticeship.enrolments.$get({ query }));
     if (reqId !== this.#reqId) return;
@@ -294,6 +310,15 @@ class EnrolmentsApi extends BaseApi {
     if (q.learnerId) query.learnerId = q.learnerId;
     if (q.email) query.email = q.email;
     return call(() => classroomio.apprenticeship.enrolments['learner-check'].$get({ query }));
+  }
+
+  // Deploy 5: withdraw (THIS | BOTH) and reinstate.
+  withdraw(id: string, body: { reason: string; scope: WithdrawScope }): Promise<CallResult<unknown>> {
+    return call(() => classroomio.apprenticeship.enrolments[':id'].withdraw.$post({ param: { id }, json: body }));
+  }
+
+  reinstate(id: string): Promise<CallResult<unknown>> {
+    return call(() => classroomio.apprenticeship.enrolments[':id'].reinstate.$post({ param: { id } }));
   }
 
   getPortfolio(id: string): Promise<CallResult<Portfolio>> {

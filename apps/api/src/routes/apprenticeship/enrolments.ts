@@ -5,7 +5,9 @@ import {
   ZEnrolmentIdParam,
   ZEnrolmentLink,
   ZEnrolmentListQuery,
+  ZEnrolmentReinstate,
   ZEnrolmentUpdate,
+  ZEnrolmentWithdraw,
   ZExportQuery,
   ZUnitDatesSpread,
   ZUnitDatesUpdate
@@ -19,10 +21,12 @@ import {
   linkEnrolment,
   listEnrolments,
   getEnrolmentPickerOptions,
+  reinstateEnrolment,
   setUnitDates,
   spreadEnrolmentUnitDates,
   unlinkEnrolment,
-  updateEnrolment
+  updateEnrolment,
+  withdrawEnrolment
 } from '@api/services/apprenticeship/enrolment';
 
 import { Hono } from '@api/utils/hono';
@@ -119,6 +123,32 @@ export const enrolmentsRouter = new Hono()
       return c.json({ success: true, data }, 200);
     } catch (error) {
       return handleError(c, error, 'Failed to unlink enrolments');
+    }
+  })
+  .post(
+    '/:id/withdraw',
+    requireAdmin,
+    zValidator('param', ZEnrolmentIdParam),
+    zValidator('json', ZEnrolmentWithdraw),
+    async (c) => {
+      try {
+        const data = await withdrawEnrolment(c.get('actor') as Actor, c.req.valid('param').id, c.req.valid('json'));
+        return c.json({ success: true, data }, 200);
+      } catch (error) {
+        return handleError(c, error, 'Failed to withdraw enrolment');
+      }
+    }
+  )
+  // The body is optional ({ scope?: 'THIS' | 'BOTH' }, default THIS).
+  .post('/:id/reinstate', requireAdmin, zValidator('param', ZEnrolmentIdParam), async (c) => {
+    try {
+      const body = await c.req.json().catch(() => ({}));
+      const parsed = ZEnrolmentReinstate.safeParse(body ?? {});
+      if (!parsed.success) return c.json({ success: false, error: 'Invalid request body' }, 400);
+      const data = await reinstateEnrolment(c.get('actor') as Actor, c.req.valid('param').id, parsed.data);
+      return c.json({ success: true, data }, 200);
+    } catch (error) {
+      return handleError(c, error, 'Failed to reinstate enrolment');
     }
   })
   .put(

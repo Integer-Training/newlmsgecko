@@ -1,5 +1,6 @@
 import { AppError, ErrorCodes } from '@api/utils/errors';
 import {
+  assertEnrolmentWritable,
   assertStaff,
   getEnrolmentForActor,
   getProgrammeForActor,
@@ -7,6 +8,7 @@ import {
 } from '@api/services/apprenticeship/access';
 import { buildGatewayView, resolveChecklist } from '@api/services/apprenticeship/gateway-core';
 import { nameGatewayActors } from '@api/services/apprenticeship/gateway-names';
+import { countedHalves } from '@api/services/apprenticeship/withdrawn';
 import { notifyGatewayReadyOrRelease } from '@api/services/apprenticeship/notifications';
 import {
   buildEnrolmentProgress,
@@ -83,11 +85,13 @@ export async function buildApprenticeshipProgress(
   if (!other || !enrolment) return detail;
   const programme = await getApprProgramme(enrolment.programmeId, client);
   const complete = (d: EnrolmentProgressDetail) => d.units.filter((u) => u.status === 'COMPLETE').length;
+  // A withdrawn half is out of the gateway unit count (unless every half is withdrawn).
+  const halves = countedHalves(!!enrolment.withdrawnAt, !!component.withdrawnAt);
   const gateway = buildGatewayView({
     checklist: resolveChecklist(programme?.gatewayChecklist),
     manual: enrolment.gatewayItems,
-    unitsTotal: detail.units.length + other.units.length,
-    unitsComplete: complete(detail) + complete(other),
+    unitsTotal: (halves.own ? detail.units.length : 0) + (halves.linked ? other.units.length : 0),
+    unitsComplete: (halves.own ? complete(detail) : 0) + (halves.linked ? complete(other) : 0),
     otjMinutes: detail.otjMinutes,
     otjTargetMinutes: detail.otjTargetMinutes,
     enrolment
@@ -104,7 +108,7 @@ async function recomputeApprenticeship(tx: TxClient, carrierId: string) {
   const full = await buildApprenticeshipProgress(carrierId, tx);
   if (!full) return null;
   // Readiness is the pair's, not the carrier's own: override the flag recomputeEnrolment set from the carrier alone.
-  if (!full.gateway.locked) {
+  if (!full.gateway.locked && !full.apprenticeshipClosed) {
     if (!full.gateway.ready) await clearGatewayReady(tx, carrierId);
     else full.gatewayReadyClaimed = await claimGatewayReady(tx, carrierId);
   }
@@ -171,6 +175,7 @@ export async function getGateway(actor: Actor, enrolmentId: string) {
 export async function setGatewayItem(actor: Actor, enrolmentId: string, key: string, input: GatewayTickInput) {
   const a = assertStaff(actor);
   const enrolment = await carrierOf(await getEnrolmentForActor(actor, enrolmentId));
+  await assertEnrolmentWritable(enrolment);
   if (enrolment.gatewayPassedAt) throw conflict('The gateway has been confirmed, so the checklist is locked');
 
   const programme = await getApprProgramme(enrolment.programmeId);
@@ -197,6 +202,7 @@ export async function setGatewayItem(actor: Actor, enrolmentId: string, key: str
 export async function confirmGateway(actor: Actor, enrolmentId: string) {
   const a = assertStaff(actor);
   const enrolment = await carrierOf(await getEnrolmentForActor(actor, enrolmentId));
+  await assertEnrolmentWritable(enrolment);
   if (enrolment.gatewayPassedAt) throw conflict('The gateway has already been confirmed');
   await runInTransaction(async (tx) => {
     // Readiness is re-derived inside the transaction, so a referral landing first stops the confirmation.
@@ -215,6 +221,7 @@ export async function reopenGateway(actor: Actor, enrolmentId: string) {
   const a = requireAuthed(actor);
   if (a.role !== 'ADMIN') throw new AppError('Only an admin can reopen the gateway', ErrorCodes.FORBIDDEN, 403);
   const enrolment = await carrierOf(await getEnrolmentForActor(actor, enrolmentId));
+  await assertEnrolmentWritable(enrolment);
   if (!enrolment.gatewayPassedAt) throw conflict('The gateway has not been confirmed');
   if (enrolment.epaResult) throw conflict('An EPA result has been recorded, so the gateway cannot be reopened');
   const row = await runInTransaction((tx) => reopenGatewayRow(tx, enrolment.id));
@@ -230,6 +237,7 @@ export async function reopenGateway(actor: Actor, enrolmentId: string) {
 export async function updateEpa(actor: Actor, enrolmentId: string, input: EpaUpdateInput, now: Date = new Date()) {
   const a = assertStaff(actor);
   const enrolment = await carrierOf(await getEnrolmentForActor(actor, enrolmentId));
+  await assertEnrolmentWritable(enrolment);
   if (!enrolment.gatewayPassedAt) throw conflict('Confirm the gateway before booking or recording the EPA');
 
   // Once a result is recorded, changing or clearing it (or its date) is an admin decision.

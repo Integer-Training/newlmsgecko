@@ -24,13 +24,30 @@
     pairPrompt?: boolean;
   }
   let {
-    tree,
+    tree: fullTree,
     selected = $bindable(),
     metIds = null,
     disabled = false,
     idPrefix = 'crit',
     pairPrompt = true
   }: Props = $props();
+
+  // A withdrawn qualification offers no criteria for NEW mappings: only the ones already ticked stay visible (so an
+  // existing mapping can still be unticked); a qualification left with nothing drops out.
+  const tree = $derived(
+    fullTree
+      .map((qual) =>
+        qual.withdrawn
+          ? {
+              ...qual,
+              units: qual.units
+                .map((u) => ({ ...u, criteria: u.criteria.filter((c) => chosen.has(c.id)) }))
+                .filter((u) => u.criteria.length > 0)
+            }
+          : qual
+      )
+      .filter((qual) => qual.units.length > 0)
+  );
 
   // A linked pair arrives as two qualifications of different types: they get their own tabs.
   const types = $derived(

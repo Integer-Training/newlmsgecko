@@ -4,6 +4,7 @@ import type { Actor } from '@cio/db/actor';
 import {
   getApprEnrolment,
   getApprProgramme,
+  getLinkedEnrolment,
   isProgrammeTutor,
   isProgrammeTutorOfLinked
 } from '@cio/db/queries/apprenticeship';
@@ -80,4 +81,43 @@ export function assertStaff(actor: Actor): AuthedActor {
   const a = requireAuthed(actor);
   if (!isStaff(a)) throw new AppError('You do not have access to this action', ErrorCodes.FORBIDDEN, 403);
   return a;
+}
+
+export const WITHDRAWN_MESSAGE = 'This apprenticeship has been withdrawn';
+
+/**
+ * Write guard (Deploy 5). Call it after loading the enrolment a write targets, BEFORE changing anything: a withdrawn
+ * enrolment is read-only for everyone (the learner still reads it). The only write that gets past it is the admin's
+ * reinstate, which does not call this.
+ *
+ * The one exception is a withdrawn CARRIER whose component is still active: that enrolment row is still the
+ * apprenticeship record (reviews, OTJ, onboarding, gateway), so it stays writable. A withdrawn COMPONENT is always
+ * read-only. Pass the row you already loaded (no query for an active enrolment) or just its id.
+ */
+export async function assertEnrolmentWritable(
+  enrolment: string | { id: string; withdrawnAt?: string | null; primaryEnrolmentId?: string | null }
+): Promise<void> {
+  if (!(await isEnrolmentWritable(enrolment))) throw new AppError(WITHDRAWN_MESSAGE, ErrorCodes.CONFLICT, 409);
+}
+
+/** The non-throwing form of the write guard: bulk operations (task-plan assign / sync) skip a read-only enrolment. */
+export async function isEnrolmentWritable(
+  enrolment: string | { id: string; withdrawnAt?: string | null; primaryEnrolmentId?: string | null }
+): Promise<boolean> {
+  const row = typeof enrolment === 'string' ? await getApprEnrolment(enrolment) : enrolment;
+  if (!row?.withdrawnAt) return true;
+  if (!row.primaryEnrolmentId) {
+    const component = await getLinkedEnrolment(row.id);
+    if (component && !component.withdrawnAt) return true;
+  }
+  return false;
+}
+/**
+ * Guard for CARRIER-level data (reviews, onboarding documents, OTJ logs, gateway): given either half of an apprenticeship it
+ * checks the carrier, which is what holds that data. A withdrawn component never blocks the carrier's records.
+ */
+export async function assertCarrierWritable(enrolment: { id: string; primaryEnrolmentId?: string | null }) {
+  if (enrolment.primaryEnrolmentId) return assertEnrolmentWritable(enrolment.primaryEnrolmentId);
+
+  return assertEnrolmentWritable(enrolment.id);
 }

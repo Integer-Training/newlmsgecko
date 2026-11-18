@@ -28,6 +28,7 @@
   import DatesDialog from '../components/portfolio/dates-dialog.svelte';
   import TutorsDialog from '../components/portfolio/tutors-dialog.svelte';
   import SpreadDialog from '../components/portfolio/spread-dialog.svelte';
+  import { fmtDate } from '../components/shared/format';
   import PdfDownloadButton from '../components/shared/pdf-download-button.svelte';
   import EvidenceSheet from '../components/evidence/evidence-sheet.svelte';
 
@@ -68,6 +69,13 @@
   }
   let tutorsOpen = $state(false);
   let spreadOpen = $state(false);
+
+  // Reinstate the whole withdrawn apprenticeship: the carrier first, then its paired qualification.
+  async function reinstateAll() {
+    if (!(await store.reinstate(store.enrolmentId))) return;
+    const other = store.pair?.enrolment.id;
+    if (other && store.pair?.enrolment.withdrawnAt) await store.reinstate(other);
+  }
 
   onMount(() => {
     store.load();
@@ -169,6 +177,28 @@
       {:else if store.data}
         <div class="space-y-4">
           <SummaryStrip {store} onSpread={() => (spreadOpen = true)} onTutors={() => (tutorsOpen = true)} />
+          {#if store.withdrawal}
+            <div
+              role="status"
+              class="flex flex-wrap items-center justify-between gap-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-300"
+            >
+              <p>
+                <strong>Withdrawn.</strong> This apprenticeship was withdrawn on {fmtDate(store.withdrawal.at)} — read only.
+                {#if store.withdrawal.reason}<span class="block">Reason: {store.withdrawal.reason}</span>{/if}
+              </p>
+              {#if isStaffViewer && $isOrgAdmin}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onclick={reinstateAll}
+                  loading={store.saving}
+                  disabled={store.saving}
+                >
+                  Reinstate
+                </Button>
+              {/if}
+            </div>
+          {/if}
           {#if store.evidenceBlocked}
             <p
               role="status"

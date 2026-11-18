@@ -1,6 +1,6 @@
 import { AppError, ErrorCodes } from '@api/utils/errors';
 import { buildGatewayView, resolveChecklist } from '@api/services/apprenticeship/gateway-core';
-import { computeRowProgress, overallRowStatus } from '@api/services/apprenticeship/enrolment';
+import { computeRowProgress, gatewayUnitCounts, overallRowStatus } from '@api/services/apprenticeship/enrolment';
 import { ensureOnboardingTypes } from '@api/services/apprenticeship/onboarding';
 import { requireAuthed } from '@api/services/apprenticeship/access';
 import { todayIso } from '@api/services/apprenticeship/progress';
@@ -23,8 +23,9 @@ import type { SummaryQueryInput } from '@cio/utils/validation/apprenticeship';
 // tutor OR programme tutor); everyone else 403. Learner / OTJ / review / gateway / onboarding numbers are derived from
 // the SAME rows and rules as the learners table (listEnrolmentRows + computeRowProgress + buildGatewayView), so the
 // tiles always equal what the lists show; that is one org-sized (tutor-sized) statement, not a per-learner loop. Tasks,
-// evidence and IQA are small GROUP BY counts. There is no "withdrawn" enrolment state in the module, so every enrolment
-// counts; finished learners fall in the COMPLETE bucket and are excluded from the OTJ split (their target is done).
+// evidence and IQA are small GROUP BY counts. A CLOSED (withdrawn) apprenticeship is excluded everywhere (the list default
+// state is 'active' and the count queries skip it); finished learners fall in the COMPLETE bucket and are excluded from the
+// OTJ split (their target is done).
 
 const UPCOMING_DAYS = 14;
 const LIST_MAX = 10;
@@ -58,7 +59,7 @@ export async function getSummary(actor: Actor, query: SummaryQueryInput, now: Da
   await ensureOnboardingTypes(a.orgId);
 
   const [rows, settings, evidenceByStatus, taskByStatus, overdue, iqa] = await Promise.all([
-    listEnrolmentRows({ ...scope, today }),
+    listEnrolmentRows({ ...scope, state: 'active', today }),
     getApprSettings(a.orgId),
     countEvidenceByStatus(scope),
     countTasksByStatus(scope),
@@ -96,11 +97,12 @@ export async function getSummary(actor: Actor, query: SummaryQueryInput, now: Da
     minutesTarget += p.otjTargetMinutes ?? 0;
     if (r.onboarding && Number(r.onboarding.approved) < Number(r.onboarding.required)) onboardingIncomplete += 1;
 
+    const units = gatewayUnitCounts(r, linkedUnits.get(r.id));
     const stage = buildGatewayView({
       checklist: resolveChecklist(r.gatewayChecklist),
       manual: r.gatewayItems,
-      unitsTotal: (r.unitsTotal ?? 0) + (linkedUnits.get(r.id)?.total ?? 0),
-      unitsComplete: (r.unitsComplete ?? 0) + (linkedUnits.get(r.id)?.complete ?? 0),
+      unitsTotal: units.unitsTotal,
+      unitsComplete: units.unitsComplete,
       otjMinutes: r.otjMinutes,
       otjTargetMinutes: p.otjTargetMinutes,
       enrolment: {

@@ -1,4 +1,5 @@
 import { AppError, ErrorCodes } from '@api/utils/errors';
+import { countedHalves } from '@api/services/apprenticeship/withdrawn';
 import {
   filterCriterionIdsInProgramme,
   getLinkedEnrolment,
@@ -66,6 +67,30 @@ export async function assertCriteriaInProgrammes(
 /** Single-programme form (task plans are per programme). Same as assertCriteriaInProgrammes([programmeId], ids). */
 export function assertCriteriaInProgramme(programmeId: string, criterionIds: string[]): Promise<string[]> {
   return assertCriteriaInProgrammes([programmeId], criterionIds);
+}
+
+/**
+ * A NEW evidence / task may not map to the criteria of a WITHDRAWN qualification (they are hidden from the picker; existing
+ * mappings are kept). `pairProgrammeIds` is getPairProgrammes().programmeIds. A 400 when any chosen criterion belongs to
+ * a withdrawn half. Unlinked / not withdrawn: a no-op.
+ */
+export async function assertCriteriaMappable(
+  enrolment: { id: string; programmeId: string; withdrawnAt?: string | null },
+  pairProgrammeIds: string[],
+  criterionIds: string[]
+): Promise<void> {
+  if (pairProgrammeIds.length < 2 && !enrolment.withdrawnAt) return;
+  const linked = pairProgrammeIds.length > 1 ? await getLinkedEnrolment(enrolment.id) : null;
+  const halves = countedHalves(!!enrolment.withdrawnAt, linked ? !!linked.withdrawnAt : null);
+  const blocked: string[] = [];
+  if (!halves.own) blocked.push(enrolment.programmeId);
+  if (linked && !halves.linked) blocked.push(linked.programmeId);
+  for (const programmeId of blocked) {
+    const found = await filterCriterionIdsInProgramme(programmeId, criterionIds);
+    if (found.length > 0) {
+      throw badRequest('One or more criteria belong to a withdrawn qualification', 'criterionIds');
+    }
+  }
 }
 
 /**

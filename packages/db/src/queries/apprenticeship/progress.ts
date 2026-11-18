@@ -159,6 +159,11 @@ export async function writeEnrolmentCache(
     /** GLH done (units + logs), minutes. */
     glhMinutes?: number;
     units: { unitId: string; actualPct: number | null; complete: boolean }[];
+    /**
+     * A WITHDRAWN carrier whose component is still active: its unit rows and actual % are FROZEN (not written); only the
+     * learner-level numbers (OTJ, evidence counts, GLH) keep updating.
+     */
+    freezeUnits?: boolean;
   },
   client: DbOrTxClient = db
 ): Promise<void> {
@@ -166,7 +171,7 @@ export async function writeEnrolmentCache(
   await client
     .update(schema.apprEnrolment)
     .set({
-      actualPct: cache.actualPct,
+      ...(cache.freezeUnits ? {} : { actualPct: cache.actualPct }),
       otjMinutes: cache.otjMinutes,
       submittedCount: cache.submittedCount,
       acceptedCount: cache.acceptedCount,
@@ -175,7 +180,7 @@ export async function writeEnrolmentCache(
       recomputedAt: now
     })
     .where(eq(schema.apprEnrolment.id, enrolmentId));
-  if (cache.units.length === 0) return;
+  if (cache.freezeUnits || cache.units.length === 0) return;
   await client
     .insert(schema.apprEnrolmentUnit)
     .values(

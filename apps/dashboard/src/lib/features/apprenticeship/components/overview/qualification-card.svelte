@@ -6,6 +6,8 @@
   import CalendarIcon from '@lucide/svelte/icons/calendar';
   import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
   import ListChecksIcon from '@lucide/svelte/icons/list-checks';
+  import * as DropdownMenu from '@cio/ui/base/dropdown-menu';
+  import EllipsisIcon from '@lucide/svelte/icons/ellipsis';
   import type { OverviewCard } from '../../api/overview.types';
   import ProgrammeTypeChip from '../shared/programme-type-chip.svelte';
   import ProgressBar from '../shared/progress-bar.svelte';
@@ -23,11 +25,15 @@
     unitHref: (unitId: string) => string;
     /** Staff (admin) only: opens the dates dialog for this qualification. */
     onEditDates?: () => void;
+    /** Admin only (Deploy 5): withdraw this qualification / reinstate it when withdrawn. */
+    onWithdraw?: () => void;
+    onReinstate?: () => void;
   }
-  let { card, mode, href, unitHref, onEditDates }: Props = $props();
+  let { card, mode, href, unitHref, onEditDates, onWithdraw, onReinstate }: Props = $props();
 
   let expanded = $state(false);
   const done = $derived(card.achievedAt !== null);
+  const withdrawn = $derived(!!card.withdrawnAt);
 </script>
 
 <section class="overflow-hidden rounded-lg border bg-(--card)" aria-label={card.title}>
@@ -49,17 +55,44 @@
     </p>
     <p class="flex items-center gap-2 text-sm">
       <span class="font-medium">Status</span>
-      <StatusChip status={done ? 'COMPLETE' : card.status} />
+      {#if withdrawn}
+        <span
+          class="inline-flex items-center rounded-full bg-(--muted) px-2 py-0.5 text-xs font-medium whitespace-nowrap text-(--muted-foreground)"
+          title={card.withdrawalReason ? `Reason: ${card.withdrawalReason}` : undefined}
+          aria-label="Withdrawn {fmtDate(card.withdrawnAt)}{card.withdrawalReason
+            ? `. Reason: ${card.withdrawalReason}`
+            : ''}">Withdrawn {fmtDate(card.withdrawnAt)}</span
+        >
+      {:else}
+        <StatusChip status={done ? 'COMPLETE' : card.status} />
+      {/if}
     </p>
-    {#if onEditDates}
+    {#if onEditDates && !withdrawn}
       <Button variant="outline" size="sm" onclick={onEditDates} aria-label="Edit dates: {card.title}">
         <PencilIcon size={14} class="mr-1" /> Edit dates
       </Button>
     {/if}
+    {#if (withdrawn && onReinstate) || (!withdrawn && onWithdraw)}
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger
+          class="inline-flex size-9 items-center justify-center rounded-md border hover:bg-(--muted)"
+          aria-label="Actions: {card.title}"
+        >
+          <EllipsisIcon size={16} />
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content align="end">
+          {#if withdrawn}
+            <DropdownMenu.Item onclick={onReinstate}>Reinstate</DropdownMenu.Item>
+          {:else}
+            <DropdownMenu.Item onclick={onWithdraw}>Withdraw</DropdownMenu.Item>
+          {/if}
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
+    {/if}
   </div>
 
   <div class="flex flex-wrap items-center gap-4 px-4 py-4">
-    <div class="grid min-w-64 flex-1 gap-4 md:grid-cols-2">
+    <div class="grid min-w-64 flex-1 gap-4 md:grid-cols-2 {withdrawn ? 'opacity-50 grayscale' : ''}">
       <div class="space-y-1">
         <div class="flex justify-between text-xs text-(--muted-foreground) italic">
           <span>Actual</span><span class="font-medium text-(--foreground) not-italic">{fmtPct(card.actualPct)}</span>

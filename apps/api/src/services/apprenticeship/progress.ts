@@ -23,6 +23,7 @@ import {
   writeEnrolmentCache
 } from '@cio/db/queries/apprenticeship';
 import { lockEnrolmentsInOrder } from '@api/services/apprenticeship/pair-lock';
+import { countedHalves } from '@api/services/apprenticeship/withdrawn';
 import type { ApprSettings } from '@cio/utils/constants/apprenticeship';
 import {
   computeEnrolmentProgress,
@@ -55,6 +56,8 @@ export interface EnrolmentProgressDetail extends ApprEnrolmentProgress {
    * pair, so when a component is recomputed this is the carrier's id (absent = the enrolment that was recomputed).
    */
   gatewayReadyEnrolmentId?: string;
+  /** Every half of the apprenticeship is withdrawn (closed): nothing is claimed or chased for it. */
+  apprenticeshipClosed?: boolean;
 }
 
 /** Everything about one learner's progress, from scratch (reads only). Null if the enrolment does not exist. */
@@ -70,6 +73,13 @@ export async function buildEnrolmentProgress(
   // standalone enrolment, counts its own home evidence only. Criteria progress is per criterion's programme either way.
   const isComponent = !!enrolment.primaryEnrolmentId;
   const component = isComponent ? null : await getLinkedEnrolment(enrolmentId, client);
+  // A WITHDRAWN half is out of the learner-level evidence totals and the gateway unit count (unless every half is
+  // withdrawn: then the frozen numbers still show). Unlinked / not withdrawn: unchanged.
+  const halves = countedHalves(!!enrolment.withdrawnAt, component ? !!component.withdrawnAt : null);
+  const totalsProgrammeIds = [
+    halves.own ? enrolment.programmeId : null,
+    halves.linked && component ? component.programmeId : null
+  ].filter((id): id is string => !!id);
   const [units, criteria, accepted, evidenceTotals, unitRows, settings, programme, loggedGlh, loggedOtj] =
     await Promise.all([
       listProgrammeUnits(enrolment.programmeId, client),
@@ -79,7 +89,7 @@ export async function buildEnrolmentProgress(
         enrolment.programmeId,
         enrolment.learnerId,
         client,
-        component ? { programmeIds: [enrolment.programmeId, component.programmeId] } : {}
+        component ? { programmeIds: totalsProgrammeIds } : {}
       ),
       listEnrolmentUnitRows(enrolmentId, client),
       opts.settings ? Promise.resolve(opts.settings) : getApprSettings(enrolment.organizationId, client),
@@ -121,18 +131,27 @@ export async function buildEnrolmentProgress(
   );
   // Gateway AUTO_UNITS on a carrier counts units across BOTH qualifications of the pair. The component is recomputed
   // first (recomputeEnrolment), so its cached unit rows are fresh.
-  const componentUnits = component ? await listEnrolmentUnitRows(component.id, client) : [];
+  const componentUnits = component && halves.linked ? await listEnrolmentUnitRows(component.id, client) : [];
   const gateway = buildGatewayView({
     checklist: resolveChecklist(programme?.gatewayChecklist),
     manual: enrolment.gatewayItems,
-    unitsTotal: progress.units.length + componentUnits.length,
+    unitsTotal: (halves.own ? progress.units.length : 0) + componentUnits.length,
     unitsComplete:
-      progress.units.filter((u) => u.status === 'COMPLETE').length + componentUnits.filter((u) => u.completedAt).length,
+      (halves.own ? progress.units.filter((u) => u.status === 'COMPLETE').length : 0) +
+      componentUnits.filter((u) => u.completedAt).length,
     otjMinutes: progress.otjMinutes,
     otjTargetMinutes: progress.otjTargetMinutes,
     enrolment
   });
-  return { ...progress, enrolmentId, acceptedByCriterion: accepted, totals, glh, gateway };
+  return {
+    ...progress,
+    enrolmentId,
+    acceptedByCriterion: accepted,
+    totals,
+    glh,
+    gateway,
+    apprenticeshipClosed: halves.closed
+  };
 }
 
 /**
@@ -169,12 +188,16 @@ export async function recomputeEnrolment(
 /** Recompute and store the cache of ONE enrolment (no pair hop). The gateway flag only applies to a carrier / standalone. */
 async function recomputeOne(
   tx: TxClient,
-  enrolment: { id: string; primaryEnrolmentId: string | null },
+  enrolment: { id: string; primaryEnrolmentId: string | null; withdrawnAt?: string | null },
   opts: { claimGatewayReady?: boolean }
 ): Promise<EnrolmentProgressDetail | null> {
   const enrolmentId = enrolment.id;
   const detail = await buildEnrolmentProgress(enrolmentId, tx);
   if (!detail) return null;
+  // WITHDRAWN: a withdrawn component, or a closed apprenticeship, keeps its cache frozen (nothing written, nothing claimed).
+  // A withdrawn CARRIER whose component is still active freezes only its units and actual %; OTJ, evidence counts and GLH
+  // keep updating because it is still the apprenticeship record.
+  if (enrolment.withdrawnAt && (enrolment.primaryEnrolmentId || detail.apprenticeshipClosed)) return detail;
   await writeEnrolmentCache(
     enrolmentId,
     {
@@ -184,7 +207,8 @@ async function recomputeOne(
       acceptedCount: detail.totals.accepted,
       referredCount: detail.totals.referred,
       glhMinutes: detail.glh.doneMinutes,
-      units: detail.units.map((u) => ({ unitId: u.unitId, actualPct: u.actualPct, complete: u.status === 'COMPLETE' }))
+      units: detail.units.map((u) => ({ unitId: u.unitId, actualPct: u.actualPct, complete: u.status === 'COMPLETE' })),
+      freezeUnits: !!enrolment.withdrawnAt
     },
     tx
   );

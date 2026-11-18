@@ -36,8 +36,9 @@ export interface OverviewCard {
   unitsTotal: number;
   unitsComplete: number;
   achievedAt: string | null;
-  /** Always null until Deploy 5 (withdraw). */
+  /** Set when this qualification is withdrawn (Deploy 5). */
   withdrawnAt: string | null;
+  withdrawalReason?: string | null;
   role: ApprEnrolmentRole;
   units: OverviewUnit[];
 }
@@ -94,7 +95,13 @@ export interface EnrolmentRowLinkAdditions {
 export interface PortfolioLinked {
   role: Extract<ApprEnrolmentRole, 'CARRIER' | 'COMPONENT'>;
   carrierId: string;
-  counterpart: { enrolmentId: string; programmeId: string; title: string; type: ApprProgrammeType };
+  counterpart: {
+    enrolmentId: string;
+    programmeId: string;
+    title: string;
+    type: ApprProgrammeType;
+    withdrawnAt?: string | null;
+  };
 }
 
 /** Fields added to the portfolio payload by Deploy 2 (`programme.type` plus `linked`). */

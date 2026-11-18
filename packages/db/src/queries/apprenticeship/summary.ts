@@ -3,6 +3,7 @@ import * as schema from '@db/schema';
 import { and, asc, db, eq, lt, ne, sql, type DbOrTxClient, type SQL } from '@db/drizzle';
 import { tutorReachSql } from './tutors';
 import { profileDisplayName } from './names';
+import { apprenticeshipClosedByLearnerSql, apprenticeshipClosedSql } from './withdrawn';
 
 // Gecko Apprenticeships — summary dashboard aggregates. No access control here: the service passes the scope in
 // (ADMIN → org, TUTOR → restrictToTutorId). Learner/OTJ/review/gateway numbers are NOT here: the service derives them
@@ -27,6 +28,10 @@ export async function countEvidenceByStatus(scope: SummaryScope, client: DbOrTxC
   const conditions: (SQL | undefined)[] = [eq(ev.organizationId, scope.organizationId)];
   if (scope.programmeId) conditions.push(eq(ev.programmeId, scope.programmeId));
   if (scope.type) conditions.push(typeSql('"appr_evidence"."programme_id"', scope.type));
+  // A withdrawn (closed) apprenticeship is out of the dashboard.
+  conditions.push(
+    sql`not (${apprenticeshipClosedByLearnerSql('"appr_evidence"."learner_id"', '"appr_evidence"."programme_id"')})`
+  );
   if (scope.restrictToTutorId) {
     conditions.push(
       tutorReachSql('"appr_evidence"."learner_id"', '"appr_evidence"."programme_id"', scope.restrictToTutorId)
@@ -46,6 +51,7 @@ export async function countTasksByStatus(scope: SummaryScope, client: DbOrTxClie
   const conditions: (SQL | undefined)[] = [eq(t.organizationId, scope.organizationId)];
   if (scope.programmeId) conditions.push(eq(t.programmeId, scope.programmeId));
   if (scope.type) conditions.push(typeSql('"appr_task"."programme_id"', scope.type));
+  conditions.push(sql`not (${apprenticeshipClosedSql('"appr_task"."enrolment_id"')})`);
   if (scope.restrictToTutorId) {
     conditions.push(tutorReachSql('"appr_task"."learner_id"', '"appr_task"."programme_id"', scope.restrictToTutorId));
   }
@@ -73,6 +79,7 @@ export async function countIqaOpen(
       sql`exists (select 1 from appr_enrolment ie where ie.id = ${sql.raw('"appr_iqa_sample"."enrolment_id"')} and ie.programme_id = ${scope.programmeId})`
     );
   }
+  conditions.push(sql`not (${apprenticeshipClosedSql('"appr_iqa_sample"."enrolment_id"')})`);
   if (scope.type) {
     conditions.push(
       sql`exists (select 1 from appr_enrolment ie join appr_programme ip on ip.id = ie.programme_id where ie.id = ${sql.raw('"appr_iqa_sample"."enrolment_id"')} and ip.type = ${scope.type})`
@@ -130,6 +137,7 @@ export async function listOverdueTasksByType(
   ];
   if (scope.programmeId) conditions.push(eq(t.programmeId, scope.programmeId));
   if (scope.type) conditions.push(eq(schema.apprProgramme.type, scope.type));
+  conditions.push(sql`not (${apprenticeshipClosedSql('"appr_task"."enrolment_id"')})`);
   if (scope.restrictToTutorId) {
     conditions.push(tutorReachSql('"appr_task"."learner_id"', '"appr_task"."programme_id"', scope.restrictToTutorId));
   }

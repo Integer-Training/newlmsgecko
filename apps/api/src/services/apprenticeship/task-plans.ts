@@ -2,7 +2,9 @@ import { randomUUID } from 'node:crypto';
 
 import { AppError, ErrorCodes } from '@api/utils/errors';
 import {
+  assertEnrolmentWritable,
   assertStaff,
+  isEnrolmentWritable,
   getEnrolmentForActor,
   getProgrammeForActor,
   requireAuthed
@@ -429,7 +431,7 @@ export async function createPlanItem(
 
     let created: CreatedTask[] = [];
     if (holderIds.length > 0) {
-      const holders = await listApprEnrolmentsByIds(holderIds, tx);
+      const holders = (await splitWritable(await listApprEnrolmentsByIds(holderIds, tx))).writable;
       const result = await insertPlanTasks(tx, fresh, holders, [row], a.userId, null);
       created = result.created;
     }
@@ -569,6 +571,18 @@ async function loadPlanEnrolments(plan: ApprTaskPlanRow, enrolmentIds: string[],
     throw badRequest('One or more learners are not enrolled on this plan’s programme', 'enrolmentIds');
   }
   return rows;
+}
+
+/**
+ * A withdrawn / closed apprenticeship is read-only: bulk assign, unassign and sync leave it out (no error, so one withdrawn
+ * learner never blocks a batch). `skipped` is how many were left out.
+ */
+async function splitWritable<E extends { id: string; withdrawnAt?: string | null; primaryEnrolmentId?: string | null }>(
+  rows: E[]
+): Promise<{ writable: E[]; skipped: number }> {
+  const writable: E[] = [];
+  for (const row of rows) if (await isEnrolmentWritable(row)) writable.push(row);
+  return { writable, skipped: rows.length - writable.length };
 }
 
 const MAX_OVERRIDE_DAYS_AHEAD = 3660; // ~10 years: catches typos like 2062 without blocking any real programme
@@ -711,14 +725,16 @@ export async function assignPlan(actor: Actor, planId: string, input: TaskPlanAs
   const outcome = await runInTransaction(async (tx) => {
     const fresh = await lockAndReloadPlan(tx, plan.id, a.orgId);
     assertAssignable(fresh, now);
-    const enrolments = await loadPlanEnrolments(fresh, input.enrolmentIds, tx);
+    const { writable: enrolments, skipped: withdrawnSkipped } = await splitWritable(
+      await loadPlanEnrolments(fresh, input.enrolmentIds, tx)
+    );
     const items = await listPlanItems(fresh.id, tx);
     if (items.length === 0) throw badRequest('Add at least one task to this plan before assigning it');
     const targets = pickItems(items, input.itemIds);
     const checked = input.dueDate ? await learnersMissingTasks(tx, fresh.id, enrolments, targets) : enrolments;
     const override = resolveDueOverride(input.dueDate, checked, now);
     const result = await insertPlanTasks(tx, fresh, enrolments, targets, a.userId, override.date);
-    return { ...result, enrolments: enrolments.length, targets, override };
+    return { ...result, enrolments: enrolments.length, withdrawnSkipped, targets, override };
   });
 
   await notifyAssigned(outcome.created);
@@ -727,11 +743,18 @@ export async function assignPlan(actor: Actor, planId: string, input: TaskPlanAs
     enrolments: outcome.enrolments,
     created: summary.created,
     skipped: summary.skipped,
+    withdrawnSkipped: outcome.withdrawnSkipped,
     mode: input.itemIds ? 'ITEMS' : 'ALL',
     itemIds: input.itemIds ? outcome.targets.map((i) => i.id) : null,
     dueOverride: outcome.override.date
   });
-  return { ...summary, dueOverride: outcome.override.date, overrideInPast: outcome.override.inPast };
+  return {
+    ...summary,
+    /** Learners left out because their apprenticeship is withdrawn (read-only). */
+    withdrawnSkipped: outcome.withdrawnSkipped,
+    dueOverride: outcome.override.date,
+    overrideInPast: outcome.override.inPast
+  };
 }
 
 /**
@@ -744,7 +767,7 @@ export async function unassignPlan(actor: Actor, planId: string, input: TaskPlan
 
   const outcome = await runInTransaction(async (tx) => {
     const fresh = await lockAndReloadPlan(tx, plan.id, a.orgId);
-    const enrolments = await loadPlanEnrolments(fresh, input.enrolmentIds, tx);
+    const { writable: enrolments } = await splitWritable(await loadPlanEnrolments(fresh, input.enrolmentIds, tx));
     const enrolmentIds = enrolments.map((e) => e.id);
     const items = input.itemIds ? await listPlanItems(fresh.id, tx) : [];
     const targets = input.itemIds ? pickItems(items, input.itemIds) : null;
@@ -804,7 +827,13 @@ export async function syncPlan(actor: Actor, planId: string, input: TaskPlanSync
       items.map((i) => i.id),
       tx
     );
-    const planned = await listPlannedPlanTasks(fresh.id, tx, input.itemIds ? targets.map((i) => i.id) : undefined);
+    const plannedAll = await listPlannedPlanTasks(fresh.id, tx, input.itemIds ? targets.map((i) => i.id) : undefined);
+    // Tasks of a withdrawn / closed apprenticeship are frozen: sync leaves them alone.
+    const plannedEnrolmentIds = [...new Set(plannedAll.map((p) => p.task.enrolmentId))];
+    const enrolmentRows = plannedEnrolmentIds.length > 0 ? await listApprEnrolmentsByIds(plannedEnrolmentIds, tx) : [];
+    const frozen = new Set<string>();
+    for (const row of enrolmentRows) if (row.withdrawnAt && !(await isEnrolmentWritable(row))) frozen.add(row.id);
+    const planned = plannedAll.filter((p) => !frozen.has(p.task.enrolmentId));
     const taskCriteria = await listTaskCriteria(
       planned.map((p) => p.task.id),
       tx
@@ -883,13 +912,19 @@ export async function syncPlan(actor: Actor, planId: string, input: TaskPlanSync
         await replaceTaskCriteriaForTasks(tx, needCriteria, wantByItem.get(group.item.id) ?? []);
       }
     }
-    return { updated, manualDueKept, itemIds: input.itemIds ? targets.map((i) => i.id) : null };
+    return {
+      updated,
+      manualDueKept,
+      withdrawnSkipped: plannedAll.length - planned.length,
+      itemIds: input.itemIds ? targets.map((i) => i.id) : null
+    };
   });
 
   await audit(actor, 'appr.task_plan.synced', plan.id, {
     updated: outcome.updated,
     itemIds: outcome.itemIds,
-    manualDueKept: outcome.manualDueKept
+    manualDueKept: outcome.manualDueKept,
+    withdrawnSkipped: outcome.withdrawnSkipped
   });
   return { updated: outcome.updated, manualDueKept: outcome.manualDueKept };
 }
@@ -954,6 +989,7 @@ export async function createTasksFromPlan(
 ) {
   const a = assertStaff(actor);
   const enrolment = await getEnrolmentForActor(actor, enrolmentId);
+  await assertEnrolmentWritable(enrolment);
   const planRow = await getTaskPlan(input.planId);
   if (
     !planRow ||

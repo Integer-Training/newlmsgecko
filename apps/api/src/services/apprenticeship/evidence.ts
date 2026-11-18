@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { AppError, ErrorCodes } from '@api/utils/errors';
 import {
+  assertEnrolmentWritable,
   assertStaff,
   canAccessLearner,
   getEnrolmentForActor,
@@ -21,6 +22,7 @@ import {
   assertActiveType,
   assertAllowedFile,
   assertCriteriaInProgrammes,
+  assertCriteriaMappable,
   getPairProgrammes
 } from '@api/services/apprenticeship/checks';
 import { assertTaskForEvidence, syncTaskStatuses } from '@api/services/apprenticeship/tasks';
@@ -394,6 +396,7 @@ export async function listToMarkQueue(actor: Actor, query: { programmeId?: strin
 
 export async function presignEvidenceUploads(actor: Actor, input: EvidencePresignInput) {
   const enrolment = await getEnrolmentForActor(actor, input.enrolmentId);
+  await assertEnrolmentWritable(enrolment);
   await assertLearnerMayAddEvidence(actor, enrolment);
 
   let evidenceId = input.evidenceId;
@@ -456,6 +459,7 @@ function audit(actor: Actor, action: string, entityId: string, metadata: Record<
 export async function createEvidence(actor: Actor, enrolmentId: string, input: EvidenceCreateInput) {
   const a = requireAuthed(actor);
   const enrolment = await getEnrolmentForActor(actor, enrolmentId);
+  await assertEnrolmentWritable(enrolment);
   const staff = isStaff(a);
   await assertLearnerMayAddEvidence(actor, enrolment);
   const status: ApprEvidenceStatus = staff ? (input.status ?? 'SUBMITTED') : 'SUBMITTED';
@@ -464,6 +468,7 @@ export async function createEvidence(actor: Actor, enrolmentId: string, input: E
   // Criteria may come from either qualification of a linked pair (one upload can count towards both).
   const pair = await getPairProgrammes(enrolment);
   const criterionIds = await assertCriteriaInProgrammes(pair.programmeIds, input.criterionIds);
+  await assertCriteriaMappable(enrolment, pair.programmeIds, criterionIds);
 
   if (input.files.length > 0 && !input.evidenceId) throw badRequest('Upload the files before saving', 'files');
   const evidenceId = input.evidenceId ?? randomUUID();
@@ -564,6 +569,7 @@ export async function updateEvidence(actor: Actor, evidenceId: string, input: Ev
     await assertActiveType(evidence.organizationId, input.typeKey);
   }
   const enrolment = await getApprEnrolmentByProgrammeLearner(evidence.programmeId, evidence.learnerId);
+  if (enrolment) await assertEnrolmentWritable(enrolment);
   const pair = enrolment ? await getPairProgrammes({ id: enrolment.id, programmeId: evidence.programmeId }) : null;
   const criterionIds = input.criterionIds
     ? await assertCriteriaInProgrammes(pair?.programmeIds ?? [evidence.programmeId], input.criterionIds)
@@ -663,6 +669,7 @@ export async function reviewEvidence(actor: Actor, evidenceId: string, input: Ev
     throw badRequest('Confirm at least one criterion before accepting', 'criterionIds');
   }
   const enrolment = await getApprEnrolmentByProgrammeLearner(evidence.programmeId, evidence.learnerId);
+  if (enrolment) await assertEnrolmentWritable(enrolment);
   const criterionIds = input.criterionIds.length
     ? await assertCriteriaInProgrammes(
         enrolment
@@ -726,10 +733,9 @@ export async function addEvidenceNote(actor: Actor, evidenceId: string, input: E
   const a = requireAuthed(actor);
   const evidence = await loadEvidenceForActor(actor, evidenceId);
   // Once at end-point assessment the apprentice can no longer add notes to their evidence either.
-  await assertLearnerMayAddEvidence(
-    actor,
-    await getApprEnrolmentByProgrammeLearner(evidence.programmeId, evidence.learnerId)
-  );
+  const noteEnrolment = await getApprEnrolmentByProgrammeLearner(evidence.programmeId, evidence.learnerId);
+  if (noteEnrolment) await assertEnrolmentWritable(noteEnrolment);
+  await assertLearnerMayAddEvidence(actor, noteEnrolment);
   // A note changes no progress value, so there is no recompute — the transaction is just the client handle.
   const note = await runInTransaction((tx) =>
     insertEvidenceNote(tx, {

@@ -850,7 +850,13 @@ describe('portfolio gains programme.type and linked', () => {
     expect(portfolio.linked).toEqual({
       role: 'CARRIER',
       carrierId: 'carrier',
-      counterpart: { enrolmentId: 'component', programmeId: STD, title: 'L3 Standard', type: 'STANDARD' }
+      counterpart: {
+        enrolmentId: 'component',
+        programmeId: STD,
+        title: 'L3 Standard',
+        type: 'STANDARD',
+        withdrawnAt: null
+      }
     });
   });
 

@@ -198,6 +198,8 @@ export interface PickerQualification {
   type?: ApprProgrammeType;
   enrolmentId?: string;
   programmeId?: string;
+  /** Withdrawn qualification: the picker offers none of its criteria for NEW mappings (existing ones stay). */
+  withdrawn?: boolean;
   units: {
     id: string;
     code: string | null;

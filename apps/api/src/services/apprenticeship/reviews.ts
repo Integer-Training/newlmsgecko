@@ -1,5 +1,6 @@
 import { AppError, ErrorCodes } from '@api/utils/errors';
 import {
+  assertCarrierWritable,
   assertStaff,
   canAccessLearner,
   getEnrolmentForActor,
@@ -101,6 +102,7 @@ export async function listReviews(actor: Actor, enrolmentId: string, now: Date =
 export async function createReview(actor: Actor, enrolmentId: string, input: ReviewCreateInput) {
   const a = assertStaff(actor);
   const enrolment = await getEnrolmentForActor(actor, enrolmentId);
+  await assertCarrierWritable(enrolment);
   const review = await runInTransaction((tx) =>
     insertApprReview(tx, {
       organizationId: enrolment.organizationId,
@@ -127,6 +129,7 @@ function assertTransition(from: string, to: string) {
 export async function updateReview(actor: Actor, reviewId: string, input: ReviewUpdateInput) {
   const a = requireAuthed(actor);
   const { review, enrolment } = await loadReview(actor, reviewId);
+  await assertCarrierWritable(enrolment);
   if (FINAL.includes(review.status)) throw conflict('This review is closed and can no longer be edited');
   if (input.expectedUpdatedAt && Date.parse(input.expectedUpdatedAt) !== Date.parse(review.updatedAt)) {
     throw conflict('This review was just changed by someone else — reload and try again');
@@ -187,7 +190,8 @@ export async function updateReview(actor: Actor, reviewId: string, input: Review
 
 export async function cancelReview(actor: Actor, reviewId: string) {
   assertStaff(actor);
-  const { review } = await loadReview(actor, reviewId);
+  const { review, enrolment } = await loadReview(actor, reviewId);
+  await assertCarrierWritable(enrolment);
   if (FINAL.includes(review.status)) throw conflict('This review is already closed');
   const updated = await runInTransaction((tx) =>
     updateApprReviewIfUnchanged(tx, review.id, review.updatedAt, { status: 'CANCELLED' })
@@ -211,6 +215,7 @@ const SIGNATURE_FIELD = {
 export async function signReview(actor: Actor, reviewId: string, input: ReviewSignInput, now: Date = new Date()) {
   const a = requireAuthed(actor);
   const { review, enrolment } = await loadReview(actor, reviewId);
+  await assertCarrierWritable(enrolment);
 
   if (input.role === 'LEARNER') {
     if (a.role !== 'LEARNER' || a.userId !== enrolment.learnerId) {

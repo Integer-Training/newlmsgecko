@@ -150,6 +150,44 @@ describe('getOverview', () => {
     expect((await getOverview(admin, CARRIER)).canAddPair).toBeNull();
   });
 
+  it('Deploy 5: a withdrawn half fills the card withdrawnAt / reason and drops out of the roll-up and the breakdown', async () => {
+    pairSetup();
+    const withdrawnAt = '2026-05-01T09:00:00.000Z';
+    const compRow = { ...enrolment(COMP, STD, CARRIER), withdrawnAt, withdrawalReason: 'Left the standard' };
+    vi.mocked(q.getComponentEnrolment).mockResolvedValue(compRow as never);
+    vi.mocked(q.getApprEnrolment).mockImplementation((async (id: string) =>
+      id === CARRIER ? enrolment(CARRIER, DIP) : id === COMP ? compRow : null) as never);
+    vi.mocked(getPortfolio).mockImplementation((async (_a: Actor, id: string) => {
+      if (id === CARRIER) return portfolio(CARRIER, DIP, 'Diploma', 80, 'ON_TARGET');
+      const p = portfolio(COMP, STD, 'Standard', 40, 'BEHIND');
+      return { ...p, enrolment: { ...p.enrolment, withdrawnAt, withdrawalReason: 'Left the standard' } };
+    }) as never);
+    const o = await getOverview(admin, CARRIER);
+    expect(o.cards[0]).toMatchObject({ withdrawnAt: null, withdrawalReason: null });
+    expect(o.cards[1]).toMatchObject({ withdrawnAt, withdrawalReason: 'Left the standard' });
+    // roll-up = the active half only
+    expect(o.overall).toEqual({ actualPct: 80, status: 'ON_TARGET' });
+    expect(vi.mocked(q.getOverviewBreakdown).mock.calls[0][0]).toMatchObject({
+      enrolmentIds: [CARRIER],
+      programmeIds: [DIP]
+    });
+  });
+
+  it('Deploy 5: when EVERY half is withdrawn the frozen numbers still roll up', async () => {
+    pairSetup();
+    const withdrawnAt = '2026-05-01T09:00:00.000Z';
+    vi.mocked(q.getApprEnrolment).mockImplementation((async (id: string) =>
+      id === CARRIER
+        ? { ...enrolment(CARRIER, DIP), withdrawnAt }
+        : id === COMP
+          ? { ...enrolment(COMP, STD, CARRIER), withdrawnAt }
+          : null) as never);
+    vi.mocked(q.getComponentEnrolment).mockResolvedValue({ ...enrolment(COMP, STD, CARRIER), withdrawnAt } as never);
+    const o = await getOverview(admin, CARRIER);
+    expect(o.overall).toEqual({ actualPct: 60, status: 'BEHIND' });
+    expect(vi.mocked(q.getOverviewBreakdown).mock.calls[0][0].enrolmentIds).toEqual([CARRIER, COMP]);
+  });
+
   it('404s for another learner and for an unknown enrolment', async () => {
     pairSetup();
     await expect(getOverview(otherLearner, CARRIER)).rejects.toMatchObject({ statusCode: 404 });

@@ -1,5 +1,5 @@
 import { AppError, ErrorCodes } from '@api/utils/errors';
-import { assertStaff, getEnrolmentForActor } from '@api/services/apprenticeship/access';
+import { assertEnrolmentWritable, assertStaff, getEnrolmentForActor } from '@api/services/apprenticeship/access';
 import { recomputeEnrolment } from '@api/services/apprenticeship/progress';
 import type { Actor } from '@cio/db/actor';
 import { recordAudit } from '@cio/db/audit';
@@ -23,6 +23,7 @@ export async function listEnrolmentGlhLogs(actor: Actor, enrolmentId: string) {
 export async function addGlhLog(actor: Actor, enrolmentId: string, input: GlhLogCreateInput) {
   const a = assertStaff(actor);
   const enrolment = await getEnrolmentForActor(actor, enrolmentId);
+  await assertEnrolmentWritable(enrolment);
   const result = await runInTransaction(async (tx) => {
     const log = await insertGlhLog(tx, {
       organizationId: enrolment.organizationId,
@@ -42,6 +43,7 @@ export async function addGlhLog(actor: Actor, enrolmentId: string, input: GlhLog
 export async function removeGlhLog(actor: Actor, enrolmentId: string, logId: string) {
   assertStaff(actor);
   const enrolment = await getEnrolmentForActor(actor, enrolmentId);
+  await assertEnrolmentWritable(enrolment);
   const result = await runInTransaction(async (tx) => {
     // Bound to THIS enrolment: a log id of another learner is simply not found.
     const removed = await deleteGlhLog(tx, logId, enrolment.id);

@@ -18,6 +18,7 @@ import {
 } from '@db/drizzle';
 import { tutorReachSql, tutorsDisplaySql } from './tutors';
 import { profileDisplayName } from './names';
+import { apprenticeshipClosedSql } from './withdrawn';
 
 // Gecko Apprenticeships — task plans, plan items and learner tasks. No access control here: services resolve the actor
 // and the org/enrolment first. Writes take the transaction client so a task status change lands with the evidence write.
@@ -515,6 +516,7 @@ export async function listOverdueTasks(
     ne(t.status, 'COMPLETE')
   ];
   if (scope.programmeId) conditions.push(eq(t.programmeId, scope.programmeId));
+  conditions.push(sql`not (${apprenticeshipClosedSql('"appr_task"."enrolment_id"')})`);
   if (scope.restrictToTutorId) {
     conditions.push(tutorReachSql('"appr_task"."learner_id"', '"appr_task"."programme_id"', scope.restrictToTutorId));
   }
@@ -556,7 +558,9 @@ export async function claimOverdueTasks(today: string, limit: number, client: Db
         ne(t.status, 'COMPLETE'),
         isNull(t.overdueNotifiedAt),
         // Learners at gateway / end-point assessment or achieved are no longer chased for tasks.
-        sql`exists (select 1 from appr_enrolment en where en.id = ${sql.raw('"appr_task"."enrolment_id"')} and en.gateway_passed_at is null and en.achieved_at is null)`
+        sql`exists (select 1 from appr_enrolment en where en.id = ${sql.raw('"appr_task"."enrolment_id"')} and en.gateway_passed_at is null and en.achieved_at is null)`,
+        // A withdrawn (closed) apprenticeship is never chased.
+        sql`not (${apprenticeshipClosedSql('"appr_task"."enrolment_id"')})`
       )
     )
     .orderBy(asc(t.dueDate), asc(t.id))

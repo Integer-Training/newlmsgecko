@@ -1,5 +1,7 @@
 <script lang="ts">
   import { Button } from '@cio/ui/base/button';
+  import { isOrgAdmin } from '$lib/utils/store/org';
+  import WithdrawDialog from '../learners/withdraw-dialog.svelte';
   import type { PortfolioStore } from '../../stores/portfolio.svelte';
   import { fmtPct } from '../shared/format';
   import StatusChip from '../shared/status-chip.svelte';
@@ -21,6 +23,17 @@
   let { store, mode, qualHref, unitHref, onEditDates }: Props = $props();
 
   const o = $derived(store.overview);
+  const admin = $derived(mode === 'staff' && $isOrgAdmin === true);
+  let withdrawOpen = $state(false);
+  let target = $state<{ id: string; title: string; paired: string | null }>({ id: '', title: '', paired: null });
+  function startWithdraw(enrolmentId: string) {
+    const cards = o?.cards ?? [];
+    const c = cards.find((x) => x.enrolmentId === enrolmentId);
+    // Only a linked pair offers the THIS / BOTH choice; once the other side is withdrawn there is nothing to choose.
+    const other = cards.length > 1 ? cards.find((x) => x.enrolmentId !== enrolmentId && !x.withdrawnAt) : undefined;
+    target = { id: enrolmentId, title: c?.title ?? 'this qualification', paired: other?.title ?? null };
+    withdrawOpen = true;
+  }
 </script>
 
 {#if o}
@@ -40,6 +53,8 @@
         href={qualHref(card.enrolmentId)}
         unitHref={(unitId) => unitHref(card.enrolmentId, unitId)}
         onEditDates={onEditDates ? () => onEditDates(card.enrolmentId) : undefined}
+        onWithdraw={admin ? () => startWithdraw(card.enrolmentId) : undefined}
+        onReinstate={admin ? () => store.reinstate(card.enrolmentId) : undefined}
       />
     {/each}
     {#if o.cards.length === 1 && o.cards[0].type === 'DIPLOMA'}
@@ -53,6 +68,15 @@
     {/if}
     <AchievedPanel cards={o.cards} />
   </div>
+  {#if admin}
+    <WithdrawDialog
+      bind:open={withdrawOpen}
+      enrolmentId={target.id}
+      title={target.title}
+      pairedTitle={target.paired}
+      onDone={() => store.load()}
+    />
+  {/if}
 {:else if store.overviewError}
   <div class="rounded-lg border border-rose-200 p-6 text-center">
     <p role="alert" class="text-sm text-rose-600">{store.overviewError}</p>

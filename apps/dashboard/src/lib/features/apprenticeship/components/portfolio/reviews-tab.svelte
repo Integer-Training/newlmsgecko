@@ -81,7 +81,7 @@
 <div class="space-y-4">
   <div class="flex flex-wrap items-center justify-between gap-2">
     <h3 class="text-sm font-semibold">Progress reviews</h3>
-    {#if isStaff}
+    {#if isStaff && !store.readOnly}
       <Button size="sm" onclick={openSchedule}><CalendarPlusIcon size={14} class="mr-1" /> Schedule review</Button>
     {/if}
   </div>

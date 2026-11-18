@@ -2,6 +2,7 @@ import { AppError, ErrorCodes } from '@api/utils/errors';
 import { getEnrolmentForActor } from '@api/services/apprenticeship/access';
 import { getPortfolio } from '@api/services/apprenticeship/enrolment';
 import { todayIso } from '@api/services/apprenticeship/progress';
+import { countedHalves } from '@api/services/apprenticeship/withdrawn';
 import type { Actor } from '@cio/db/actor';
 import {
   getApprEnrolment,
@@ -37,8 +38,9 @@ function cardOf(p: Portfolio, role: ApprEnrolmentRole, type: ApprProgrammeType, 
     unitsTotal: units.length,
     unitsComplete: units.filter((u) => u.status === 'COMPLETE').length,
     achievedAt: p.enrolment.achievedAt ? new Date(p.enrolment.achievedAt).toISOString() : null,
-    // Deploy 5 (withdraw) fills this in.
-    withdrawnAt: null as string | null,
+    // Set when this qualification is withdrawn (frozen, out of the roll-up and the gateway count).
+    withdrawnAt: (p.enrolment.withdrawnAt ? new Date(p.enrolment.withdrawnAt).toISOString() : null) as string | null,
+    withdrawalReason: (p.enrolment.withdrawalReason ?? null) as string | null,
     role,
     units: units.map((u) => ({
       id: u.id,
@@ -84,10 +86,13 @@ export async function getOverview(actor: Actor, enrolmentId: string) {
       : [])
   ];
 
-  const enrolmentIds = cards.map((c) => c.enrolmentId);
+  // A withdrawn half is out of the roll-up and the breakdown (unless every half is withdrawn: the frozen numbers show).
+  const halves = countedHalves(!!carrier.withdrawnAt, component ? !!component.withdrawnAt : null);
+  const counted = cards.filter((c) => (c.enrolmentId === carrier.id ? halves.own : halves.linked));
+  const enrolmentIds = counted.map((c) => c.enrolmentId);
   const [breakdown, onboarding] = await Promise.all([
     getOverviewBreakdown(
-      { enrolmentIds, programmeIds: cards.map((c) => c.programmeId), learnerId: carrier.learnerId },
+      { enrolmentIds, programmeIds: counted.map((c) => c.programmeId), learnerId: carrier.learnerId },
       todayIso()
     ),
     getOnboardingCountsForEnrolment(carrier.id)
@@ -120,7 +125,7 @@ export async function getOverview(actor: Actor, enrolmentId: string) {
   return {
     learner: carrierPortfolio.learner,
     tutors: carrierPortfolio.tutors,
-    overall: apprenticeshipRollup(cards.map((c) => ({ actualPct: c.actualPct, status: c.status }))),
+    overall: apprenticeshipRollup(counted.map((c) => ({ actualPct: c.actualPct, status: c.status }))),
     cards,
     breakdown,
     otj,

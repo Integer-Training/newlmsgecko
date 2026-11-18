@@ -4639,6 +4639,10 @@ export const apprEnrolment = pgTable(
     otjTargetMinutesOverride: integer('otj_target_minutes_override'),
     // Set on the COMPONENT of a linked Diploma/Standard pair; points at the carrier. NULL = standalone or carrier.
     primaryEnrolmentId: uuid('primary_enrolment_id'),
+    // ── withdrawn (Deploy 5). withdrawn_at set = this enrolment is withdrawn (units frozen, out of roll-up / gateway). ──
+    withdrawnAt: timestamp('withdrawn_at', { withTimezone: true, mode: 'string' }),
+    withdrawnBy: uuid('withdrawn_by'),
+    withdrawalReason: text('withdrawal_reason'),
     // ── gateway / EPA (round 2). gateway_items = manual checklist ticks {key: {done, by, at, note}}; auto items are
     // computed on read. gateway_passed_* locks the checklist; epa_result + date set achieved_at. ──
     gatewayItems: jsonb('gateway_items')
@@ -4688,6 +4692,11 @@ export const apprEnrolment = pgTable(
       columns: [table.primaryEnrolmentId],
       foreignColumns: [table.id],
       name: 'appr_enrolment_primary_enrolment_id_fkey'
+    }).onDelete('set null'),
+    foreignKey({
+      columns: [table.withdrawnBy],
+      foreignColumns: [profile.id],
+      name: 'appr_enrolment_withdrawn_by_fkey'
     }).onDelete('set null'),
     unique('appr_enrolment_programme_learner_unique').on(table.programmeId, table.learnerId),
     uniqueIndex('appr_enrolment_primary_unique')

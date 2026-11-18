@@ -2,6 +2,7 @@ import * as schema from '@db/schema';
 
 import { and, asc, db, desc, eq, inArray, isNull, lte, ne, sql, type DbOrTxClient } from '@db/drizzle';
 import { profileDisplayName } from './names';
+import { apprenticeshipClosedSql } from './withdrawn';
 
 // Gecko Apprenticeships — progress reviews. No access control here (services scope the actor first). Updates are
 // conditional on the updatedAt / status the caller read, so a concurrent edit or signature is a 409, never a silent
@@ -98,7 +99,15 @@ export async function claimDueReviews(dueOnOrBefore: string, limit: number, clie
   const candidates = await client
     .select({ id: r.id })
     .from(r)
-    .where(and(inArray(r.status, ['SCHEDULED', 'DRAFT']), lte(r.scheduledDate, dueOnOrBefore), isNull(r.dueNotifiedAt)))
+    .where(
+      and(
+        inArray(r.status, ['SCHEDULED', 'DRAFT']),
+        lte(r.scheduledDate, dueOnOrBefore),
+        isNull(r.dueNotifiedAt),
+        // A withdrawn (closed) apprenticeship is never chased.
+        sql`not (${apprenticeshipClosedSql('"appr_review"."enrolment_id"')})`
+      )
+    )
     .orderBy(asc(r.scheduledDate), asc(r.id))
     .limit(limit);
   if (candidates.length === 0) return [];

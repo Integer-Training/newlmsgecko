@@ -92,6 +92,7 @@
       rows={view.rows}
       pendingMinutes={view.summary.pendingMinutes}
       onAdd={add}
+      readOnly={store.readOnly}
       onEdit={edit}
       onReview={review}
       onViewEvidence={(id) => store.openEvidence(id)}
