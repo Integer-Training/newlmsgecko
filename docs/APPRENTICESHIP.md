@@ -305,3 +305,93 @@ admin-only; tutors use "Add from plan" on the portfolio Tasks tab of a learner t
 (`GET /apprenticeship/tasks/enrolments/:id/plan-items`, `POST …/tasks/from-plan`). Learners: 403.
 Verified: API 1226 pass / 15 known baseline failures; independent review (no HIGH; 3 MEDIUM + 3 LOW fixed); local
 E2E 18/18 + re-test of the fixes.
+
+## Apprenticeship Standard, diploma↔standard pairing, dual enrolment, OTJ log, withdraw (2026-11-18)
+
+Branch `feat/appr-standard` (commits 3d51841e, 70c16bf0, 8e5a70fe + uncommitted Deploy 5 and Phase 6). Plan:
+`~/.claude/plans/gecko-standard-plan.md` (owner decisions in its §14). All migrations additive.
+
+**Three products, one workspace.** (1) Regular courses (unchanged). (2) Apprenticeship diploma. (3) Apprenticeship
+standard. Apprentice and regular learner are the same account; "apprentice" only means an `appr_enrolment` row exists.
+The Apprenticeships workspace shell (header band + tabs, admin and tutor) groups the apprenticeship pages; the
+new-course modal has a separate "Apprenticeship programme" card (opens `programmes?new=1`).
+
+**Programme type and pairing (0035).** `appr_programme.type` (`DIPLOMA` default | `STANDARD`) and
+`paired_programme_id` (stored on the diploma). Rules, service-enforced: same level (`apprLevelNumber` parses the
+free-text level, first digit 1-8; both sides need a non-null equal number), standard is ACTIVE in the same org, many
+diplomas may share one standard, each diploma pairs to at most one. Guards (409/400): changing or clearing the pair
+while learners hold linked enrolments, archiving a paired standard, a level change that breaks a pair.
+`GET /programmes/:id/pair-candidates` lists same-level active standards.
+
+**Unit import.** CSV or XLSX (parsed in the browser with `read-excel-file`, lazy-loaded; the server only sees rows),
+downloadable templates, unit preview and warnings in the import response. Ref-collision fix: a standard whose
+criterion codes repeat across units (plain `1.1` in every unit) no longer updates unit 1's criterion from unit 2.
+
+**Carrier/component model (0036).** A learner on both has two enrolments (own dates, units, status, progress).
+The first is the carrier; the second sets `primary_enrolment_id` to it (partial unique index: one component per
+carrier). Learner-level data lives on the carrier only: reviews, onboarding, contracted hours / OTJ override, OTJ logs
+and OTJ cache, gateway/EPA, GLH log of the apprenticeship. Evidence, tasks, unit dates and progress stay per
+enrolment. Maintenance back-fills (first review etc.) skip components. The learners list folds a pair into one row
+with an overall roll-up (`apprenticeshipRollup`).
+
+**Enrolment (admin only).** `POST /apprenticeship/enrolments/apprenticeship` creates 1-2 enrolments in one
+transaction under a per-learner advisory lock; the carrier is the diploma when both are created together.
+`GET /enrolments/learner-check?learnerId|email`; `POST|DELETE /enrolments/:id/link` (unlink refused with cross-mapped
+evidence or OTJ logs on the component). Rules (also applied to legacy `POST /enrolments`, which auto-links): at most
+one open diploma + one open standard per learner (open = not achieved, not withdrawn); if both, the diploma's pair
+must be that standard. Legacy unrelated double enrolments are left alone. Wizard: 3 steps (learner, programmes,
+tutor + hours); new learner's temp password shown once.
+
+**Access.** `canAccessLearner` and `tutorReachSql` extend a tutor's reach across a linked pair (programme tutor of
+either half). Unlinked rows behave as before; learners self only; managers none.
+
+**Cross-mapped evidence (0037 release).** One upload may map to criteria in both qualifications. Counting moved from
+`evidence.programme_id` to criterion -> qualification -> programme, so each half counts the learner's accepted
+evidence mapped to its own criteria (identical for unlinked learners). Every write recomputes both halves under one
+ordered pair lock. UI: Diploma/Standard tabs in the criteria picker, non-blocking "map to its criteria too?" prompt,
+"Also counts towards" chip, "From Diploma|Standard" chip, reviewer banner ("decision applies to every mapped
+criterion"). `appr.evidence.submitted` reaches tutors of both halves (deduped); the review notification names both.
+
+**OTJ log (0037, `appr_otj_log`).** Not criterion-bound; always on the carrier. Statuses SUBMITTED, VALIDATED,
+REJECTED (note required). Learner adds (always SUBMITTED), edits/deletes own while SUBMITTED, edits a REJECTED one to
+resubmit; staff in reach add (may add as VALIDATED), validate/reject, delete non-validated; only admin reopens a
+VALIDATED log. Learners are blocked after gateway confirmed. Carrier cache `otj_minutes` = OTJ-flagged accepted
+evidence minutes of both halves + VALIDATED logs with `is_otj`, recomputed in the same transaction. Endpoints:
+`GET /enrolments/:id/otj`, `POST /enrolments/:id/otj-logs`, `PATCH|DELETE /otj-logs/:logId`,
+`POST /otj-logs/:logId/review` (409 on stale `expectedStatus`), `GET /otj-logs` (staff To-mark queue). Page shows
+Current / Expected / Required / completion, merged log + evidence table.
+
+**Gateway/EPA.** One per apprenticeship: AUTO_UNITS sums units across both halves (withdrawn excluded); an achieving
+EPA sets `achieved_at` on both halves, a fail clears both. Summary counts a pair once; IQA coverage is by criterion
+programme.
+
+**Summary / report / PDF.** Summary has a programme-type filter, "Learners on both" and tiles linking to filtered
+lists. Portfolio PDF is per qualification and adds an off-the-job log section (file names only, as before).
+
+**Withdraw / reinstate (0038).** `POST /enrolments/:id/withdraw` (admin; body scope `THIS` default | `BOTH`, optional
+reason) and `POST .../reinstate`. THIS freezes that enrolment: it leaves the roll-up and gateway count, the partner
+carries on; a withdrawn carrier stays writable while its component is active (it holds reviews/OTJ/onboarding/gateway).
+BOTH closes the apprenticeship (a lone enrolment is always closed). Evidence mappings are kept; its criteria are
+hidden from the evidence picker. Write guard `assertEnrolmentWritable` (409 "This apprenticeship has been withdrawn")
+in evidence, tasks, reviews, OTJ, onboarding services; the learner still reads. Learners list has a state filter
+(active / achieved / withdrawn). Task-plan bulk assign, unassign and sync skip withdrawn learners (counted as
+`withdrawnSkipped`, no error). Withdrawn halves do not block a new enrolment.
+
+**Phase 6 notices.** Create-learner dialog calls `learner-check` and shows "Already an apprentice on ..." (also on the
+email-exists 409) with two choices: continue with this account (warned) or create a separate profile with a
+different email. Learner management gains a derived Course / Apprentice / Both "Kind" column and chip filter
+(`kind` on `GET /organization/management/learners`, read-only, no data change).
+
+**Migrations (all additive).** 0035 `appr_programme.type`, `paired_programme_id` + index; 0036
+`appr_enrolment.primary_enrolment_id` + partial unique index; 0037 table `appr_otj_log` + 2 indexes; 0038
+`appr_enrolment.withdrawn_at`, `withdrawn_by`, `withdrawal_reason`. No backfill, defaults keep existing rows
+standalone DIPLOMA / active.
+
+**Rollback.** Redeploy the previous build: it ignores the new columns and table (optionally drop them). Caveat: once
+cross-mapped evidence exists, old code stops counting it for the counterpart (progress under-reports, no data lost);
+run `recomputeProgramme` for affected programmes before rolling back and again after redeploying.
+
+**Known limitations.**
+- A failed new-learner enrolment can leave an orphan account (user created before the enrolment transaction).
+- Existing cross-mappings stay editable after a qualification is withdrawn (only new picks are hidden).
+- The To-mark type filter is client-side on the loaded page, so it does not search beyond that page.

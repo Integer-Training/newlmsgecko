@@ -30,6 +30,7 @@
   // "Send login" (regenerate + reveal a temp password) and suspend/reactivate. Admin-only (API-enforced).
 
   type ActivityFilter = 'all' | 'active' | 'inactive' | 'created' | 'suspended';
+  type KindFilter = 'all' | 'course' | 'apprentice' | 'both';
 
   const ALL = 'all';
 
@@ -38,6 +39,7 @@
 
   let activity = $state<ActivityFilter>('all');
   let courseFilter = $state(ALL);
+  let kindFilter = $state<KindFilter>('all');
   let search = $state('');
   let pageSize = $state(25);
   let pageNum = $state(1);
@@ -62,6 +64,15 @@
   ];
   const activityLabel = $derived(ACTIVITY_OPTIONS.find((o) => o.value === activity)?.label ?? 'All activity');
 
+  const KIND_OPTIONS: { value: KindFilter; label: string }[] = [
+    { value: 'all', label: 'All kinds' },
+    { value: 'course', label: 'Course' },
+    { value: 'apprentice', label: 'Apprentice' },
+    { value: 'both', label: 'Both' }
+  ];
+  const kindLabel = $derived(KIND_OPTIONS.find((o) => o.value === kindFilter)?.label ?? 'All kinds');
+  const kindOf = (r: LearnerMgmtRow) => r.kind ?? 'course';
+
   const courseTitles = $derived.by(() => {
     const seen: Record<string, true> = {};
     for (const r of rows) for (const c of r.courses) if (c.title) seen[c.title] = true;
@@ -73,6 +84,7 @@
     const q = search.trim().toLowerCase();
     return rows.filter((r) => {
       if (activity !== 'all' && r.activity !== activity) return false;
+      if (kindFilter !== 'all' && kindOf(r) !== kindFilter) return false;
       if (courseFilter !== ALL && !r.courses.some((c) => c.title === courseFilter)) return false;
       if (q) {
         const hay = `${r.name ?? ''} ${r.email ?? ''}`.toLowerCase();
@@ -93,6 +105,7 @@
 
   function resetFilters() {
     activity = 'all';
+    kindFilter = 'all';
     courseFilter = ALL;
     search = '';
     pageNum = 1;
@@ -144,10 +157,11 @@
   };
 
   function exportCsv() {
-    const headers = ['Name', 'Email', 'Tutor', 'Course count', 'Courses', 'Time spent', 'Last login', 'Status'];
+    const headers = ['Name', 'Email', 'Kind', 'Tutor', 'Course count', 'Courses', 'Time spent', 'Last login', 'Status'];
     const data = filtered.map((r) => [
       r.name ?? '',
       r.email ?? '',
+      kindOf(r),
       r.tutorName ?? 'Unassigned',
       r.courseCount,
       r.courses.map((c) => c.title).join('; '),
@@ -224,6 +238,18 @@
               </div>
 
               <div class="space-y-1">
+                <span class="ui:text-muted-foreground text-xs font-medium">Kind</span>
+                <Select.Root type="single" bind:value={kindFilter}>
+                  <Select.Trigger class="sm:w-40">{kindLabel}</Select.Trigger>
+                  <Select.Content>
+                    {#each KIND_OPTIONS as opt (opt.value)}
+                      <Select.Item value={opt.value}>{opt.label}</Select.Item>
+                    {/each}
+                  </Select.Content>
+                </Select.Root>
+              </div>
+
+              <div class="space-y-1">
                 <span class="ui:text-muted-foreground text-xs font-medium">Course</span>
                 <Select.Root type="single" bind:value={courseFilter}>
                   <Select.Trigger class="sm:w-52">{courseFilterLabel}</Select.Trigger>
@@ -257,6 +283,7 @@
                   <Table.Head class="w-8"></Table.Head>
                   <Table.Head>Name</Table.Head>
                   <Table.Head>Email</Table.Head>
+                  <Table.Head>Kind</Table.Head>
                   <Table.Head>Tutor</Table.Head>
                   <Table.Head class="text-right">Courses</Table.Head>
                   <Table.Head class="text-right">Time spent</Table.Head>
@@ -268,13 +295,13 @@
               <Table.Body>
                 {#if loading}
                   <Table.Row>
-                    <Table.Cell colspan={9} class="ui:text-muted-foreground py-10 text-center text-sm"
+                    <Table.Cell colspan={10} class="ui:text-muted-foreground py-10 text-center text-sm"
                       >Loading…</Table.Cell
                     >
                   </Table.Row>
                 {:else if filtered.length === 0}
                   <Table.Row>
-                    <Table.Cell colspan={9} class="py-10 text-center">
+                    <Table.Cell colspan={10} class="py-10 text-center">
                       <UsersIcon class="ui:text-muted-foreground mx-auto mb-2 size-6" />
                       <p class="text-sm font-medium">No learners match your filters</p>
                       <p class="ui:text-muted-foreground mt-1 text-xs">
@@ -305,6 +332,9 @@
                       </Table.Cell>
                       <Table.Cell class="font-medium whitespace-nowrap">{row.name || 'Learner'}</Table.Cell>
                       <Table.Cell class="ui:text-muted-foreground">{row.email ?? ''}</Table.Cell>
+                      <Table.Cell>
+                        <Badge variant="outline" class="capitalize">{kindOf(row)}</Badge>
+                      </Table.Cell>
                       <Table.Cell class="whitespace-nowrap">
                         {#if row.tutorName}
                           {row.tutorName}
@@ -355,7 +385,7 @@
                     {#if expanded.has(row.memberId)}
                       <Table.Row class="ui:bg-muted/30">
                         <Table.Cell></Table.Cell>
-                        <Table.Cell colspan={8}>
+                        <Table.Cell colspan={9}>
                           <div class="flex flex-wrap gap-1.5 py-1">
                             {#each row.courses as c (c.courseId)}
                               <Badge variant="outline">{c.title}</Badge>

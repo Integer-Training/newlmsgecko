@@ -75,3 +75,12 @@ export async function getSuperAdminProfileId(orgId: string, client: DbOrTxClient
     .limit(1);
   return row?.profileId ?? null;
 }
+
+/** Distinct learner ids with at least one apprenticeship enrolment in the org (read-only; drives the "Kind" chip). */
+export async function listApprenticeLearnerIds(orgId: string, client: DbOrTxClient = db): Promise<string[]> {
+  const rows = await client
+    .selectDistinct({ learnerId: schema.apprEnrolment.learnerId })
+    .from(schema.apprEnrolment)
+    .where(eq(schema.apprEnrolment.organizationId, orgId));
+  return rows.map((r) => r.learnerId);
+}

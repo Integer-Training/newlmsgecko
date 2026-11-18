@@ -171,6 +171,25 @@
   function onEmailBlur() {
     if (mode === 'new' && email.includes('@')) runCheck({ email: email.trim() });
   }
+  // Phase 6: "Create a separate apprentice profile" keeps the two worlds apart. Switch to a new learner with the name
+  // prefilled and the email blank (it must be a different email).
+  let separateHint = $state(false);
+  function createSeparate() {
+    let first = firstName;
+    let last = lastName;
+    if (mode === 'existing' && chosenLearner?.name) {
+      const parts = chosenLearner.name.trim().split(/\s+/);
+      first = parts[0] ?? '';
+      last = parts.slice(1).join(' ');
+    }
+    mode = 'new';
+    firstName = first;
+    lastName = last;
+    email = '';
+    learnerId = '';
+    check = null;
+    separateHint = true;
+  }
   function useExisting() {
     if (!check?.learnerId) return;
     mode = 'existing';
@@ -319,6 +338,7 @@
                   onclick={() => {
                     mode = value;
                     check = null;
+                    separateHint = false;
                   }}
                 >
                   {label}
@@ -369,6 +389,11 @@
               <div class="space-y-1">
                 <label for="ea-email" class="text-sm">Email</label>
                 <Input id="ea-email" type="email" autocomplete="off" bind:value={email} onblur={onEmailBlur} />
+                {#if separateHint}
+                  <p class="text-xs text-(--muted-foreground)">
+                    Use a different email from the existing account so the apprentice profile stays separate.
+                  </p>
+                {/if}
               </div>
             {/if}
           </fieldset>
@@ -384,6 +409,18 @@
                     <button type="button" class="font-medium underline" onclick={useExisting}>
                       Use Existing learner instead
                     </button>
+                    <span aria-hidden="true">·</span>
+                    <button
+                      type="button"
+                      class="font-medium underline"
+                      onclick={() => {
+                        email = '';
+                        check = null;
+                        separateHint = true;
+                      }}
+                    >
+                      Use a different email for a separate profile
+                    </button>
                   {/if}
                 </div>
               {/if}
@@ -398,10 +435,21 @@
                 </div>
               {/each}
               {#if check.regularCourses > 0}
-                <p class="rounded-md bg-(--muted) px-3 py-2 text-sm">
-                  This person is also a regular course learner ({check.regularCourses}
-                  course{check.regularCourses === 1 ? '' : 's'}).
-                </p>
+                <div class="space-y-2 rounded-md bg-(--muted) px-3 py-2 text-sm">
+                  <p>
+                    This person is also a regular course learner ({check.regularCourses}
+                    course{check.regularCourses === 1 ? '' : 's'}). Apprenticeship records are kept separate from their
+                    courses.
+                  </p>
+                  {#if mode === 'existing'}
+                    <div class="flex flex-wrap gap-2">
+                      <Button type="button" size="sm" aria-pressed="true">Continue with this account</Button>
+                      <Button type="button" size="sm" variant="outline" onclick={createSeparate}>
+                        Create a separate apprentice profile
+                      </Button>
+                    </div>
+                  {/if}
+                </div>
               {/if}
             </div>
           {/if}

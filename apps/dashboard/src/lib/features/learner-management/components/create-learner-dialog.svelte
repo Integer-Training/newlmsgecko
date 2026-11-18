@@ -5,6 +5,8 @@
   import { Input } from '@cio/ui/base/input';
   import { learnerManagementApi } from '$features/learner-management/api/learner-management.svelte';
   import RevealPanel from './reveal-panel.svelte';
+  import { enrolmentsApi } from '$features/apprenticeship/api/enrolments.svelte';
+  import type { LearnerCheckResult } from '$features/apprenticeship/api/overview.types';
 
   // Create-learner dialog. First/last name + email + course + tutor are all REQUIRED — a learner is always
   // enrolled in a course and assigned a tutor. On success the dialog switches to a reveal panel showing the
@@ -21,6 +23,29 @@
   let email = $state('');
   let courseId = $state('');
   let tutorId = $state('');
+
+  // Phase 6: when the email already has an account, look up (admin-only, after the 409) whether that person is an
+  // apprentice. Both choices are non-blocking: warn only, or use a different email for a separate profile.
+  let conflictCheck = $state<LearnerCheckResult | null>(null);
+  let keepAccountNote = $state(false);
+
+  $effect(() => {
+    if (!learnerManagementApi.emailConflict) {
+      conflictCheck = null;
+      keepAccountNote = false;
+      return;
+    }
+    const addr = email.trim();
+    enrolmentsApi.learnerCheck({ email: addr }).then((res) => {
+      if (res.ok && learnerManagementApi.emailConflict && addr === email.trim()) conflictCheck = res.data;
+    });
+  });
+
+  function useDifferentEmail() {
+    email = '';
+    learnerManagementApi.clearConflict();
+    document.getElementById('nl-email')?.focus();
+  }
 
   const hasCourses = $derived(learnerManagementApi.options.courses.length > 0);
   const hasTutors = $derived(learnerManagementApi.options.tutors.length > 0);
@@ -49,6 +74,8 @@
     email = '';
     courseId = '';
     tutorId = '';
+    keepAccountNote = false;
+    learnerManagementApi.clearConflict();
   }
 
   async function submit() {
@@ -107,8 +134,45 @@
 
         <div class="space-y-1">
           <label for="nl-email" class="text-sm font-medium">Email</label>
-          <Input id="nl-email" type="email" bind:value={email} placeholder="jane@example.com" autocomplete="off" />
+          <Input
+            id="nl-email"
+            type="email"
+            bind:value={email}
+            placeholder="jane@example.com"
+            autocomplete="off"
+            oninput={() => learnerManagementApi.clearConflict()}
+          />
         </div>
+
+        {#if learnerManagementApi.emailConflict}
+          <div
+            class="space-y-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-300"
+            aria-live="polite"
+          >
+            <p>A person with this email already has an account.</p>
+            {#if conflictCheck && conflictCheck.apprenticeship.length > 0}
+              <p>
+                Already an apprentice on
+                <strong>{[...new Set(conflictCheck.apprenticeship.map((a) => a.programmeTitle))].join(', ')}</strong>.
+                Apprenticeship records are kept separate from their courses.
+              </p>
+            {/if}
+            {#if keepAccountNote}
+              <p>
+                To enrol this existing account on a course, open the course and add them from its People tab. No new
+                account has been created.
+              </p>
+            {/if}
+            <div class="flex flex-wrap gap-2">
+              <Button type="button" size="sm" variant="outline" onclick={() => (keepAccountNote = true)}>
+                Continue with this account
+              </Button>
+              <Button type="button" size="sm" variant="outline" onclick={useDifferentEmail}>
+                Use a different email for a separate profile
+              </Button>
+            </div>
+          </div>
+        {/if}
 
         <div class="space-y-1">
           <label for="nl-course" class="text-sm font-medium">Course <span class="text-red-500">*</span></label>

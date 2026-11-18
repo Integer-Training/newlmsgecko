@@ -16,6 +16,8 @@ export interface LearnerMgmtRow {
   tutorName: string | null;
   courses: { courseId: string; title: string }[];
   courseCount: number;
+  /** Derived: regular courses, apprenticeship records, or both. */
+  kind?: 'course' | 'apprentice' | 'both';
   timeSpentSeconds: number;
   lastLogin: string | null;
 }
@@ -49,6 +51,8 @@ class LearnerManagementApi extends BaseApi {
   busyMemberId = $state<number | null>(null);
   revealed = $state<RevealedCredentials | null>(null);
   creating = $state(false);
+  /** Set when the last create failed because the email already has an account (409). */
+  emailConflict = $state(false);
 
   async load() {
     return this.execute<typeof classroomio.organization.management.learners.$get>({
@@ -72,6 +76,7 @@ class LearnerManagementApi extends BaseApi {
 
   async createLearner(input: CreateLearnerInput) {
     this.creating = true;
+    this.emailConflict = false;
     try {
       return await this.execute<typeof classroomio.organization.management.learners.$post>({
         requestFn: () => classroomio.organization.management.learners.$post({ json: input }),
@@ -82,8 +87,14 @@ class LearnerManagementApi extends BaseApi {
           this.load();
         },
         onError: (result) => {
-          if (typeof result === 'string') snackbar.error(result);
-          else if ('error' in result && typeof result.error === 'string') snackbar.error(result.error);
+          const msg =
+            typeof result === 'string'
+              ? result
+              : 'error' in result && typeof result.error === 'string'
+                ? result.error
+                : '';
+          if (/already exists/i.test(msg)) this.emailConflict = true;
+          if (msg) snackbar.error(msg);
         }
       });
     } finally {
@@ -139,6 +150,10 @@ class LearnerManagementApi extends BaseApi {
     } finally {
       this.busyMemberId = null;
     }
+  }
+
+  clearConflict() {
+    this.emailConflict = false;
   }
 
   clearRevealed() {

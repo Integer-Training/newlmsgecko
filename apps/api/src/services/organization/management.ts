@@ -6,6 +6,7 @@ import {
   getSuperAdminMemberId,
   getSuperAdminProfileId,
   listOrgAdminMembers,
+  listApprenticeLearnerIds,
   listOrgLearnerMembers,
   listOrgTutorMembersFull,
   type OrgMemberRow
@@ -48,6 +49,14 @@ function activityOf(status: string, lastSeen: string | null | undefined, now: nu
   return now - new Date(lastSeen).getTime() > THIRTY_DAYS_MS ? 'inactive' : 'active';
 }
 
+/** Which world a learner is in: regular courses, apprenticeship records, or both (derived, read-only). */
+export type LearnerKind = 'course' | 'apprentice' | 'both';
+
+export function learnerKindOf(courseCount: number, isApprentice: boolean): LearnerKind {
+  if (isApprentice) return courseCount > 0 ? 'both' : 'apprentice';
+  return 'course';
+}
+
 export interface CourseRef {
   courseId: string;
   title: string;
@@ -62,6 +71,7 @@ export interface LearnerMgmtRow {
   tutorName: string | null;
   courses: CourseRef[];
   courseCount: number;
+  kind: LearnerKind;
   timeSpentSeconds: number;
   lastLogin: string | null;
 }
@@ -78,12 +88,14 @@ export async function getLearnerManagement(actor: Actor): Promise<LearnerManagem
   const members = await listOrgLearnerMembers(orgId);
   const learnerIds = members.map((m) => m.userId);
 
-  const [allocations, enrolments, times, lastSeen] = await Promise.all([
+  const [allocations, enrolments, times, lastSeen, apprenticeIds] = await Promise.all([
     listAllocationsByOrg(orgId),
     getEnrolmentsForLearners(learnerIds),
     getUnitTimeForLearners(learnerIds),
-    getLastSeenForUserIds(learnerIds)
+    getLastSeenForUserIds(learnerIds),
+    listApprenticeLearnerIds(orgId)
   ]);
+  const apprentices = new Set(apprenticeIds);
 
   // learner → first allocated tutor name.
   const tutorByLearner = new Map<string, string>();
@@ -120,6 +132,7 @@ export async function getLearnerManagement(actor: Actor): Promise<LearnerManagem
       tutorName: tutorByLearner.get(m.userId) ?? null,
       courses,
       courseCount: courses.length,
+      kind: learnerKindOf(courses.length, apprentices.has(m.userId)),
       timeSpentSeconds: secondsByLearner.get(m.userId) ?? 0,
       lastLogin: last
     };
