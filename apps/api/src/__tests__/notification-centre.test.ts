@@ -13,6 +13,7 @@ vi.mock('@cio/db/queries/comms', () => ({
 }));
 vi.mock('@cio/db/queries/apprenticeship', () => ({
   isProgrammeTutor: vi.fn(async () => false),
+  isProgrammeTutorOfLinked: vi.fn(async () => false),
   getEvidenceLinkTargets: vi.fn(async () => new Map()),
   getTaskLinkTargets: vi.fn(async () => new Map()),
   getReviewLinkTargets: vi.fn(async () => new Map()),

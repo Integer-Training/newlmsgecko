@@ -9,12 +9,16 @@ import type { AuthSession } from '@api/types/auth';
 
 vi.mock('@cio/db/queries/apprenticeship', () => ({
   isProgrammeTutor: vi.fn(async () => false),
+  isProgrammeTutorOfLinked: vi.fn(async () => false),
+  countOpenLinkedPairs: vi.fn(async () => 0),
   getApprProgramme: vi.fn(),
   getApprQualificationInProgramme: vi.fn(async () => null),
   getApprUnitInProgramme: vi.fn(async () => null),
   getApprCriterionInProgramme: vi.fn(async () => null),
   getApprProgrammeStructure: vi.fn(async () => ({ qualifications: [], units: [], criteria: [] })),
   listApprProgrammesWithCounts: vi.fn(async () => []),
+  listDiplomasPairedTo: vi.fn(async () => []),
+  listActiveStandards: vi.fn(async () => []),
   listApprQualificationIds: vi.fn(async () => []),
   insertApprProgrammeWithQualification: vi.fn(),
   insertApprQualification: vi.fn(),
@@ -80,6 +84,7 @@ type Route = { method: string; path: string; body?: unknown };
 const PROGRAMME_ROUTES: Route[] = [
   { method: 'GET', path: base },
   { method: 'PATCH', path: base, body: { title: 'New' } },
+  { method: 'GET', path: `${base}/pair-candidates` },
   { method: 'PUT', path: `${base}/reorder`, body: { kind: 'qualification', parentId: P, orderedIds: [QID] } },
   { method: 'POST', path: `${base}/import`, body: { csv: 'unit_code\nU1', mode: 'preview' } },
   { method: 'POST', path: `${base}/qualifications`, body: { title: 'Q' } }
@@ -208,7 +213,7 @@ describe('tutor reads', () => {
   });
   it('a tutor lists programmes and reads the settings bundle for their own org', async () => {
     expect((await call(COLLECTION_ROUTES[0], 'tutor')).status).toBe(200);
-    expect(q.listApprProgrammesWithCounts).toHaveBeenCalledWith(ORG, 'ACTIVE');
+    expect(q.listApprProgrammesWithCounts).toHaveBeenCalledWith(ORG, 'ACTIVE', 'ALL');
     expect((await call(COLLECTION_ROUTES[2], 'tutor')).status).toBe(200);
     expect(q.listApprEvidenceTypes).toHaveBeenCalledWith(ORG);
   });
@@ -220,7 +225,7 @@ describe('admin happy paths', () => {
       headers: { 'x-test-actor': 'admin', 'x-organization-id': 'org-evil' }
     });
     expect(res.status).toBe(200);
-    expect(q.listApprProgrammesWithCounts).toHaveBeenCalledWith(ORG, 'ALL');
+    expect(q.listApprProgrammesWithCounts).toHaveBeenCalledWith(ORG, 'ALL', 'ALL');
   });
   it('deleting an existing criterion reports removedMappings', async () => {
     vi.mocked(q.getApprCriterionInProgramme).mockResolvedValueOnce({ id: CID } as never);

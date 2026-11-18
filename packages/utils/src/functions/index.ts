@@ -8,3 +8,4 @@ export * from './sanitize';
 export * from './slug';
 export * from './transcript-vtt';
 export * from './apprenticeship-progress';
+export * from './apprenticeship-pairing';

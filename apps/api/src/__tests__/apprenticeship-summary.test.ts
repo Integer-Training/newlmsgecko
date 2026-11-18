@@ -6,6 +6,7 @@ import type { Actor } from '@cio/db/actor';
 
 vi.mock('@cio/db/queries/apprenticeship', () => ({
   isProgrammeTutor: vi.fn(async () => false),
+  isProgrammeTutorOfLinked: vi.fn(async () => false),
   getApprEnrolment: vi.fn(),
   listCriterionAcceptedDates: vi.fn(async () => new Map()),
   getApprSettings: vi.fn(async () => ({ concernGapPct: 15, otjFactor: 0.2, otjWeeklyCapHours: 30 })),
@@ -139,6 +140,32 @@ describe('getSummary', () => {
       gateway: { ready: 0, atGateway: 0, epaBooked: 0, achieved: 0 },
       onboardingIncomplete: 0,
       iqa: { pending: 2, awaitingAck: 1 }
+    });
+  });
+
+  it('counts a linked pair once, at its rolled-up (worst-half) status, like the list chips', async () => {
+    vi.mocked(q.listEnrolmentRows).mockResolvedValue([
+      // carrier ahead of plan (ON_TARGET) but its component is far behind (CONCERN) -> the pair is CONCERN
+      row({
+        id: 'pair',
+        actualPct: 90,
+        linked: {
+          id: 'component',
+          programmeId: PROG,
+          programmeTitle: 'Standard',
+          programmeType: 'STANDARD',
+          startDate: '2026-01-01',
+          plannedEndDate: '2027-01-01',
+          actualPct: 5,
+          achievedAt: null
+        }
+      }),
+      row({ id: 'solo', actualPct: 90 })
+    ] as never);
+    const s = await getSummary(admin, {}, NOW);
+    expect(s.learners).toEqual({
+      total: 2,
+      byStatus: { ON_TARGET: 1, BEHIND: 0, CONCERN: 1, NOT_SET: 0, COMPLETE: 0 }
     });
   });
 

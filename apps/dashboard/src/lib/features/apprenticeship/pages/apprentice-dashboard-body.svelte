@@ -7,6 +7,10 @@
   import { evidenceApi, type EvidenceNote } from '../api/evidence.svelte';
   import { tutorNames } from '../api/enrolments.svelte';
   import { apprenticeShell } from '../api/apprentice-shell.svelte';
+  import type { OverviewPayload } from '../api/overview.types';
+  import QualificationCard from '../components/overview/qualification-card.svelte';
+  import StatusBreakdown from '../components/overview/status-breakdown.svelte';
+  import AchievedPanel from '../components/overview/achieved-panel.svelte';
   import { PortfolioStore } from '../stores/portfolio.svelte';
   import ProgressBar from '../components/shared/progress-bar.svelte';
   import StatusChip from '../components/shared/status-chip.svelte';
@@ -27,6 +31,12 @@
     store.load();
     void apprenticeShell.refreshOnboardingBadge(enrolmentId);
   });
+
+  // Overview payload (Deploy 2): one card per qualification + status breakdowns, loaded by the portfolio store for the
+  // carrier (either enrolment id resolves to it). A failure just hides the cards — "What to do next" still works.
+  const overview = $derived<OverviewPayload | null>(store.overview);
+  const qualHref = (qualEnrolmentId: string) => `${BASE}/q/${qualEnrolmentId}`;
+  const unitHref = (qualEnrolmentId: string, unitId: string) => `${BASE}/q/${qualEnrolmentId}/units/${unitId}`;
 
   const d = $derived(store.data);
   const onboarding = $derived(
@@ -105,6 +115,22 @@
               {fmtDate(d.enrolment.startDate)} → {fmtDate(d.enrolment.plannedEndDate)}
             </p>
           </div>
+
+          {#if overview}
+            <div class="space-y-4" aria-label="Your qualifications">
+              <StatusBreakdown breakdown={overview.breakdown} />
+              {#each overview.cards as c (c.enrolmentId)}
+                <QualificationCard
+                  card={c}
+                  mode="learner"
+                  href={qualHref(c.enrolmentId)}
+                  unitHref={(unitId) => unitHref(c.enrolmentId, unitId)}
+                />
+              {/each}
+              <AchievedPanel cards={overview.cards} />
+            </div>
+            <h3 class="text-lg font-semibold">What to do next</h3>
+          {/if}
 
           <div class="grid gap-4 md:grid-cols-2">
             <!-- (a) Onboarding first, while it is incomplete -->

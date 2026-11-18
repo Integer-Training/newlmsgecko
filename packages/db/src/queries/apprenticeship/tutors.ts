@@ -13,13 +13,18 @@ const pt = schema.apprProgrammeTutor;
 const ROLE_TUTOR_ID = 2;
 
 /**
- * SQL condition "this tutor reaches the row": named (allocation) OR assigned to the row's programme. Pass the outer
+ * SQL condition "this tutor reaches the row": named (allocation) OR assigned to the row's programme OR assigned to the
+ * programme of the enrolment LINKED to the learner's enrolment on that programme (a Diploma + Standard pair is one
+ * apprenticeship; for an unlinked enrolment the third branch is always false). Pass the outer
  * table's learner_id / programme_id columns as fully-qualified raw names (`"appr_task"."learner_id"`), otherwise a
  * correlated subquery would silently match its own table.
  */
 export function tutorReachSql(learnerCol: string, programmeCol: string, tutorId: string) {
   return sql`(exists (select 1 from tutor_allocation ta where ta.learner_id = ${sql.raw(learnerCol)} and ta.tutor_id = ${tutorId})
-    or exists (select 1 from appr_programme_tutor apt where apt.programme_id = ${sql.raw(programmeCol)} and apt.tutor_id = ${tutorId}))`;
+    or exists (select 1 from appr_programme_tutor apt where apt.programme_id = ${sql.raw(programmeCol)} and apt.tutor_id = ${tutorId})
+    or exists (select 1 from appr_enrolment me join appr_enrolment lk on (lk.primary_enrolment_id = me.id or lk.id = me.primary_enrolment_id)
+      join appr_programme_tutor lpt on lpt.programme_id = lk.programme_id
+      where me.learner_id = ${sql.raw(learnerCol)} and me.programme_id = ${sql.raw(programmeCol)} and lpt.tutor_id = ${tutorId}))`;
 }
 
 export interface ApprTutorDisplay {
@@ -71,6 +76,26 @@ export async function isProgrammeTutor(programmeId: string, tutorId: string, cli
     .where(and(eq(pt.programmeId, programmeId), eq(pt.tutorId, tutorId)))
     .limit(1);
   return Boolean(row);
+}
+
+/**
+ * Is this tutor assigned to the programme of the enrolment linked to the learner's enrolment on `programmeId`? (The
+ * third branch of the access rule; false for an unlinked enrolment.)
+ */
+export async function isProgrammeTutorOfLinked(
+  learnerId: string,
+  programmeId: string,
+  tutorId: string,
+  client: DbOrTxClient = db
+) {
+  const rows = (await client.execute(
+    sql`select 1 as ok from appr_enrolment me
+      join appr_enrolment lk on (lk.primary_enrolment_id = me.id or lk.id = me.primary_enrolment_id)
+      join appr_programme_tutor lpt on lpt.programme_id = lk.programme_id
+      where me.learner_id = ${learnerId}::uuid and me.programme_id = ${programmeId}::uuid and lpt.tutor_id = ${tutorId}::uuid
+      limit 1`
+  )) as unknown as unknown[];
+  return rows.length > 0;
 }
 
 /** Programme ids a tutor is assigned to, in this org. */

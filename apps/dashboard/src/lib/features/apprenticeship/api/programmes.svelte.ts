@@ -1,14 +1,31 @@
 import { classroomio } from '$lib/utils/services/api';
 import { BaseApi } from '$lib/utils/services/api/base.svelte';
 import { snackbar } from '$features/ui/snackbar/store';
+import type { ApprProgrammeType } from '@cio/utils/constants/apprenticeship';
 import { call } from './call';
 
 // Gecko Apprenticeships admin client: programme catalogue, structure CRUD, CSV import, org settings + evidence types.
 // Every route is requireAdmin server-side; this client just drives the UI.
 export type ProgrammeStatus = 'ACTIVE' | 'ARCHIVED';
 
+export interface PairedProgrammeRef {
+  id: string;
+  title: string;
+  level: string | null;
+}
+export interface PairCandidate {
+  id: string;
+  title: string;
+  level: string | null;
+}
 export interface ProgrammeRow {
   id: string;
+  type: ApprProgrammeType;
+  levelNumber?: number | null;
+  /** Diploma only: the Standard it is paired with. */
+  pairedProgramme?: PairedProgrammeRef | null;
+  /** Standard only: the diplomas paired to it. */
+  pairedDiplomas?: { id: string; title: string }[];
   title: string;
   description: string | null;
   reference: string | null;
@@ -52,6 +69,10 @@ export interface Qualification {
 }
 export interface ProgrammeTree {
   id: string;
+  type: ApprProgrammeType;
+  levelNumber?: number | null;
+  pairedProgramme?: PairedProgrammeRef | null;
+  pairedDiplomas?: { id: string; title: string }[];
   title: string;
   description: string | null;
   reference: string | null;
@@ -68,6 +89,14 @@ export interface ImportResult {
   criteriaNew: number;
   criteriaUpdated: number;
   errors: { row: number; message: string }[];
+  warnings?: { row: number; message: string }[];
+  units?: {
+    title: string;
+    code: string | null;
+    state: 'NEW' | 'UPDATED' | 'UNCHANGED';
+    criteriaNew: number;
+    criteriaUpdated: number;
+  }[];
 }
 export interface ApprSettings {
   concernGapPct: number;
@@ -119,11 +148,11 @@ class ProgrammesApi extends BaseApi {
 
   // ── Programmes ──
 
-  async load(status: ProgrammeStatus | 'ALL' = 'ALL') {
+  async load(status: ProgrammeStatus | 'ALL' = 'ALL', type: ApprProgrammeType | 'ALL' = 'ALL') {
     const req = ++this.#listReq;
     this.loadError = null;
     return this.execute<typeof classroomio.apprenticeship.programmes.$get>({
-      requestFn: () => base().$get({ query: { status } }),
+      requestFn: () => base().$get({ query: { status, type } }),
       logContext: 'loading programmes',
       onSuccess: (result) => {
         if (req === this.#listReq) this.programmes = result.data as ProgrammeRow[];
@@ -140,6 +169,8 @@ class ProgrammesApi extends BaseApi {
     reference?: string | null;
     awardingBody?: string | null;
     level?: string | null;
+    type?: ApprProgrammeType;
+    pairedProgrammeId?: string | null;
   }) {
     const res = await this.execute<typeof classroomio.apprenticeship.programmes.$post>({
       requestFn: () => base().$post({ json: input }),
@@ -172,6 +203,7 @@ class ProgrammesApi extends BaseApi {
       reference: string | null;
       awardingBody: string | null;
       level: string | null;
+      pairedProgrammeId: string | null;
     }> & {
       status?: ProgrammeStatus;
       reviewIntervalWeeks?: number;
@@ -183,6 +215,11 @@ class ProgrammesApi extends BaseApi {
       onError: this.#fail('Could not save the programme.')
     });
     if (res) {
+      // Pairing changes the derived pairedProgramme object, so re-read rather than patching locally.
+      if ('pairedProgrammeId' in patch) {
+        await this.loadTree(id);
+        return true;
+      }
       if (this.tree?.id === id) this.tree = { ...this.tree, ...patch };
       if (this.programmes) {
         this.programmes = this.programmes.map((p) => (p.id === id ? { ...p, ...patch } : p));
@@ -353,6 +390,23 @@ class ProgrammesApi extends BaseApi {
     });
     if (res && mode === 'apply') await this.loadTree(programmeId);
     return res ? (res.data as ImportResult) : undefined;
+  }
+
+  /** Active standards, fetched without touching the shared list (used by the new-programme dialog). */
+  async loadActiveStandards() {
+    const res = await call<ProgrammeRow[]>(
+      () => base().$get({ query: { status: 'ACTIVE', type: 'STANDARD' } }),
+      'Could not load standards.'
+    );
+    return res.ok ? res.data : [];
+  }
+
+  /** Active standards a diploma can be paired with (same org, same level). */
+  loadPairCandidates(programmeId: string) {
+    return call<PairCandidate[]>(
+      () => classroomio.apprenticeship.programmes[':id']['pair-candidates'].$get({ param: { id: programmeId } }),
+      'Could not load the standards to pair with.'
+    );
   }
 
   // ── Gateway checklist (per programme; null on save resets to the default) ──

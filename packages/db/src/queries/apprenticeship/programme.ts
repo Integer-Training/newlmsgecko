@@ -16,7 +16,11 @@ export async function getApprProgramme(programmeId: string, client: DbOrTxClient
 }
 
 /** Org programmes with structure + learner counts in ONE statement (correlated counts, no N+1). */
-export async function listApprProgrammesWithCounts(organizationId: string, status: 'ACTIVE' | 'ARCHIVED' | 'ALL') {
+export async function listApprProgrammesWithCounts(
+  organizationId: string,
+  status: 'ACTIVE' | 'ARCHIVED' | 'ALL',
+  type: 'DIPLOMA' | 'STANDARD' | 'ALL' = 'ALL'
+) {
   const p = schema.apprProgramme;
   return db
     .select({
@@ -27,6 +31,18 @@ export async function listApprProgrammesWithCounts(organizationId: string, statu
       awardingBody: p.awardingBody,
       level: p.level,
       status: p.status,
+      type: p.type,
+      pairedProgrammeId: p.pairedProgrammeId,
+      // The Standard this diploma is paired to (null for Standards / unpaired diplomas).
+      pairedProgramme: sql<{
+        id: string;
+        title: string;
+        level: string | null;
+      } | null>`(select json_build_object('id', pp.id, 'title', pp.title, 'level', pp.level) from appr_programme pp where pp.id = ${sql.raw('"appr_programme"."paired_programme_id"')})`,
+      // Diplomas pointing at this programme (only ever non-empty for a Standard).
+      pairedDiplomas: sql<
+        { id: string; title: string }[]
+      >`coalesce((select json_agg(json_build_object('id', pd.id, 'title', pd.title) order by pd.title) from appr_programme pd where pd.paired_programme_id = ${sql.raw('"appr_programme"."id"')}), '[]'::json)`,
       createdAt: p.createdAt,
       updatedAt: p.updatedAt,
       qualificationCount: sql<number>`(select count(*) from appr_qualification q where q.programme_id = ${sql.raw('"appr_programme"."id"')})::int`,
@@ -43,9 +59,11 @@ export async function listApprProgrammesWithCounts(organizationId: string, statu
     })
     .from(p)
     .where(
-      status === 'ALL'
-        ? eq(p.organizationId, organizationId)
-        : and(eq(p.organizationId, organizationId), eq(p.status, status))
+      and(
+        eq(p.organizationId, organizationId),
+        status === 'ALL' ? undefined : eq(p.status, status),
+        type === 'ALL' ? undefined : eq(p.type, type)
+      )
     )
     .orderBy(asc(p.title));
 }
@@ -61,6 +79,8 @@ export async function insertApprProgrammeWithQualification(
     reference?: string | null;
     awardingBody?: string | null;
     level?: string | null;
+    type?: 'DIPLOMA' | 'STANDARD';
+    pairedProgrammeId?: string | null;
   }
 ) {
   const [programme] = await tx
@@ -72,7 +92,9 @@ export async function insertApprProgrammeWithQualification(
       description: input.description ?? null,
       reference: input.reference ?? null,
       awardingBody: input.awardingBody ?? null,
-      level: input.level ?? null
+      level: input.level ?? null,
+      type: input.type ?? 'DIPLOMA',
+      pairedProgrammeId: input.pairedProgrammeId ?? null
     })
     .returning();
   const [qualification] = await tx
@@ -100,6 +122,7 @@ export async function updateApprProgramme(
     level: string | null;
     status: string;
     reviewIntervalWeeks: number;
+    pairedProgrammeId: string | null;
     gatewayChecklist: { key: string; label: string; kind: string }[] | null;
   }>,
   client: DbOrTxClient = db
@@ -110,6 +133,40 @@ export async function updateApprProgramme(
     .where(eq(schema.apprProgramme.id, programmeId))
     .returning();
   return row ?? null;
+}
+
+/** Diplomas (any status) whose paired Standard is this programme. */
+export async function listDiplomasPairedTo(standardId: string, client: DbOrTxClient = db) {
+  return client
+    .select({
+      id: schema.apprProgramme.id,
+      title: schema.apprProgramme.title,
+      level: schema.apprProgramme.level,
+      status: schema.apprProgramme.status
+    })
+    .from(schema.apprProgramme)
+    .where(eq(schema.apprProgramme.pairedProgrammeId, standardId))
+    .orderBy(asc(schema.apprProgramme.title));
+}
+
+/** ACTIVE Standards of an org (the service narrows to the diploma's level number). */
+export async function listActiveStandards(organizationId: string, client: DbOrTxClient = db) {
+  return client
+    .select({
+      id: schema.apprProgramme.id,
+      title: schema.apprProgramme.title,
+      level: schema.apprProgramme.level,
+      reference: schema.apprProgramme.reference
+    })
+    .from(schema.apprProgramme)
+    .where(
+      and(
+        eq(schema.apprProgramme.organizationId, organizationId),
+        eq(schema.apprProgramme.type, 'STANDARD'),
+        eq(schema.apprProgramme.status, 'ACTIVE')
+      )
+    )
+    .orderBy(asc(schema.apprProgramme.title));
 }
 
 export async function listApprQualificationIds(programmeId: string, client: DbOrTxClient = db) {

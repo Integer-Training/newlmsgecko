@@ -6,6 +6,9 @@ import type { Actor } from '@cio/db/actor';
 
 vi.mock('@cio/db/queries/apprenticeship', () => ({
   isProgrammeTutor: vi.fn(async () => false),
+  isProgrammeTutorOfLinked: vi.fn(async () => false),
+  listLearnerEnrolments: vi.fn(async () => []),
+  lockLearnerEnrolments: vi.fn(async () => undefined),
   getApprProgramme: vi.fn(),
   getApprEnrolmentByProgrammeLearner: vi.fn(async () => null),
   getApprProgrammeStructure: vi.fn(async () => ({ qualifications: [], units: [{ id: 'u1' }], criteria: [] })),

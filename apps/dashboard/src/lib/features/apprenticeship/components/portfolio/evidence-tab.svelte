@@ -6,6 +6,7 @@
   import { APPR_EVIDENCE_STATUSES, APPR_EVIDENCE_STATUS_LABELS } from '@cio/utils/constants/apprenticeship';
   import { evidenceApi } from '../../api/evidence.svelte';
   import type { PortfolioStore } from '../../stores/portfolio.svelte';
+  import ProgrammeTypeChip from '../shared/programme-type-chip.svelte';
   import EvidenceStatusChip from '../shared/evidence-status-chip.svelte';
   import { fmtDate, fmtMinutes } from '../shared/format';
 
@@ -81,6 +82,7 @@
           <Table.Row>
             <Table.Head>Title</Table.Head>
             <Table.Head>Type</Table.Head>
+            {#if store.pair}<Table.Head>Qualification</Table.Head>{/if}
             <Table.Head>Status</Table.Head>
             <Table.Head class="text-right">Criteria</Table.Head>
             <Table.Head class="text-right">Files</Table.Head>
@@ -107,6 +109,12 @@
                 </button>
               </Table.Cell>
               <Table.Cell>{e.typeLabel ?? e.typeKey}</Table.Cell>
+              {#if store.pair}
+                {@const qt = store.portfolioFor(e.qualEnrolmentId)?.programme.type}
+                <Table.Cell
+                  >{#if qt}<ProgrammeTypeChip type={qt} />{:else}—{/if}</Table.Cell
+                >
+              {/if}
               <Table.Cell><EvidenceStatusChip status={e.status} /></Table.Cell>
               <Table.Cell class="text-right">{e.criteriaCount}</Table.Cell>
               <Table.Cell class="text-right">{e.fileCount}</Table.Cell>

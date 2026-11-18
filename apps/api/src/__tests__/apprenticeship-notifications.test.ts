@@ -10,6 +10,7 @@ vi.mock('@cio/db/queries/allocation', () => ({
 }));
 vi.mock('@cio/db/queries/apprenticeship', () => ({
   isProgrammeTutor: vi.fn(async () => false),
+  isProgrammeTutorOfLinked: vi.fn(async () => false),
   listOrgAdminIds: vi.fn(async () => []),
   releaseGatewayReady: vi.fn(async () => undefined)
 }));

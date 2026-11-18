@@ -6,10 +6,11 @@ import {
   deleteUploadRows,
   getEnrolmentLearnerIds,
   insertFirstReviewIfNone,
+  listCarrierEnrolmentsNeedingFirstReview,
+  listComponentEnrolmentIds,
   listGatewayReadyCandidates,
   listOrgAdminIds,
   releaseGatewayReady,
-  listEnrolmentsNeedingFirstReview,
   listReferencedUploadKeys,
   listUploadsForCleanup,
   markUploadsAttached
@@ -195,9 +196,12 @@ export async function ensureFirstReview(
   });
 }
 
-/** Daily back-fill: first review for every enrolment that has a start date but no review yet. */
+/**
+ * Daily back-fill: first review for every enrolment that has a start date but no review yet. Linked COMPONENTS are
+ * skipped (reviews are learner-level and live on the carrier) — filtered in the query, so they cannot fill the batch.
+ */
 export async function runApprFirstReviewBackfill(opts: { today?: string; batchSize?: number } = {}) {
-  const rows = await listEnrolmentsNeedingFirstReview(opts.batchSize ?? 500);
+  const rows = await listCarrierEnrolmentsNeedingFirstReview(opts.batchSize ?? 500);
   let created = 0;
   for (const r of rows) {
     if (await ensureFirstReview(r, r.reviewIntervalWeeks, { today: opts.today })) created += 1;
@@ -223,7 +227,10 @@ export async function runApprGatewayReadyScan(opts: { batchSize?: number } = {})
     if (candidates.length === 0) break;
     afterId = candidates[candidates.length - 1].id;
     candidateCount += candidates.length;
-    const result = await scanGatewayPage(candidates);
+    // Gateway / EPA is learner-level and lives on the carrier: a linked component is never flagged (the keyset paging
+    // above walks the whole set, so dropping rows here cannot starve anyone).
+    const components = await listComponentEnrolmentIds(candidates.map((c) => c.id));
+    const result = await scanGatewayPage(candidates.filter((c) => !components.has(c.id)));
     flagged += result.flagged;
     notifications += result.notifications;
     if (candidates.length < pageSize) break;

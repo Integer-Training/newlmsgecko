@@ -25,6 +25,7 @@ import {
   deleteUnit,
   getProgrammeTree,
   importStructureCsv,
+  listPairCandidates,
   listProgrammes,
   reorderChildren,
   updateCriterion,
@@ -45,7 +46,11 @@ import { zValidator } from '@hono/zod-validator';
 export const programmesRouter = new Hono()
   .get('/', requireStaff, zValidator('query', ZProgrammeListQuery), async (c) => {
     try {
-      const data = await listProgrammes(c.get('actor') as Actor, c.req.valid('query').status);
+      const data = await listProgrammes(
+        c.get('actor') as Actor,
+        c.req.valid('query').status,
+        c.req.valid('query').type
+      );
       return c.json({ success: true, data }, 200);
     } catch (error) {
       return handleError(c, error, 'Failed to list programmes');
@@ -57,6 +62,15 @@ export const programmesRouter = new Hono()
       return c.json({ success: true, data }, 201);
     } catch (error) {
       return handleError(c, error, 'Failed to create programme');
+    }
+  })
+  // Active Standards a diploma can be paired to (admin).
+  .get('/:id/pair-candidates', requireAdmin, zValidator('param', ZProgrammeIdParam), async (c) => {
+    try {
+      const data = await listPairCandidates(c.get('actor') as Actor, c.req.valid('param').id);
+      return c.json({ success: true, data }, 200);
+    } catch (error) {
+      return handleError(c, error, 'Failed to load pair candidates');
     }
   })
   // Read-only structure: tutors need it for the criteria picker when marking from To mark (org-scoped in the service).

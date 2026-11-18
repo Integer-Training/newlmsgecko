@@ -3,6 +3,8 @@ import { classroomio } from '$lib/utils/services/api';
 import { BaseApi } from '$lib/utils/services/api/base.svelte';
 import { snackbar } from '$features/ui/snackbar/store';
 import { call, type CallResult } from './call';
+import type { ApprProgrammeType } from '@cio/utils/constants/apprenticeship';
+import type { ApprenticeshipCreateResult, EnrolmentLinked, LearnerCheckResult, OverviewRollup } from './overview.types';
 import type { GatewayView, GlhSummary } from './gateway.svelte';
 
 // Gecko Apprenticeships — admin client for the learners table, enrolment and the portfolio payload. Shapes mirror
@@ -47,6 +49,10 @@ export interface EnrolmentRow {
   stage?: ApprStage;
   stageLabel?: string;
   gatewayReady?: boolean;
+  /** Deploy 2: carrier programme type, the linked (paired) enrolment and the combined progress. */
+  programmeType?: ApprProgrammeType;
+  linked?: EnrolmentLinked | null;
+  overall?: OverviewRollup;
 }
 
 export interface EnrolmentList {
@@ -59,6 +65,7 @@ export interface EnrolmentList {
 
 export interface EnrolmentFilters {
   programmeId?: string;
+  type?: ApprProgrammeType;
   tutorId?: string;
   status?: ApprProgressStatus;
   search?: string;
@@ -172,6 +179,19 @@ export interface ProgrammeOption {
   id: string;
   title: string;
   status?: string;
+  type?: ApprProgrammeType;
+  level?: string | null;
+  levelNumber?: number | null;
+  tutorNames?: string[];
+  pairedProgramme?: { id: string; title: string; level: string | null } | null;
+}
+
+export interface ApprenticeshipCreateBody {
+  learner: { learnerId: string } | { firstName: string; lastName: string; email: string };
+  tutorId: string;
+  contractedHoursWeek?: number | null;
+  otjTargetMinutesOverride?: number | null;
+  enrolments: { programmeId: string; startDate: string; plannedEndDate: string }[];
 }
 export interface TutorOption {
   id: string;
@@ -217,6 +237,7 @@ class EnrolmentsApi extends BaseApi {
     const reqId = ++this.#reqId;
     const query: Record<string, string> = { page: String(filters.page), pageSize: String(filters.pageSize) };
     if (filters.programmeId) query.programmeId = filters.programmeId;
+    if (filters.type) query.type = filters.type;
     if (filters.tutorId) query.tutorId = filters.tutorId;
     if (filters.status) query.status = filters.status;
     if (filters.search?.trim()) query.search = filters.search.trim();
@@ -262,6 +283,17 @@ class EnrolmentsApi extends BaseApi {
 
   create(body: EnrolmentCreateBody): Promise<CallResult<{ id: string; temporaryPassword?: string }>> {
     return call(() => classroomio.apprenticeship.enrolments.$post({ json: body }));
+  }
+
+  createApprenticeship(body: ApprenticeshipCreateBody): Promise<CallResult<ApprenticeshipCreateResult>> {
+    return call(() => classroomio.apprenticeship.enrolments.apprenticeship.$post({ json: body }));
+  }
+
+  learnerCheck(q: { learnerId?: string; email?: string }): Promise<CallResult<LearnerCheckResult>> {
+    const query: Record<string, string> = {};
+    if (q.learnerId) query.learnerId = q.learnerId;
+    if (q.email) query.email = q.email;
+    return call(() => classroomio.apprenticeship.enrolments['learner-check'].$get({ query }));
   }
 
   getPortfolio(id: string): Promise<CallResult<Portfolio>> {

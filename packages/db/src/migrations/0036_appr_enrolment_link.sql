@@ -1,0 +1,3 @@
+ALTER TABLE "appr_enrolment" ADD COLUMN "primary_enrolment_id" uuid;--> statement-breakpoint
+ALTER TABLE "appr_enrolment" ADD CONSTRAINT "appr_enrolment_primary_enrolment_id_fkey" FOREIGN KEY ("primary_enrolment_id") REFERENCES "public"."appr_enrolment"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX "appr_enrolment_primary_unique" ON "appr_enrolment" USING btree ("primary_enrolment_id") WHERE "appr_enrolment"."primary_enrolment_id" IS NOT NULL;

@@ -18,12 +18,20 @@
     type ProgrammeRow,
     type ProgrammeStatus
   } from '$features/apprenticeship/api/programmes.svelte';
+  import ProgrammeTypeChip from '$features/apprenticeship/components/shared/programme-type-chip.svelte';
+  import type { ApprProgrammeType } from '@cio/utils/constants/apprenticeship';
   import NewProgrammeDialog from '$features/apprenticeship/components/programme/new-programme-dialog.svelte';
 
   // Admin programme catalogue (one programme per course). Loads every programme once; status / level / awarding body
   // filters and search are client-side.
   const ANY = '__any__';
   let search = $state('');
+  let typeFilter = $state<ApprProgrammeType | 'ALL'>('ALL');
+  const TYPE_SEGMENTS: { value: ApprProgrammeType | 'ALL'; label: string }[] = [
+    { value: 'ALL', label: 'All' },
+    { value: 'DIPLOMA', label: 'Diplomas' },
+    { value: 'STANDARD', label: 'Standards' }
+  ];
   let statusFilter = $state<ProgrammeStatus>('ACTIVE');
   let levelFilter = $state(ANY);
   let bodyFilter = $state(ANY);
@@ -56,10 +64,13 @@
     const q = search.trim().toLowerCase();
     return (rows ?? []).filter((p) => {
       if (p.status !== statusFilter) return false;
+      if (typeFilter !== 'ALL' && p.type !== typeFilter) return false;
       if (levelFilter !== ANY && norm(p.level) !== levelFilter) return false;
       if (bodyFilter !== ANY && norm(p.awardingBody) !== bodyFilter) return false;
       if (!q) return true;
-      return [p.title, p.reference ?? '', p.level ?? '', p.awardingBody ?? ''].some((v) => v.toLowerCase().includes(q));
+      return [p.title, p.reference ?? '', p.level ?? '', p.awardingBody ?? '', p.pairedProgramme?.title ?? ''].some(
+        (v) => v.toLowerCase().includes(q)
+      );
     });
   });
 
@@ -90,6 +101,23 @@
   <Page.Body>
     {#snippet child()}
       <div class="mb-4 flex flex-wrap items-end gap-3">
+        <div class="flex flex-col gap-1">
+          <span class="text-xs text-(--muted-foreground)" id="type-seg-label">Type</span>
+          <div class="inline-flex rounded-md border p-0.5" role="group" aria-labelledby="type-seg-label">
+            {#each TYPE_SEGMENTS as seg (seg.value)}
+              <button
+                type="button"
+                aria-pressed={typeFilter === seg.value}
+                class="rounded px-3 py-1.5 text-sm font-medium {typeFilter === seg.value
+                  ? 'bg-(--primary) text-(--primary-foreground)'
+                  : 'text-(--muted-foreground) hover:bg-(--muted)'}"
+                onclick={() => (typeFilter = seg.value)}
+              >
+                {seg.label}
+              </button>
+            {/each}
+          </div>
+        </div>
         <div class="flex flex-col gap-1">
           <span class="text-xs text-(--muted-foreground)">Status</span>
           <Select.Root type="single" bind:value={statusFilter}>
@@ -163,6 +191,8 @@
             <Table.Header>
               <Table.Row>
                 <Table.Head>Programme</Table.Head>
+                <Table.Head>Type</Table.Head>
+                <Table.Head>Paired with</Table.Head>
                 <Table.Head>Reference</Table.Head>
                 <Table.Head>Awarding body</Table.Head>
                 <Table.Head>Level</Table.Head>
@@ -179,6 +209,24 @@
                 <Table.Row>
                   <Table.Cell class="min-w-56 font-medium break-words whitespace-normal!">
                     <a href="{base}/{p.id}" class="hover:underline">{p.title}</a>
+                  </Table.Cell>
+                  <Table.Cell><ProgrammeTypeChip type={p.type} /></Table.Cell>
+                  <Table.Cell class="break-words whitespace-normal!">
+                    {#if p.type === 'DIPLOMA'}
+                      {#if p.pairedProgramme}
+                        <a href="{base}/{p.pairedProgramme.id}" class="hover:underline">{p.pairedProgramme.title}</a>
+                      {:else}
+                        <span class="text-amber-700 dark:text-amber-300">Not paired</span>
+                      {/if}
+                    {:else if (p.pairedDiplomas ?? []).length > 0}
+                      <span title={(p.pairedDiplomas ?? []).map((d) => d.title).join(', ')}
+                        >{p.pairedDiplomas?.length} apprenticeship {p.pairedDiplomas?.length === 1
+                          ? 'diploma'
+                          : 'diplomas'}</span
+                      >
+                    {:else}
+                      —
+                    {/if}
                   </Table.Cell>
                   <Table.Cell>{p.reference ?? '—'}</Table.Cell>
                   <Table.Cell class="break-words whitespace-normal!">{p.awardingBody ?? '—'}</Table.Cell>

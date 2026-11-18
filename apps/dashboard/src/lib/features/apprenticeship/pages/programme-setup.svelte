@@ -11,6 +11,8 @@
   import ProgrammeHeader from '$features/apprenticeship/components/programme/programme-header.svelte';
   import QualificationSection from '$features/apprenticeship/components/programme/qualification-section.svelte';
   import ImportDialog from '$features/apprenticeship/components/programme/import-dialog.svelte';
+  import PairingCard from '$features/apprenticeship/components/programme/pairing-card.svelte';
+  import ProgrammeTypeChip from '$features/apprenticeship/components/shared/programme-type-chip.svelte';
   import GatewayChecklist from '$features/apprenticeship/components/programme/gateway-checklist.svelte';
 
   // Programme setup: details + units -> criteria editor + CSV import. One programme = one course (qualification);
@@ -38,7 +40,15 @@
   <Page.Header>
     <Page.HeaderContent>
       <Page.Title>{tree?.title ?? 'Programme setup'}</Page.Title>
-      <Page.Subtitle>Set up units and criteria · {$currentOrg.name}</Page.Subtitle>
+      <Page.Subtitle>
+        <span class="inline-flex flex-wrap items-center gap-2">
+          {#if tree}
+            <ProgrammeTypeChip type={tree.type} size="md" />
+            {#if tree.level}<span>{tree.levelNumber ? `Level ${tree.levelNumber}` : tree.level}</span> ·{/if}
+          {/if}
+          Set up units and criteria · {$currentOrg.name}
+        </span>
+      </Page.Subtitle>
     </Page.HeaderContent>
     <Page.Action>
       <div class="flex items-center gap-2">
@@ -64,6 +74,9 @@
       {:else}
         <div class="flex max-w-7xl flex-col gap-4">
           <ProgrammeHeader programme={tree} />
+          {#key tree.id}
+            <PairingCard programme={tree} />
+          {/key}
           <GatewayChecklist programmeId={tree.id} />
 
           {#each tree.qualifications as qualification, i (qualification.id)}
@@ -82,5 +95,5 @@
 </Page.Root>
 
 {#if tree}
-  <ImportDialog bind:open={showImport} programmeId={tree.id} />
+  <ImportDialog bind:open={showImport} programmeId={tree.id} type={tree.type} />
 {/if}

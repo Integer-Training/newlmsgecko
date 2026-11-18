@@ -4516,6 +4516,10 @@ export const apprProgramme = pgTable(
     reviewIntervalWeeks: integer('review_interval_weeks').default(12).notNull(),
     // Gateway checklist: [{key, label, kind AUTO_UNITS | AUTO_OTJ | MANUAL}]. Null = APPR_DEFAULT_GATEWAY_CHECKLIST.
     gatewayChecklist: jsonb('gateway_checklist').$type<{ key: string; label: string; kind: string }[]>(),
+    // DIPLOMA | STANDARD (APPR_PROGRAMME_TYPES).
+    type: varchar().default('DIPLOMA').notNull(),
+    // Stored on the diploma; points at its Standard (same org/level, ACTIVE). Several diplomas may share one Standard.
+    pairedProgrammeId: uuid('paired_programme_id'),
     createdBy: uuid('created_by'),
     createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull()
@@ -4531,6 +4535,12 @@ export const apprProgramme = pgTable(
       foreignColumns: [profile.id],
       name: 'appr_programme_created_by_fkey'
     }).onDelete('set null'),
+    foreignKey({
+      columns: [table.pairedProgrammeId],
+      foreignColumns: [table.id],
+      name: 'appr_programme_paired_programme_id_fkey'
+    }).onDelete('set null'),
+    index('idx_appr_programme_paired').on(table.pairedProgrammeId),
     index('idx_appr_programme_org').on(table.organizationId)
   ]
 );
@@ -4627,6 +4637,8 @@ export const apprEnrolment = pgTable(
     achievedAt: timestamp('achieved_at', { withTimezone: true, mode: 'string' }),
     contractedHoursWeek: doublePrecision('contracted_hours_week'),
     otjTargetMinutesOverride: integer('otj_target_minutes_override'),
+    // Set on the COMPONENT of a linked Diploma/Standard pair; points at the carrier. NULL = standalone or carrier.
+    primaryEnrolmentId: uuid('primary_enrolment_id'),
     // ── gateway / EPA (round 2). gateway_items = manual checklist ticks {key: {done, by, at, note}}; auto items are
     // computed on read. gateway_passed_* locks the checklist; epa_result + date set achieved_at. ──
     gatewayItems: jsonb('gateway_items')
@@ -4672,7 +4684,15 @@ export const apprEnrolment = pgTable(
       foreignColumns: [profile.id],
       name: 'appr_enrolment_created_by_fkey'
     }).onDelete('set null'),
+    foreignKey({
+      columns: [table.primaryEnrolmentId],
+      foreignColumns: [table.id],
+      name: 'appr_enrolment_primary_enrolment_id_fkey'
+    }).onDelete('set null'),
     unique('appr_enrolment_programme_learner_unique').on(table.programmeId, table.learnerId),
+    uniqueIndex('appr_enrolment_primary_unique')
+      .on(table.primaryEnrolmentId)
+      .where(sql`${table.primaryEnrolmentId} IS NOT NULL`),
     index('idx_appr_enrolment_org').on(table.organizationId),
     index('idx_appr_enrolment_learner').on(table.learnerId)
   ]

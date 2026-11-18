@@ -3,6 +3,7 @@
   import { Button } from '@cio/ui/base/button';
   import { Input } from '@cio/ui/base/input';
   import { Textarea } from '@cio/ui/base/textarea';
+  import ProgrammeTypeChip from '$features/apprenticeship/components/shared/programme-type-chip.svelte';
   import ArchiveIcon from '@lucide/svelte/icons/archive';
   import ArchiveRestoreIcon from '@lucide/svelte/icons/archive-restore';
   import { snackbar } from '$features/ui/snackbar/store';
@@ -91,6 +92,7 @@
   <div class="flex flex-wrap items-center justify-between gap-2">
     <div class="flex items-center gap-2">
       <h2 class="text-lg font-semibold tracking-tight">Programme details</h2>
+      <ProgrammeTypeChip type={programme.type} />
       <Badge variant={programme.status === 'ACTIVE' ? 'success' : 'secondary'}>
         {programme.status === 'ACTIVE' ? 'Active' : 'Archived'}
       </Badge>

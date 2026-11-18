@@ -14,6 +14,8 @@
     myApprenticeshipApi.load(true);
   });
 
+  const qualHref = (q: string) => `/lms/apprenticeship/q/${q}`;
+  const unitHref = (q: string, u: string) => `/lms/apprenticeship/q/${q}/units/${u}`;
   const list = $derived(myApprenticeshipApi.enrolments);
 </script>
 
@@ -33,7 +35,7 @@
   />
 {:else if list.length === 1}
   {#key list[0].id}
-    <Portfolio enrolmentId={list[0].id} showBack={false} />
+    <Portfolio enrolmentId={list[0].id} showBack={false} {qualHref} {unitHref} />
   {/key}
 {:else}
   <Page.Root class="w-full">

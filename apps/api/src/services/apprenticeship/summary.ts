@@ -1,6 +1,6 @@
 import { AppError, ErrorCodes } from '@api/utils/errors';
 import { buildGatewayView, resolveChecklist } from '@api/services/apprenticeship/gateway-core';
-import { computeRowProgress } from '@api/services/apprenticeship/enrolment';
+import { computeRowProgress, overallRowStatus } from '@api/services/apprenticeship/enrolment';
 import { ensureOnboardingTypes } from '@api/services/apprenticeship/onboarding';
 import { requireAuthed } from '@api/services/apprenticeship/access';
 import { todayIso } from '@api/services/apprenticeship/progress';
@@ -79,7 +79,8 @@ export async function getSummary(actor: Actor, query: SummaryQueryInput, now: Da
 
   for (const r of rows) {
     const p = computeRowProgress(r, settings, today);
-    byStatus[p.status] += 1;
+    // Same rule as the list's status chips / counts: a linked pair counts once, at its rolled-up (worst-half) status.
+    byStatus[overallRowStatus(r, p.status, settings, today)] += 1;
     if (p.status !== 'COMPLETE') otjByStatus[p.otjStatus as OtjStatus] += 1;
     minutesDone += r.otjMinutes;
     minutesTarget += p.otjTargetMinutes ?? 0;

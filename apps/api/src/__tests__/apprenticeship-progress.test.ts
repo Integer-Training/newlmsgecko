@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   averagePct,
+  apprenticeshipRollup,
+  otjCompletionPct,
   computeEnrolmentProgress,
   criteriaActualPct,
   criterionMet,
@@ -404,5 +406,54 @@ describe('sortUnitsBySchedule', () => {
   it('compareUnitsBySchedule orders dated before undated', () => {
     expect(compareUnitsBySchedule(u('a', '2026-01-01', null), u('b', null, null))).toBeLessThan(0);
     expect(compareUnitsBySchedule(u('a', null, null), u('b', null, null))).toBe(0);
+  });
+});
+
+describe('apprenticeshipRollup', () => {
+  type St = 'CONCERN' | 'BEHIND' | 'NOT_SET' | 'ON_TARGET' | 'COMPLETE';
+  const worst = (...st: St[]) => apprenticeshipRollup(st.map((status) => ({ actualPct: 10, status }))).status;
+
+  it('averages the parts and takes the worst status', () => {
+    expect(
+      apprenticeshipRollup([
+        { actualPct: 80, status: 'ON_TARGET' },
+        { actualPct: 41, status: 'BEHIND' }
+      ])
+    ).toEqual({ actualPct: 60, status: 'BEHIND' });
+  });
+  it('ranks CONCERN > BEHIND > NOT_SET > ON_TARGET > COMPLETE', () => {
+    expect(worst('COMPLETE', 'ON_TARGET')).toBe('ON_TARGET');
+    expect(worst('ON_TARGET', 'NOT_SET')).toBe('NOT_SET');
+    expect(worst('NOT_SET', 'BEHIND')).toBe('BEHIND');
+    expect(worst('BEHIND', 'CONCERN')).toBe('CONCERN');
+  });
+  it('is COMPLETE only when every part is', () => {
+    const done = { actualPct: 100, status: 'COMPLETE' as const };
+    expect(apprenticeshipRollup([done, done])).toEqual({ actualPct: 100, status: 'COMPLETE' });
+    expect(apprenticeshipRollup([done, { actualPct: 50, status: 'ON_TARGET' }]).status).toBe('ON_TARGET');
+  });
+  it('handles a single part, null percentages and no parts', () => {
+    expect(apprenticeshipRollup([{ actualPct: 33, status: 'ON_TARGET' }])).toEqual({
+      actualPct: 33,
+      status: 'ON_TARGET'
+    });
+    expect(apprenticeshipRollup([{ actualPct: null, status: 'NOT_SET' }])).toEqual({
+      actualPct: null,
+      status: 'NOT_SET'
+    });
+    expect(apprenticeshipRollup([])).toEqual({ actualPct: null, status: 'NOT_SET' });
+  });
+});
+
+describe('otjCompletionPct', () => {
+  it('floors and caps at 100', () => {
+    expect(otjCompletionPct(50, 100)).toBe(50);
+    expect(otjCompletionPct(199, 300)).toBe(66);
+    expect(otjCompletionPct(500, 100)).toBe(100);
+    expect(otjCompletionPct(0, 100)).toBe(0);
+  });
+  it('is null when there is no target', () => {
+    expect(otjCompletionPct(10, null)).toBeNull();
+    expect(otjCompletionPct(10, 0)).toBeNull();
   });
 });

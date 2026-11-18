@@ -246,6 +246,20 @@
       "when": 1794917500707,
       "tag": "0034_appr_task_due_manual",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1794999025276,
+      "tag": "0035_appr_programme_type_pair",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1795001488706,
+      "tag": "0036_appr_enrolment_link",
+      "breakpoints": true
     }
   ]
 }

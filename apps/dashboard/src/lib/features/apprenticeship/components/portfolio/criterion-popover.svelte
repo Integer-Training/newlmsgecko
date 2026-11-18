@@ -1,28 +1,44 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  import * as Popover from '@cio/ui/base/popover';
+  import * as Dialog from '@cio/ui/base/dialog';
+  import * as Tabs from '@cio/ui/base/tabs';
+  import { Input } from '@cio/ui/base/input';
+  import { Button } from '@cio/ui/base/button';
   import { Spinner } from '@cio/ui/base/spinner';
   import { evidenceApi, type CriterionEvidenceItem } from '../../api/evidence.svelte';
   import type { PortfolioStore } from '../../stores/portfolio.svelte';
   import EvidenceStatusChip from '../shared/evidence-status-chip.svelte';
+  import TaskStatusChip from '../shared/task-status-chip.svelte';
   import { fmtDate } from '../shared/format';
 
-  // "List evidence" popover for one criterion: every piece mapped to it, each opening the evidence sheet. Used by the
-  // criteria rows (evidence-count chip) and by the criteria-map cells. Re-fetches when it opens and after any change.
+  // "List evidence" for one criterion, as a dialog: the criterion code and text, two tiles (Evidence, Tasks) and two
+  // tabs — Evidence (every piece mapped to it, each opening the evidence sheet) and Tasks (this learner's tasks that
+  // target it). Used by the criteria rows, the unit page and the criteria-map cells. Re-fetches when it opens and
+  // after any change.
 
   interface Props {
     store: PortfolioStore;
     criterionId: string;
     label: string;
+    /** Criterion code and text shown in the dialog header (falls back to `label`). */
+    code?: string;
+    text?: string;
+    /** The enrolment that owns this criterion's programme (default: the store's). */
+    enrolmentId?: string;
     triggerClass?: string;
     children: Snippet;
   }
-  let { store, criterionId, label, triggerClass = '', children }: Props = $props();
+  let { store, criterionId, label, code, text, enrolmentId, triggerClass = '', children }: Props = $props();
+
+  const PAGE_SIZE = 5;
 
   let open = $state(false);
   let items = $state<CriterionEvidenceItem[]>([]);
   let loading = $state(false);
   let error = $state<string | null>(null);
+  let tab = $state('evidence');
+  let search = $state('');
+  let pageNo = $state(1);
 
   $effect(() => {
     // Track open + the store version so the list stays in sync with the rest of the page.
@@ -30,7 +46,7 @@
     if (!open) return;
     let cancelled = false;
     loading = items.length === 0;
-    evidenceApi.forCriterion(criterionId, store.enrolmentId).then((res) => {
+    evidenceApi.forCriterion(criterionId, enrolmentId ?? store.enrolmentId).then((res) => {
       if (cancelled) return;
       loading = false;
       if (res.ok) {
@@ -45,45 +61,139 @@
     };
   });
 
+  $effect(() => {
+    if (open) {
+      tab = 'evidence';
+      search = '';
+      pageNo = 1;
+    }
+  });
+
+  const tasks = $derived(store.tasks.filter((t) => t.criteria.some((c) => c.id === criterionId)));
+  const filtered = $derived(
+    items.filter((i) => {
+      const q = search.trim().toLowerCase();
+      return !q || i.title.toLowerCase().includes(q) || i.snippet.toLowerCase().includes(q);
+    })
+  );
+  const pages = $derived(Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)));
+  const visible = $derived(filtered.slice((pageNo - 1) * PAGE_SIZE, pageNo * PAGE_SIZE));
+
   function pick(id: string) {
     open = false;
     store.openEvidence(id);
   }
 </script>
 
-<Popover.Root bind:open>
-  <Popover.Trigger class={triggerClass} aria-label={label}>
-    {@render children()}
-  </Popover.Trigger>
-  <Popover.Content class="ui:p-2 w-80!" align="start">
-    <p class="px-2 pb-1 text-xs font-medium text-(--muted-foreground)">{label}</p>
-    {#if loading}
-      <div class="flex justify-center py-4" role="status" aria-label="Loading evidence"><Spinner /></div>
-    {:else if error}
-      <p role="alert" class="px-2 py-2 text-sm text-rose-600">{error}</p>
-    {:else if items.length === 0}
-      <p class="px-2 py-2 text-sm text-(--muted-foreground)">No evidence mapped to this criterion yet.</p>
-    {:else}
-      <ul class="max-h-64 overflow-y-auto">
-        {#each items as item (item.id)}
-          <li>
-            <button
-              type="button"
-              class="w-full rounded-md px-2 py-1.5 text-left hover:bg-(--muted)"
-              onclick={() => pick(item.id)}
-            >
-              <span class="flex items-center justify-between gap-2">
-                <span class="truncate text-sm font-medium">{item.title}</span>
-                <EvidenceStatusChip status={item.status} />
+<button type="button" class={triggerClass} aria-label={label} aria-haspopup="dialog" onclick={() => (open = true)}>
+  {@render children()}
+</button>
+
+<Dialog.Root bind:open>
+  <Dialog.Content class="sm:max-w-2xl">
+    <Dialog.Header>
+      <Dialog.Title>{code ?? label}</Dialog.Title>
+      <Dialog.Description>{text ?? ''}</Dialog.Description>
+    </Dialog.Header>
+
+    <dl class="grid grid-cols-2 gap-3">
+      <div class="rounded-lg border p-3">
+        <dt class="text-xs text-(--muted-foreground)">Evidence</dt>
+        <dd class="text-xl font-semibold">{items.length}</dd>
+      </div>
+      <div class="rounded-lg border p-3">
+        <dt class="text-xs text-(--muted-foreground)">Tasks</dt>
+        <dd class="text-xl font-semibold">{tasks.length}</dd>
+      </div>
+    </dl>
+
+    <Tabs.Root bind:value={tab}>
+      <Tabs.List>
+        <Tabs.Trigger value="evidence">Evidence</Tabs.Trigger>
+        <Tabs.Trigger value="tasks">Tasks</Tabs.Trigger>
+      </Tabs.List>
+
+      <Tabs.Content value="evidence" class="mt-3 space-y-2">
+        {#if loading}
+          <div class="flex justify-center py-6" role="status" aria-label="Loading evidence"><Spinner /></div>
+        {:else if error}
+          <p role="alert" class="text-sm text-rose-600">{error}</p>
+        {:else if items.length === 0}
+          <p class="py-4 text-sm text-(--muted-foreground)">No evidence mapped to this criterion yet.</p>
+        {:else}
+          <Input
+            type="search"
+            placeholder="Search evidence"
+            aria-label="Search evidence"
+            bind:value={search}
+            oninput={() => (pageNo = 1)}
+          />
+          <div class="overflow-x-auto rounded-lg border">
+            <table class="w-full text-sm">
+              <thead class="bg-(--muted)/50 text-left text-xs text-(--muted-foreground)">
+                <tr>
+                  <th class="px-3 py-2 font-medium">Title</th>
+                  <th class="px-3 py-2 font-medium">Details</th>
+                  <th class="px-3 py-2 font-medium">Status</th>
+                  <th class="px-3 py-2 font-medium">Files</th>
+                  <th class="px-3 py-2"><span class="sr-only">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody class="divide-y">
+                {#each visible as item (item.id)}
+                  <tr>
+                    <td class="px-3 py-2 font-medium">
+                      {item.title}
+                      <span class="block text-xs font-normal text-(--muted-foreground)">{fmtDate(item.createdAt)}</span>
+                    </td>
+                    <td class="max-w-56 px-3 py-2 text-(--muted-foreground)">
+                      <span class="line-clamp-2">{item.snippet || 'No details'}</span>
+                    </td>
+                    <td class="px-3 py-2"><EvidenceStatusChip status={item.status} /></td>
+                    <td class="px-3 py-2">{item.fileCount}</td>
+                    <td class="px-3 py-2 text-right">
+                      <Button variant="outline" size="sm" onclick={() => pick(item.id)}>View</Button>
+                    </td>
+                  </tr>
+                {:else}
+                  <tr><td colspan="5" class="px-3 py-4 text-center text-(--muted-foreground)">No matches.</td></tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+          {#if pages > 1}
+            <div class="flex items-center justify-between text-sm">
+              <span class="text-(--muted-foreground)">Page {pageNo} of {pages}</span>
+              <span class="flex gap-2">
+                <Button variant="outline" size="sm" disabled={pageNo <= 1} onclick={() => (pageNo -= 1)}
+                  >Previous</Button
+                >
+                <Button variant="outline" size="sm" disabled={pageNo >= pages} onclick={() => (pageNo += 1)}
+                  >Next</Button
+                >
               </span>
-              <span class="line-clamp-2 text-xs text-(--muted-foreground)">{item.snippet || 'No details'}</span>
-              <span class="text-xs text-(--muted-foreground)">
-                {fmtDate(item.createdAt)} · {item.fileCount} file{item.fileCount === 1 ? '' : 's'}
-              </span>
-            </button>
-          </li>
-        {/each}
-      </ul>
-    {/if}
-  </Popover.Content>
-</Popover.Root>
+            </div>
+          {/if}
+        {/if}
+      </Tabs.Content>
+
+      <Tabs.Content value="tasks" class="mt-3">
+        {#if tasks.length === 0}
+          <p class="py-4 text-sm text-(--muted-foreground)">No tasks target this criterion.</p>
+        {:else}
+          <ul class="divide-y rounded-lg border">
+            {#each tasks as t (t.id)}
+              <li class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
+                <span class="min-w-0">
+                  <span class="font-medium">{t.title}</span>
+                  <span class="block text-xs text-(--muted-foreground)">Due {fmtDate(t.dueDate)}</span>
+                </span>
+                <TaskStatusChip status={t.status} overdue={t.overdue} />
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      </Tabs.Content>
+    </Tabs.Root>
+  </Dialog.Content>
+</Dialog.Root>

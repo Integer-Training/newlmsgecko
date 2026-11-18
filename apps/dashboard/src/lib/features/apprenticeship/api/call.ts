@@ -4,10 +4,24 @@
 
 export type CallResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
+// Some failures arrive with the whole JSON body as the message ('{"success":false,"error":"…"}'): show only the text.
+function unwrapJson(text: string): string {
+  const t = text.trim();
+  if (!t.startsWith('{')) return text;
+  try {
+    const inner = JSON.parse(t) as { error?: unknown; message?: unknown };
+    if (typeof inner.error === 'string') return inner.error;
+    if (typeof inner.message === 'string') return inner.message;
+  } catch {
+    // not JSON after all
+  }
+  return text;
+}
+
 function errorText(body: unknown, fallback: string): string {
   if (!body || typeof body !== 'object') return fallback;
   const b = body as { error?: unknown; message?: unknown };
-  if (typeof b.error === 'string') return b.error;
+  if (typeof b.error === 'string') return unwrapJson(b.error);
   if (typeof b.message === 'string') return b.message;
   // zValidator failure: { success: false, error: { issues: [{ message }] } }
   const issues = (b.error as { issues?: { message?: string }[] } | undefined)?.issues;
@@ -27,6 +41,6 @@ export async function call<T>(fn: () => Promise<Response>, fallback = 'Something
     if (body?.success === true) return { ok: true, data: body.data as T };
     return { ok: false, error: errorText(body, fallback) };
   } catch (error) {
-    return { ok: false, error: error instanceof Error && error.message ? error.message : fallback };
+    return { ok: false, error: error instanceof Error && error.message ? unwrapJson(error.message) : fallback };
   }
 }

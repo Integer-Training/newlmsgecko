@@ -259,3 +259,33 @@ export const APPR_IQA_TARGET_PCT_DEFAULT = 10;
 /** Most samples one "Suggest sample" run may create. */
 export const APPR_IQA_SUGGEST_MAX = 100;
 export const APPR_IQA_FEEDBACK_MAX = 5000;
+
+// ── Apprenticeship Standard (programme types, pairing, OTJ log) ──
+
+export const APPR_PROGRAMME_TYPES = ['DIPLOMA', 'STANDARD'] as const;
+export type ApprProgrammeType = (typeof APPR_PROGRAMME_TYPES)[number];
+export const APPR_PROGRAMME_TYPE_LABELS: Record<ApprProgrammeType, string> = {
+  DIPLOMA: 'Apprenticeship diploma',
+  STANDARD: 'Apprenticeship standard'
+};
+export const APPR_PROGRAMME_TYPE_SHORT: Record<ApprProgrammeType, string> = {
+  DIPLOMA: 'Diploma',
+  STANDARD: 'Standard'
+};
+/** Select options for new programmes (level itself stays free text in the DB). */
+export const APPR_LEVELS = [2, 3, 4, 5, 6, 7] as const;
+/** Import/template hint only (criterion group labels for a Standard). */
+export const APPR_STANDARD_GROUPS = ['Knowledge', 'Skills', 'Behaviours'] as const;
+
+export const APPR_OTJ_LOG_STATUSES = ['SUBMITTED', 'VALIDATED', 'REJECTED'] as const;
+export type ApprOtjLogStatus = (typeof APPR_OTJ_LOG_STATUSES)[number];
+export const APPR_OTJ_LOG_STATUS_LABELS: Record<ApprOtjLogStatus, string> = {
+  SUBMITTED: 'Submitted',
+  VALIDATED: 'Validated',
+  REJECTED: 'Rejected'
+};
+export const APPR_OTJ_LOG_TITLE_MAX = 120;
+
+/** Role of an enrolment in an apprenticeship: CARRIER (primary of a linked pair), COMPONENT (linked to a carrier) or STANDALONE. */
+export const APPR_ENROLMENT_ROLES = ['CARRIER', 'COMPONENT', 'STANDALONE'] as const;
+export type ApprEnrolmentRole = (typeof APPR_ENROLMENT_ROLES)[number];

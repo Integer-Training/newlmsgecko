@@ -14,6 +14,7 @@
   import XIcon from '@lucide/svelte/icons/x';
   import { snackbar } from '$features/ui/snackbar/store';
   import { programmesApi, type Criterion, type Unit } from '$features/apprenticeship/api/programmes.svelte';
+  import { APPR_STANDARD_GROUPS } from '@cio/utils/constants/apprenticeship';
   import ConfirmDeleteDialog from './confirm-delete-dialog.svelte';
 
   // One unit: collapsible row (code, title, criteria count) with unit edit/delete/move, and inside it a compact
@@ -28,6 +29,10 @@
   }
 
   let { programmeId, qualificationId, unit, index, total, onmove }: Props = $props();
+
+  // Standards group criteria as Knowledge / Skills / Behaviours; diplomas keep a free-form group.
+  const isStandard = $derived(programmesApi.tree?.id === programmeId && programmesApi.tree.type === 'STANDARD');
+  const groupHint = $derived(isStandard ? `Group (${APPR_STANDARD_GROUPS.join(' / ')})` : 'Group');
 
   let expanded = $state(false);
   let editingUnit = $state(false);
@@ -182,7 +187,19 @@
       />
     </Table.Cell>
     <Table.Cell>
-      <Input aria-label="Group" bind:value={draft.groupLabel} maxlength={200} placeholder="Group" class="h-8 w-full" />
+      <Input
+        aria-label={groupHint}
+        bind:value={draft.groupLabel}
+        maxlength={200}
+        placeholder={groupHint}
+        list={isStandard ? `groups-${unit.id}` : undefined}
+        class="h-8 w-full"
+      />
+      {#if isStandard}
+        <datalist id="groups-{unit.id}">
+          {#each APPR_STANDARD_GROUPS as g (g)}<option value={g}></option>{/each}
+        </datalist>
+      {/if}
     </Table.Cell>
     <Table.Cell>
       <Input
@@ -305,7 +322,7 @@
             <Table.Row>
               <Table.Head class="w-16">Code</Table.Head>
               <Table.Head>Criterion</Table.Head>
-              <Table.Head class="w-28">Group</Table.Head>
+              <Table.Head class="w-28">{isStandard ? 'Group (K / S / B)' : 'Group'}</Table.Head>
               <Table.Head class="w-20">Required</Table.Head>
               <Table.Head class="w-36 text-right"><span class="sr-only">Actions</span></Table.Head>
             </Table.Row>

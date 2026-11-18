@@ -86,7 +86,8 @@
       creatingProgramme = true;
       const created = await programmesApi.create({
         title: $createCourseModal.title.trim(),
-        description: $createCourseModal.description?.trim() || null
+        description: $createCourseModal.description?.trim() || null,
+        type: 'DIPLOMA'
       });
       creatingProgramme = false;
       if (created) onClose(`/org/${$currentOrg.siteName}/apprenticeships/programmes/${created.id}`);

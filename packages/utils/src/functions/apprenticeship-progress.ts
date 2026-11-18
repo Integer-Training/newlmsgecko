@@ -441,3 +441,33 @@ export function sortUnitsBySchedule<T extends { startDate: string | null; target
     .sort((a, b) => compareUnitsBySchedule(a.unit, b.unit) || a.index - b.index)
     .map((entry) => entry.unit);
 }
+
+const ROLLUP_STATUS_RANK: Record<ApprProgressStatus, number> = {
+  CONCERN: 4,
+  BEHIND: 3,
+  NOT_SET: 2,
+  ON_TARGET: 1,
+  COMPLETE: 0
+};
+
+/**
+ * Overall progress across the qualifications of one apprenticeship (Diploma + Standard). Actual is the average of the
+ * parts; status is the worst part (CONCERN > BEHIND > NOT_SET > ON_TARGET > COMPLETE), COMPLETE only when all are.
+ */
+export function apprenticeshipRollup(parts: readonly { actualPct: number | null; status: ApprProgressStatus }[]): {
+  actualPct: number | null;
+  status: ApprProgressStatus;
+} {
+  if (parts.length === 0) return { actualPct: null, status: 'NOT_SET' };
+  let status: ApprProgressStatus = 'COMPLETE';
+  for (const p of parts) {
+    if (ROLLUP_STATUS_RANK[p.status] > ROLLUP_STATUS_RANK[status]) status = p.status;
+  }
+  return { actualPct: averagePct(parts.map((p) => p.actualPct)), status };
+}
+
+/** OTJ completion %: min(100, floor(done / target × 100)); null when there is no target. */
+export function otjCompletionPct(doneMinutes: number, targetMinutes: number | null | undefined): number | null {
+  if (targetMinutes === null || targetMinutes === undefined || targetMinutes <= 0) return null;
+  return Math.min(100, Math.floor((Math.max(0, doneMinutes) / targetMinutes) * 100));
+}

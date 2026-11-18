@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@cio/db/queries/apprenticeship', () => ({
   isProgrammeTutor: vi.fn(async () => false),
+  isProgrammeTutorOfLinked: vi.fn(async () => false),
   countOnboardingTypes: vi.fn(async () => 1),
   listUploadsForCleanup: vi.fn(),
   listReferencedUploadKeys: vi.fn(async () => new Set<string>()),
@@ -14,8 +15,9 @@ vi.mock('@cio/db/queries/apprenticeship', () => ({
   claimOverdueTasks: vi.fn(),
   claimDueReviews: vi.fn(),
   getEnrolmentLearnerIds: vi.fn(async () => new Map()),
-  listEnrolmentsNeedingFirstReview: vi.fn(async () => []),
+  listCarrierEnrolmentsNeedingFirstReview: vi.fn(async () => []),
   insertFirstReviewIfNone: vi.fn(async () => true),
+  listComponentEnrolmentIds: vi.fn(async () => new Set<string>()),
   listGatewayReadyCandidates: vi.fn(async () => []),
   claimGatewayReadyNow: vi.fn(async () => true),
   listOrgAdminIds: vi.fn(async () => []),
@@ -201,12 +203,12 @@ describe('first-review back-fill (ensureFirstReview + the daily scan)', () => {
   });
 
   it('is idempotent: the insert is "only if no review exists", so a re-run reports nothing created', async () => {
-    vi.mocked(q.listEnrolmentsNeedingFirstReview).mockResolvedValueOnce([
+    vi.mocked(q.listCarrierEnrolmentsNeedingFirstReview).mockResolvedValueOnce([
       { id: 'e1', organizationId: 'o', startDate: '2026-01-05', reviewIntervalWeeks: 12 }
     ] as never);
     vi.mocked(q.claimDueReviews).mockResolvedValue([] as never);
     expect((await runApprReviewDueScan({ today: '2026-06-01' })).firstReviewsCreated).toBe(1);
-    vi.mocked(q.listEnrolmentsNeedingFirstReview).mockResolvedValueOnce([
+    vi.mocked(q.listCarrierEnrolmentsNeedingFirstReview).mockResolvedValueOnce([
       { id: 'e1', organizationId: 'o', startDate: '2026-01-05', reviewIntervalWeeks: 12 }
     ] as never);
     vi.mocked(q.insertFirstReviewIfNone).mockResolvedValueOnce(false);
@@ -282,6 +284,20 @@ describe('runApprGatewayReadyScan (safety net for a non-claiming recompute)', ()
       entityType: 'appr_enrolment',
       entityId: 'enr-1'
     });
+  });
+
+  it('never flags a linked COMPONENT: gateway / EPA is learner-level and lives on the carrier', async () => {
+    vi.mocked(q.listGatewayReadyCandidates).mockResolvedValueOnce([
+      cand({ id: 'carrier' }),
+      cand({ id: 'component' })
+    ] as never);
+    vi.mocked(q.listComponentEnrolmentIds).mockResolvedValueOnce(new Set(['component']));
+    vi.mocked(listTutorsForLearnerInOrg).mockResolvedValue([] as never);
+    vi.mocked(q.listOrgAdminIds).mockResolvedValue(['adm']);
+    const res = await runApprGatewayReadyScan();
+    expect(res.flagged).toBe(1);
+    expect(q.claimGatewayReadyNow).toHaveBeenCalledTimes(1);
+    expect(q.claimGatewayReadyNow).toHaveBeenCalledWith('carrier');
   });
 
   it('pages through the WHOLE candidate set by id (keyset), never stopping at the first page', async () => {

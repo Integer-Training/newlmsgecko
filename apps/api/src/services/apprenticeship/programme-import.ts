@@ -35,9 +35,21 @@ export interface ImportCriterion {
   sort: number;
 }
 
+export interface UnitPreviewRow {
+  title: string;
+  code: string | null;
+  state: 'NEW' | 'UPDATED' | 'UNCHANGED';
+  criteriaNew: number;
+  criteriaUpdated: number;
+}
+
 export interface ImportPlan {
   summary: { unitsNew: number; unitsUpdated: number; criteriaNew: number; criteriaUpdated: number };
   errors: { row: number; message: string }[];
+  /** Rows still import. `row` 0 = about the file as a whole (e.g. units the file does not mention). */
+  warnings: { row: number; message: string }[];
+  /** One entry per unit the file mentions, in file order. UPDATED = the unit's own fields or any of its criteria change. */
+  unitPreview: UnitPreviewRow[];
   newUnits: {
     id: string;
     qualificationId: string;
@@ -115,14 +127,17 @@ export function fromSkillsPortfolioExport(
     const code = (values['code'] ?? '').trim();
     const cut = code.lastIndexOf('/');
     const unit = splitUnitCode(values['unittitle'] ?? '');
+    // Only an Ofqual-shaped code (contains "/") is a globally unique id. A bare code like "1.1" repeats across units,
+    // so it is NOT used as a ref: matching then falls to unit title + criterion code.
+    const refLike = code.includes('/');
     return {
       row,
       values: {
-        unit_ref: cut > 0 ? code.slice(0, cut) : '',
+        unit_ref: refLike && cut > 0 ? code.slice(0, cut) : '',
         unit_title: unit.title,
         // A HINT, not unit_code: it fills an empty code but never overwrites one an admin set.
         unit_code_hint: unit.code,
-        criterion_ref: code,
+        criterion_ref: refLike ? code : '',
         criterion_code: values['name'] ?? '',
         criterion_text: values['description'] ?? '',
         required: values['requireditems'] ?? ''
@@ -144,12 +159,20 @@ export function fromSkillsPortfolioExport(
 }
 
 export function planStructureImport(
-  existing: { qualifications: ImportQualification[]; units: ImportUnit[]; criteria: ImportCriterion[] },
+  existing: {
+    qualifications: ImportQualification[];
+    units: ImportUnit[];
+    criteria: ImportCriterion[];
+    /** True when the programme has enrolments: a changed `required` then warns that progress is recalculated. */
+    hasEnrolments?: boolean;
+  },
   csv: string
 ): ImportPlan {
   const errors: ImportPlan['errors'] = [];
+  const warnings: ImportPlan['warnings'] = [];
   const { headers, records } = fromSkillsPortfolioExport(parseCsvWithHeader(csv));
   const fail = (row: number, message: string) => errors.push({ row, message });
+  const warn = (row: number, message: string) => warnings.push({ row, message });
 
   if (!headers.includes('unit_code') && !headers.includes('unit_title') && !headers.includes('unit_ref')) {
     fail(1, 'Header must include unit_code or unit_title');
@@ -206,6 +229,10 @@ export function planStructureImport(
   }
 
   // ── Walk the rows ──
+  const touchedUnits = new Set<string>(); // unit ids the file mentions, in file order
+  const touchedQuals = new Set<string>();
+  const seenCriterion = new Map<string, number>(); // criterion id -> first row that touched it
+  const requiredChangeRow = new Map<string, number>(); // criterion id -> row that changed `required`
   for (const { row, values: v } of records) {
     const qualCell = v['qualification'] ?? '';
     const unitCode = v['unit_code'] ?? '';
@@ -281,6 +308,10 @@ export function planStructureImport(
     let criterion: CriterionState | undefined;
     if (hasCriterion) {
       criterion = critRef ? criterionByRef.get(norm(critRef)) : undefined;
+      if (criterion && criterion.unitId !== unit?.id) {
+        fail(row, `criterion_ref "${critRef}" belongs to a different unit than this row's unit — row skipped`);
+        continue;
+      }
       if (!criterion && unit && critCode) criterion = criterionByCode.get(`${unit.id}|${norm(critCode)}`);
       if (!criterion && (!critCode || !critText)) {
         fail(row, 'criterion_code and criterion_text are required for a new criterion');
@@ -312,12 +343,26 @@ export function planStructureImport(
       indexUnit(unit);
     }
 
+    touchedUnits.add(unit.id);
+    touchedQuals.add(qid);
+
     if (hasCriterion) {
+      if (criterion) {
+        const first = seenCriterion.get(criterion.id);
+        if (first !== undefined) {
+          warn(
+            row,
+            `Criterion "${criterion.cur.code}" of unit "${unit.cur.title}" already appears on row ${first} — the later row wins`
+          );
+        } else seenCriterion.set(criterion.id, row);
+      }
       if (!criterion) {
         const sort = criteriaOfUnit.get(unit.id) ?? 0;
         criteriaOfUnit.set(unit.id, sort + 1);
+        const id = randomUUID();
+        seenCriterion.set(id, row);
         indexCriterion({
-          id: randomUUID(),
+          id,
           isNew: true,
           unitId: unit.id,
           cur: {
@@ -334,7 +379,10 @@ export function planStructureImport(
         if (critCode) criterion.cur.code = critCode;
         if (critText) criterion.cur.text = critText;
         if (group) criterion.cur.groupLabel = group;
-        if (required !== null) criterion.cur.requiredCount = required;
+        if (required !== null) {
+          if (criterion.orig && required !== criterion.cur.requiredCount) requiredChangeRow.set(criterion.id, row);
+          criterion.cur.requiredCount = required;
+        }
         if (critRef) criterion.cur.externalRef = critRef;
         indexCriterion(criterion);
       }
@@ -343,6 +391,8 @@ export function planStructureImport(
 
   // ── Diff into ops ──
   const plan = emptyPlan(errors);
+  plan.warnings = warnings;
+  const unitChanged = new Set<string>();
   for (const u of units.values()) {
     if (u.isNew) {
       plan.newUnits.push({
@@ -362,15 +412,58 @@ export function planStructureImport(
         u.orig.glh !== u.cur.glh)
     ) {
       plan.unitUpdates.push({ id: u.id, patch: { ...u.cur } });
+      unitChanged.add(u.id);
     }
   }
+  const critNewByUnit = new Map<string, number>();
+  const critUpdByUnit = new Map<string, number>();
+  const bump = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) ?? 0) + 1);
   for (const c of criteria.values()) {
     if (c.isNew) {
       plan.newCriteria.push({ id: c.id, unitId: c.unitId, sort: c.sort, ...c.cur });
+      bump(critNewByUnit, c.unitId);
     } else if (c.orig && (Object.keys(c.cur) as (keyof typeof c.cur)[]).some((k) => c.orig![k] !== c.cur[k])) {
       plan.criterionUpdates.push({ id: c.id, patch: { ...c.cur } });
+      bump(critUpdByUnit, c.unitId);
+      const reqRow = requiredChangeRow.get(c.id);
+      if (existing.hasEnrolments && reqRow !== undefined && c.orig.requiredCount !== c.cur.requiredCount) {
+        const parent = units.get(c.unitId);
+        warn(
+          reqRow,
+          `Criterion "${c.cur.code}" of unit "${parent?.cur.title ?? ''}": required changes from ${c.orig.requiredCount} to ${c.cur.requiredCount} — learners' progress will be recalculated`
+        );
+      }
     }
   }
+
+  for (const id of touchedUnits) {
+    const u = units.get(id)!;
+    const criteriaNew = critNewByUnit.get(id) ?? 0;
+    const criteriaUpdated = critUpdByUnit.get(id) ?? 0;
+    plan.unitPreview.push({
+      title: u.cur.title,
+      code: u.cur.code,
+      state: u.isNew ? 'NEW' : unitChanged.has(id) || criteriaNew + criteriaUpdated > 0 ? 'UPDATED' : 'UNCHANGED',
+      criteriaNew,
+      criteriaUpdated
+    });
+  }
+
+  // Units in a qualification the file touched, but absent from the file: left alone (import never deletes).
+  const MAX_ABSENT = 25;
+  const absent = [...units.values()].filter(
+    (u) => !u.isNew && touchedQuals.has(u.qualificationId) && !touchedUnits.has(u.id)
+  );
+  for (const u of absent.slice(0, MAX_ABSENT)) {
+    warn(
+      0,
+      `Unit "${u.cur.code ? u.cur.code + ' ' : ''}${u.cur.title}" is in the programme but not in the file — left unchanged (import never deletes)`
+    );
+  }
+  if (absent.length > MAX_ABSENT) {
+    warn(0, `...and ${absent.length - MAX_ABSENT} more units in the programme are not in the file — left unchanged`);
+  }
+  warnings.sort((a, b) => a.row - b.row);
   plan.summary = {
     unitsNew: plan.newUnits.length,
     unitsUpdated: plan.unitUpdates.length,
@@ -384,6 +477,8 @@ function emptyPlan(errors: ImportPlan['errors']): ImportPlan {
   return {
     summary: { unitsNew: 0, unitsUpdated: 0, criteriaNew: 0, criteriaUpdated: 0 },
     errors,
+    warnings: [],
+    unitPreview: [],
     newUnits: [],
     unitUpdates: [],
     newCriteria: [],

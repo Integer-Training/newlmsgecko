@@ -1,13 +1,19 @@
 import { AppError, ErrorCodes } from '@api/utils/errors';
 import { isAllocatedTutor } from '@api/middlewares/guards/ownership';
 import type { Actor } from '@cio/db/actor';
-import { getApprEnrolment, getApprProgramme, isProgrammeTutor } from '@cio/db/queries/apprenticeship';
+import {
+  getApprEnrolment,
+  getApprProgramme,
+  isProgrammeTutor,
+  isProgrammeTutorOfLinked
+} from '@cio/db/queries/apprenticeship';
 
 // Gecko Apprenticeships — THE access rule, in one place, so the admin (Phase A), tutor (B) and learner (C) screens only
 // open routes and never re-implement scoping:
 //   ADMIN  → everything in their org.
 //   TUTOR  → enrolments of learners ALLOCATED to them (tutor_allocation = the NAMED tutor, same rule as the diploma
-//            flow) OR of a programme they are assigned to (appr_programme_tutor, like a course's tutors).
+//            flow) OR of a programme they are assigned to (appr_programme_tutor, like a course's tutors) OR of the
+//            programme of the enrolment LINKED to it (a Diploma + Standard pair is one apprenticeship).
 //   LEARNER→ only their own enrolment (read; their own evidence is handled by the evidence service).
 // Anything not visible is reported as 404, so ids of other orgs/learners cannot be probed.
 
@@ -41,7 +47,11 @@ export async function canAccessLearner(
   if (!actor.authenticated || actor.orgId !== organizationId) return false;
   if (actor.role === 'ADMIN') return true;
   if (actor.role === 'TUTOR') {
-    return (await isAllocatedTutor(actor, learnerId)) || isProgrammeTutor(programmeId, actor.userId);
+    if (await isAllocatedTutor(actor, learnerId)) return true;
+    if (await isProgrammeTutor(programmeId, actor.userId)) return true;
+
+    // Third branch: assigned to the linked counterpart's programme (always false for an unlinked enrolment).
+    return isProgrammeTutorOfLinked(learnerId, programmeId, actor.userId);
   }
   if (actor.role === 'LEARNER') return actor.userId === learnerId;
   return false;

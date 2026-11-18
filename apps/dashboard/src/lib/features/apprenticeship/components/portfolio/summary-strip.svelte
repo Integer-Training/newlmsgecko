@@ -11,6 +11,7 @@
   import ProgressBar from '../shared/progress-bar.svelte';
   import StatusChip from '../shared/status-chip.svelte';
   import StageChip from '../shared/stage-chip.svelte';
+  import ProgrammeTypeChip from '../shared/programme-type-chip.svelte';
   import { fmtDate, fmtMinutes, fmtPct } from '../shared/format';
 
   interface Props {
@@ -40,8 +41,15 @@
           <StatusChip status={d.summary.status} />
           <StageChip stage={d.summary.stage} label={d.summary.stageLabel} />
         </div>
-        <p class="text-sm text-(--muted-foreground)">
-          {d.programme.title} · Tutor: {tutorNames(d.tutors)}
+        <p class="flex flex-wrap items-center gap-x-2 text-sm text-(--muted-foreground)">
+          {#each store.portfolios as p (p.enrolment.id)}
+            <span class="inline-flex items-center gap-1.5">
+              {p.programme.title}
+              {#if p.programme.type}<ProgrammeTypeChip type={p.programme.type} />{/if}
+            </span>
+            <span aria-hidden="true">·</span>
+          {/each}
+          <span>Tutor: {tutorNames(d.tutors)}</span>
         </p>
         <p class="text-sm text-(--muted-foreground)">
           {fmtDate(d.enrolment.startDate)} → {fmtDate(d.enrolment.plannedEndDate)}
@@ -77,7 +85,7 @@
     <div class="grid gap-4 md:grid-cols-2">
       <div class="space-y-1">
         <div class="flex justify-between text-sm">
-          <span class="font-medium">Qualification progress</span>
+          <span class="font-medium">{store.pair ? `${d.programme.title} progress` : 'Qualification progress'}</span>
           <span>{fmtPct(d.summary.actualPct)} · expected {fmtPct(d.summary.expectedPct)}</span>
         </div>
         <ProgressBar actual={d.summary.actualPct} expected={d.summary.expectedPct} label="Qualification progress" />

@@ -161,51 +161,23 @@ export const baseNavConfig: NavItemConfig[] = [
     icon: CourseIcon,
     matchPattern: '^/org/[^/]+/courses(/.*)?$' // Matches nested routes
   },
-  // Gecko Apprenticeships — its own programme catalogue (not a course). Admin-only; learner pages + programme setup.
+  // Gecko Apprenticeships — its own area (workspace shell with tabs), one plain link in its own sidebar group.
+  // Old sub-pages stay reachable as nestedRoutes so breadcrumbs resolve.
   {
-    group: 'content',
+    group: 'apprenticeships',
     titleKey: 'Apprenticeships',
     path: '/apprenticeships',
     icon: GraduationCapIcon,
     requiresAdmin: true,
-    useHashUrl: true,
     matchPattern: '^/org/[^/]+/apprenticeships(/.*)?$',
-    items: [
-      {
-        titleKey: 'Learners',
-        path: '/apprenticeships',
-        matchPattern: '^/org/[^/]+/apprenticeships(/learners/.*)?/?$'
-      },
-      {
-        titleKey: 'Summary',
-        path: '/apprenticeships/summary',
-        matchPattern: '^/org/[^/]+/apprenticeships/summary(/.*)?$'
-      },
-      {
-        titleKey: 'To mark',
-        path: '/apprenticeships/to-mark',
-        matchPattern: '^/org/[^/]+/apprenticeships/to-mark(/.*)?$'
-      },
-      {
-        titleKey: 'IQA',
-        path: '/apprenticeships/iqa',
-        matchPattern: '^/org/[^/]+/apprenticeships/iqa(/.*)?$'
-      },
-      {
-        titleKey: 'Task plans',
-        path: '/apprenticeships/task-plans',
-        matchPattern: '^/org/[^/]+/apprenticeships/task-plans(/.*)?$'
-      },
-      {
-        titleKey: 'Programmes',
-        path: '/apprenticeships/programmes',
-        matchPattern: '^/org/[^/]+/apprenticeships/programmes(/.*)?$'
-      },
-      {
-        titleKey: 'Settings',
-        path: '/apprenticeships/settings',
-        matchPattern: '^/org/[^/]+/apprenticeships/settings(/.*)?$'
-      }
+    nestedRoutes: [
+      { path: 'learners', titleKey: 'Learners' },
+      { path: 'summary', titleKey: 'Overview' },
+      { path: 'to-mark', titleKey: 'To mark' },
+      { path: 'iqa', titleKey: 'Quality (IQA)' },
+      { path: 'task-plans', titleKey: 'Task plans' },
+      { path: 'programmes', titleKey: 'Programmes' },
+      { path: 'settings', titleKey: 'Settings' }
     ]
   },
   ...(COHORTS_ENABLED
@@ -579,6 +551,7 @@ export function getOrgNavigationItems(
 const GROUP_ORDER: Array<{ key: string | null; labelKey: string | null }> = [
   { key: 'home', labelKey: 'org_navigation.home' },
   { key: 'content', labelKey: 'org_navigation.content' },
+  { key: 'apprenticeships', labelKey: 'org_navigation.apprenticeships' },
   { key: 'people', labelKey: 'org_navigation.people' },
   { key: 'automation', labelKey: 'org_navigation.automation' },
   { key: null, labelKey: null }

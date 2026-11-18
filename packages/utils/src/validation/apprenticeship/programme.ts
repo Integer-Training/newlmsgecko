@@ -1,4 +1,5 @@
 import * as z from 'zod';
+import { APPR_PROGRAMME_TYPES } from '../../constants/apprenticeship';
 
 /**
  * Validators for the Gecko Apprenticeships admin API (programme catalogue, structure, CSV import, org settings).
@@ -14,7 +15,8 @@ const trimmed = (max: number) => z.string().trim().min(1).max(max);
 const optionalText = (max: number) => z.string().trim().max(max).nullish();
 
 export const ZProgrammeListQuery = z.object({
-  status: z.enum(['ACTIVE', 'ARCHIVED', 'ALL']).default('ACTIVE')
+  status: z.enum(['ACTIVE', 'ARCHIVED', 'ALL']).default('ACTIVE'),
+  type: z.enum([...APPR_PROGRAMME_TYPES, 'ALL']).default('ALL')
 });
 
 export const ZProgrammeCreate = z.object({
@@ -22,7 +24,9 @@ export const ZProgrammeCreate = z.object({
   description: optionalText(5000),
   reference: optionalText(100),
   awardingBody: optionalText(200),
-  level: optionalText(50)
+  level: optionalText(50),
+  type: z.enum(APPR_PROGRAMME_TYPES).default('DIPLOMA'),
+  pairedProgrammeId: z.uuid().nullish()
 });
 export type ProgrammeCreateInput = z.infer<typeof ZProgrammeCreate>;
 
@@ -34,7 +38,8 @@ export const ZProgrammeUpdate = z
     awardingBody: optionalText(200),
     level: optionalText(50),
     status: z.enum(APPR_PROGRAMME_STATUSES),
-    reviewIntervalWeeks: z.number().int().min(1).max(52)
+    reviewIntervalWeeks: z.number().int().min(1).max(52),
+    pairedProgrammeId: z.uuid().nullable()
   })
   .partial()
   .refine((v) => Object.keys(v).length > 0, { message: 'Nothing to update' });

@@ -1,6 +1,9 @@
+import * as z from 'zod';
 import {
+  ZApprenticeshipCreate,
   ZEnrolmentCreate,
   ZEnrolmentIdParam,
+  ZEnrolmentLink,
   ZEnrolmentListQuery,
   ZEnrolmentUpdate,
   ZExportQuery,
@@ -8,13 +11,17 @@ import {
   ZUnitDatesUpdate
 } from '@cio/utils/validation/apprenticeship';
 import {
+  checkLearner,
+  createApprenticeship,
   createEnrolment,
   exportPortfolioCsv,
   getPortfolio,
+  linkEnrolment,
   listEnrolments,
   getEnrolmentPickerOptions,
   setUnitDates,
   spreadEnrolmentUnitDates,
+  unlinkEnrolment,
   updateEnrolment
 } from '@api/services/apprenticeship/enrolment';
 
@@ -32,6 +39,11 @@ import { zValidator } from '@hono/zod-validator';
 // enrolment and evidence (anything else 404s). Managers have no apprenticeship access.
 const requireApprMember = requireRole('ADMIN', 'TUTOR', 'LEARNER');
 
+// GET /learner-check: exactly one of learnerId / email.
+const ZLearnerCheckQuery = z
+  .object({ learnerId: z.uuid().optional(), email: z.email().max(254).optional() })
+  .refine((v) => Boolean(v.learnerId) !== Boolean(v.email), { message: 'Pass either learnerId or email' });
+
 export const enrolmentsRouter = new Hono()
   .get('/', requireApprMember, zValidator('query', ZEnrolmentListQuery), async (c) => {
     try {
@@ -47,6 +59,22 @@ export const enrolmentsRouter = new Hono()
       return c.json({ success: true, data }, 200);
     } catch (error) {
       return handleError(c, error, 'Failed to load tutors and learners');
+    }
+  })
+  .get('/learner-check', requireAdmin, zValidator('query', ZLearnerCheckQuery), async (c) => {
+    try {
+      const data = await checkLearner(c.get('actor') as Actor, c.req.valid('query'));
+      return c.json({ success: true, data }, 200);
+    } catch (error) {
+      return handleError(c, error, 'Failed to check the learner');
+    }
+  })
+  .post('/apprenticeship', requireAdmin, zValidator('json', ZApprenticeshipCreate), async (c) => {
+    try {
+      const data = await createApprenticeship(c.get('actor') as Actor, c.req.valid('json'));
+      return c.json({ success: true, data }, 201);
+    } catch (error) {
+      return handleError(c, error, 'Failed to enrol apprentice');
     }
   })
   .post('/', requireAdmin, zValidator('json', ZEnrolmentCreate), async (c) => {
@@ -71,6 +99,28 @@ export const enrolmentsRouter = new Hono()
       }
     }
   )
+  .post(
+    '/:id/link',
+    requireAdmin,
+    zValidator('param', ZEnrolmentIdParam),
+    zValidator('json', ZEnrolmentLink),
+    async (c) => {
+      try {
+        const data = await linkEnrolment(c.get('actor') as Actor, c.req.valid('param').id, c.req.valid('json'));
+        return c.json({ success: true, data }, 200);
+      } catch (error) {
+        return handleError(c, error, 'Failed to link enrolments');
+      }
+    }
+  )
+  .delete('/:id/link', requireAdmin, zValidator('param', ZEnrolmentIdParam), async (c) => {
+    try {
+      const data = await unlinkEnrolment(c.get('actor') as Actor, c.req.valid('param').id);
+      return c.json({ success: true, data }, 200);
+    } catch (error) {
+      return handleError(c, error, 'Failed to unlink enrolments');
+    }
+  })
   .put(
     '/:id/unit-dates',
     requireStaff,

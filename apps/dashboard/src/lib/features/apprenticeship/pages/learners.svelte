@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, untrack } from 'svelte';
+  import { untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import { page as appPage } from '$app/state';
   import * as Page from '@cio/ui/base/page';
@@ -10,11 +10,16 @@
   import { Search } from '@cio/ui/custom/search';
   import { Empty } from '@cio/ui/custom/empty';
   import UserPlusIcon from '@lucide/svelte/icons/user-plus';
-  import { APPR_PROGRESS_STATUSES, type ApprProgressStatus } from '@cio/utils/constants/apprenticeship';
+  import {
+    APPR_PROGRESS_STATUSES,
+    type ApprProgrammeType,
+    type ApprProgressStatus
+  } from '@cio/utils/constants/apprenticeship';
   import { currentOrg, isOrgAdmin } from '$lib/utils/store/org';
   import { apprenticeshipsBase } from '../utils/paths';
   import { enrolmentsApi } from '../api/enrolments.svelte';
-  import AddLearnerDialog from '../components/learners/add-learner-dialog.svelte';
+  import EnrolApprenticeDialog from '../components/learners/enrol-apprentice-dialog.svelte';
+  import ProgrammeTypeChip from '../components/shared/programme-type-chip.svelte';
   import ProgressBar from '../components/shared/progress-bar.svelte';
   import StatusChip from '../components/shared/status-chip.svelte';
   import StageChip from '../components/shared/stage-chip.svelte';
@@ -29,6 +34,7 @@
   const PAGE_SIZE = 25;
 
   let programmeId = $state('');
+  let typeFilter = $state<ApprProgrammeType | ''>('');
   let tutorId = $state('');
   let status = $state<ApprProgressStatus | ''>('');
   let noTutor = $state(false);
@@ -37,18 +43,50 @@
   let searchValue = $state('');
   let debouncedSearch = $state('');
   let page = $state(1);
-  let addOpen = $state(false);
+  // ?enrol=1 (workspace button) opens the wizard; &learner=<id>&programme=<id> pre-fills it ("Add the paired standard").
+  let addOpen = $state(appPage.url.searchParams.get('enrol') === '1');
+  let presetLearner = $state(appPage.url.searchParams.get('learner') ?? '');
+  let presetProgramme = $state(appPage.url.searchParams.get('programme') ?? '');
+  let created = false;
+
+  // The header button links to ?enrol=1 even when already on this page: react to the query, not just mount.
+  $effect(() => {
+    const sp = appPage.url.searchParams;
+    if (sp.get('enrol') !== '1') return;
+    untrack(() => {
+      created = false;
+      presetLearner = sp.get('learner') ?? '';
+      presetProgramme = sp.get('programme') ?? '';
+      addOpen = true;
+    });
+  });
+  // Closing the dialog drops the query so the same link works again.
+  $effect(() => {
+    if (addOpen || created) return;
+    const url = untrack(() => new URL(appPage.url));
+    if (!url.searchParams.has('enrol')) return;
+    ['enrol', 'learner', 'programme'].forEach((k) => url.searchParams.delete(k));
+    void goto(url.pathname + url.search, { replaceState: true, noScroll: true, keepFocus: true });
+  });
   let retry = $state(0);
 
   const base = $derived(apprenticeshipsBase(appPage.url.pathname, $currentOrg.siteName));
   const list = $derived(enrolmentsApi.list);
   const totalPages = $derived(list ? Math.max(1, Math.ceil(list.total / list.pageSize)) : 1);
   const hasFilters = $derived(
-    !!programmeId || !!tutorId || !!status || !!debouncedSearch || noTutor || onboardingIncomplete
+    !!programmeId || !!typeFilter || !!tutorId || !!status || !!debouncedSearch || noTutor || onboardingIncomplete
   );
 
-  onMount(() => {
-    enrolmentsApi.loadOptions($isOrgAdmin === true);
+  // The admin flag is unknown (null) on a hard load: load the pickers once it is known, not before.
+  // (currentOrg starts as an empty placeholder, so wait for a real org + role; reload if it later resolves to admin.)
+  let optionsLoadedFor: boolean | null = null;
+  $effect(() => {
+    const org = $currentOrg;
+    const admin = $isOrgAdmin;
+    if (!org?.id || admin === null || admin === undefined) return;
+    if (optionsLoadedFor === admin || optionsLoadedFor === true) return;
+    optionsLoadedFor = admin;
+    untrack(() => enrolmentsApi.loadOptions(admin === true));
   });
 
   // Debounce typing so the table doesn't refetch per keystroke.
@@ -61,7 +99,15 @@
   // Any filter change goes back to page 1 and refetches; so does paging.
   let lastKey = '';
   $effect(() => {
-    const key = JSON.stringify([programmeId, tutorId, status, debouncedSearch, noTutor, onboardingIncomplete]);
+    const key = JSON.stringify([
+      programmeId,
+      typeFilter,
+      tutorId,
+      status,
+      debouncedSearch,
+      noTutor,
+      onboardingIncomplete
+    ]);
     let p = page;
     if (key !== lastKey) {
       if (lastKey !== '' && p !== 1) {
@@ -73,6 +119,7 @@
     retry;
     const filters = {
       programmeId: programmeId || undefined,
+      type: typeFilter || undefined,
       tutorId: tutorId || undefined,
       status: status || undefined,
       search: debouncedSearch || undefined,
@@ -86,6 +133,7 @@
 
   function reset() {
     programmeId = '';
+    typeFilter = '';
     tutorId = '';
     status = '';
     noTutor = false;
@@ -101,6 +149,18 @@
   const programmeLabel = $derived(
     programmeId ? (enrolmentsApi.programmes.find((p) => p.id === programmeId)?.title ?? 'Programme') : 'All programmes'
   );
+  const diplomaOptions = $derived(
+    enrolmentsApi.programmes.filter(
+      (p) => (p.type ?? 'DIPLOMA') === 'DIPLOMA' && (!typeFilter || typeFilter === 'DIPLOMA')
+    )
+  );
+  const standardOptions = $derived(
+    enrolmentsApi.programmes.filter((p) => p.type === 'STANDARD' && (!typeFilter || typeFilter === 'STANDARD'))
+  );
+  // A diploma-only apprentice gets the amber chip; the tooltip says whether a Standard could be added.
+  function pairAvailable(id: string) {
+    return !!enrolmentsApi.programmes.find((p) => p.id === id)?.pairedProgramme;
+  }
   const tutorLabel = $derived.by(() => {
     if (!tutorId) return 'All tutors';
     const t = enrolmentsApi.tutors.find((x) => x.id === tutorId);
@@ -122,7 +182,7 @@
       <Button variant="outline" href="{base}/to-mark">To mark</Button>
       {#if $isOrgAdmin}
         <Button onclick={() => (addOpen = true)}>
-          <UserPlusIcon size={16} class="mr-1" /> Add learner
+          <UserPlusIcon size={16} class="mr-1" /> Enrol apprentice
         </Button>
       {/if}
     </Page.Action>
@@ -159,6 +219,26 @@
 
       <div class="mb-4 flex flex-wrap items-end gap-3">
         <div class="flex flex-col gap-1">
+          <span class="text-xs text-(--muted-foreground)">Type</span>
+          <div class="flex gap-1" role="group" aria-label="Filter by programme type">
+            {#each [['', 'All'], ['DIPLOMA', 'Diploma'], ['STANDARD', 'Standard']] as const as [value, label] (value)}
+              <button
+                type="button"
+                aria-pressed={typeFilter === value}
+                class="rounded-md border px-3 py-1.5 text-sm {typeFilter === value
+                  ? 'border-(--primary) bg-(--primary) text-(--primary-foreground)'
+                  : 'hover:bg-(--muted)'}"
+                onclick={() => {
+                  typeFilter = value;
+                  programmeId = '';
+                }}
+              >
+                {label}
+              </button>
+            {/each}
+          </div>
+        </div>
+        <div class="flex flex-col gap-1">
           <span class="text-xs text-(--muted-foreground)" id="lf-prog">Programme</span>
           <Select.Root type="single" bind:value={programmeId}>
             <Select.Trigger class="min-w-[200px]" aria-labelledby="lf-prog"
@@ -166,9 +246,22 @@
             >
             <Select.Content>
               <Select.Item value="">All programmes</Select.Item>
-              {#each enrolmentsApi.programmes as p (p.id)}
-                <Select.Item value={p.id}>{p.title}</Select.Item>
-              {/each}
+              {#if diplomaOptions.length}
+                <Select.Group>
+                  <Select.Label>Diplomas</Select.Label>
+                  {#each diplomaOptions as p (p.id)}
+                    <Select.Item value={p.id}>{p.title}</Select.Item>
+                  {/each}
+                </Select.Group>
+              {/if}
+              {#if standardOptions.length}
+                <Select.Group>
+                  <Select.Label>Standards</Select.Label>
+                  {#each standardOptions as p (p.id)}
+                    <Select.Item value={p.id}>{p.title}</Select.Item>
+                  {/each}
+                </Select.Group>
+              {/if}
             </Select.Content>
           </Select.Root>
         </div>
@@ -246,7 +339,7 @@
             <Table.Header>
               <Table.Row>
                 <Table.Head>Learner</Table.Head>
-                <Table.Head class="min-w-52">Qualification</Table.Head>
+                <Table.Head class="min-w-60">Qualification</Table.Head>
                 <Table.Head class="min-w-52">Off-the-job</Table.Head>
                 <Table.Head>Status</Table.Head>
                 <Table.Head>Tutor</Table.Head>
@@ -263,7 +356,25 @@
                     {#if r.learner.email}
                       <p class="text-xs text-(--muted-foreground)">{r.learner.email}</p>
                     {/if}
-                    <p class="text-xs text-(--muted-foreground)">{r.programmeTitle}</p>
+                    <p class="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-(--muted-foreground)">
+                      {#if r.programmeType}<ProgrammeTypeChip type={r.programmeType} />{/if}
+                      <span>{r.programmeTitle}</span>
+                    </p>
+                    {#if r.linked}
+                      <p class="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-(--muted-foreground)">
+                        <ProgrammeTypeChip type={r.linked.type} />
+                        <span>{r.linked.programmeTitle}</span>
+                      </p>
+                    {:else if r.programmeType === 'DIPLOMA'}
+                      <p class="mt-1">
+                        <span
+                          class="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium whitespace-nowrap text-amber-800 dark:bg-amber-500/20 dark:text-amber-300"
+                          title={pairAvailable(r.programmeId)
+                            ? 'On the diploma only. Its paired standard can be added.'
+                            : 'On the diploma only. This programme has no paired standard.'}>No standard</span
+                        >
+                      </p>
+                    {/if}
                     <p class="text-xs text-(--muted-foreground)">
                       {fmtDate(r.startDate)} → {fmtDate(r.plannedEndDate)}
                     </p>
@@ -285,14 +396,46 @@
                     {/if}
                   </Table.Cell>
                   <Table.Cell>
-                    <ProgressBar
-                      actual={r.actualPct}
-                      expected={r.expectedPct}
-                      label="{r.learner.name} qualification progress"
-                    />
-                    <p class="mt-1 text-xs text-(--muted-foreground)">
-                      {fmtPct(r.actualPct)}{r.expectedPct !== null ? ` · expected ${r.expectedPct}%` : ' · expected —'}
-                    </p>
+                    {#if r.linked}
+                      <div class="space-y-1.5">
+                        <div class="flex items-center gap-2">
+                          {#if r.programmeType}<ProgrammeTypeChip type={r.programmeType} />{/if}
+                          <div class="min-w-0 flex-1">
+                            <ProgressBar
+                              actual={r.actualPct}
+                              expected={r.expectedPct}
+                              label="{r.learner.name} {r.programmeTitle} progress"
+                            />
+                          </div>
+                          <span class="w-9 text-right text-xs">{fmtPct(r.actualPct)}</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                          <ProgrammeTypeChip type={r.linked.type} />
+                          <div class="min-w-0 flex-1">
+                            <ProgressBar
+                              actual={r.linked.actualPct}
+                              expected={r.linked.expectedPct}
+                              label="{r.learner.name} {r.linked.programmeTitle} progress"
+                            />
+                          </div>
+                          <span class="w-9 text-right text-xs">{fmtPct(r.linked.actualPct)}</span>
+                        </div>
+                      </div>
+                      <p class="mt-1 text-xs text-(--muted-foreground)">
+                        Overall {fmtPct(r.overall?.actualPct ?? null)}
+                      </p>
+                    {:else}
+                      <ProgressBar
+                        actual={r.actualPct}
+                        expected={r.expectedPct}
+                        label="{r.learner.name} qualification progress"
+                      />
+                      <p class="mt-1 text-xs text-(--muted-foreground)">
+                        {fmtPct(r.actualPct)}{r.expectedPct !== null
+                          ? ` · expected ${r.expectedPct}%`
+                          : ' · expected —'}
+                      </p>
+                    {/if}
                   </Table.Cell>
                   <Table.Cell>
                     <ProgressBar
@@ -375,5 +518,14 @@
 </Page.Root>
 
 {#if $isOrgAdmin}
-  <AddLearnerDialog bind:open={addOpen} onCreated={(id) => goto(`${base}/learners/${id}`)} />
+  <EnrolApprenticeDialog
+    bind:open={addOpen}
+    presetLearnerId={presetLearner}
+    presetProgrammeId={presetProgramme}
+    onCreated={(id) => {
+      created = true;
+      retry += 1;
+      goto(`${base}/learners/${id}`);
+    }}
+  />
 {/if}

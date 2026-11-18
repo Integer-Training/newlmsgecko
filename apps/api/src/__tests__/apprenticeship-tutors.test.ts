@@ -6,6 +6,7 @@ import type { Actor } from '@cio/db/actor';
 
 vi.mock('@cio/db/queries/apprenticeship', () => ({
   isProgrammeTutor: vi.fn(async () => false),
+  isProgrammeTutorOfLinked: vi.fn(async () => false),
   getApprEnrolment: vi.fn(),
   getApprProgramme: vi.fn(),
   getEnrolmentOverview: vi.fn(async () => ({ tutors: [{ id: 'u-tutor', name: 'Tina' }] })),
@@ -70,6 +71,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(q.getApprEnrolment).mockResolvedValue(enrolment as never);
   vi.mocked(q.isProgrammeTutor).mockResolvedValue(false);
+  vi.mocked(q.isProgrammeTutorOfLinked).mockResolvedValue(false);
   vi.mocked(isTutorAllocatedToLearner).mockResolvedValue(false);
   vi.mocked(getOrgMemberRoleId).mockResolvedValue(2);
 });
@@ -91,6 +93,18 @@ describe('access rule — named OR programme tutor', () => {
     expect(q.isProgrammeTutor).toHaveBeenCalledWith(PROG_A, 'u-tutor');
     // the same learner on another programme stays closed
     expect(await canAccessLearner(tutor, ORG, LRN, PROG_B)).toBe(false);
+  });
+
+  it('a tutor of the LINKED programme (a Diploma + Standard pair) reaches it as the third branch', async () => {
+    vi.mocked(q.isProgrammeTutorOfLinked).mockImplementation(async (_learner, programmeId) => programmeId === PROG_A);
+    expect(await status(getEnrolmentForActor(tutor, ENR))).toBe(200);
+    expect(q.isProgrammeTutorOfLinked).toHaveBeenCalledWith(LRN, PROG_A, 'u-tutor');
+    // an unlinked enrolment (the query answers false) stays closed, and the branch is only reached after the other two
+    expect(await canAccessLearner(tutor, ORG, LRN, PROG_B)).toBe(false);
+    vi.mocked(isTutorAllocatedToLearner).mockResolvedValue(true);
+    vi.mocked(q.isProgrammeTutorOfLinked).mockClear();
+    expect(await canAccessLearner(tutor, ORG, LRN, PROG_A)).toBe(true);
+    expect(q.isProgrammeTutorOfLinked).not.toHaveBeenCalled();
   });
 
   it('programme assignment never crosses orgs, and learners/admins are unaffected', async () => {

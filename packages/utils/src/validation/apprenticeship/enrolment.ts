@@ -4,6 +4,7 @@ import {
   APPR_EVIDENCE_TITLE_MAX,
   APPR_NOTE_KINDS,
   APPR_NOTE_MAX,
+  APPR_PROGRAMME_TYPES,
   APPR_PROGRESS_STATUSES
 } from '../../constants/apprenticeship';
 import { toDayNumber } from '../../functions/apprenticeship-progress';
@@ -26,6 +27,7 @@ export const ZEnrolmentListQuery = z.object({
   programmeId: z.uuid().optional(),
   tutorId: z.uuid().optional(),
   status: z.enum(APPR_PROGRESS_STATUSES).optional(),
+  type: z.enum(APPR_PROGRAMME_TYPES).optional(),
   search: z.string().trim().max(100).optional(),
   // 'true' → learners with neither a named tutor nor a programme tutor.
   noTutor: z
@@ -59,6 +61,34 @@ export const ZEnrolmentCreate = z
     path: ['plannedEndDate']
   });
 export type EnrolmentCreateInput = z.infer<typeof ZEnrolmentCreate>;
+
+/** Enrol an apprentice on one programme or on a Diploma + Standard pair in one go. */
+export const ZApprenticeshipCreate = z
+  .object({
+    learner: learnerRef,
+    tutorId: z.uuid(),
+    contractedHoursWeek: z.number().min(0.5).max(168).nullish(),
+    otjTargetMinutesOverride: z.number().int().min(0).max(10_000_000).nullish(),
+    enrolments: z
+      .array(
+        z
+          .object({ programmeId: z.uuid(), startDate: isoDate, plannedEndDate: isoDate })
+          .refine((v) => toDayNumber(v.plannedEndDate)! >= toDayNumber(v.startDate)!, {
+            message: 'Planned end date must be on or after the start date',
+            path: ['plannedEndDate']
+          })
+      )
+      .min(1)
+      .max(2)
+  })
+  .refine((v) => new Set(v.enrolments.map((e) => e.programmeId)).size === v.enrolments.length, {
+    message: 'Pick two different programmes',
+    path: ['enrolments']
+  });
+export type ApprenticeshipCreateInput = z.infer<typeof ZApprenticeshipCreate>;
+
+export const ZEnrolmentLink = z.object({ enrolmentId: z.uuid() });
+export type EnrolmentLinkInput = z.infer<typeof ZEnrolmentLink>;
 
 export const ZEnrolmentUpdate = z
   .object({

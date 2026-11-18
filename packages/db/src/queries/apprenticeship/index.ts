@@ -14,3 +14,4 @@ export * from './onboarding';
 export * from './iqa';
 export * from './summary';
 export * from './report';
+export * from './overview';

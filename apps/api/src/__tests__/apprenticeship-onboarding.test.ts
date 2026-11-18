@@ -8,6 +8,7 @@ const tx = { tx: true, execute: vi.fn(async () => undefined) };
 
 vi.mock('@cio/db/queries/apprenticeship', () => ({
   isProgrammeTutor: vi.fn(async () => false),
+  isProgrammeTutorOfLinked: vi.fn(async () => false),
   getApprEnrolment: vi.fn(),
   countOnboardingTypes: vi.fn(async () => 3),
   insertOnboardingTypes: vi.fn(async (rows: unknown[]) => rows.map((r, i) => ({ id: `new-${i}`, ...(r as object) }))),

@@ -9,19 +9,27 @@
   import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
   import PencilIcon from '@lucide/svelte/icons/pencil';
   import PlusIcon from '@lucide/svelte/icons/plus';
+  import ExternalLinkIcon from '@lucide/svelte/icons/arrow-up-right';
   import type { PortfolioStore } from '../../stores/portfolio.svelte';
   import CriterionPopover from './criterion-popover.svelte';
   import ProgressBar from '../shared/progress-bar.svelte';
   import StatusChip from '../shared/status-chip.svelte';
+  import ProgrammeTypeChip from '../shared/programme-type-chip.svelte';
   import { fmtDate, fmtPct } from '../shared/format';
 
   // Units tab: per qualification one row per unit; clicking a unit opens its criteria IN PLACE (no page change).
-  // Dates can be set inline. Every number is the API's.
+  // Dates can be set inline. Every number is the API's. A paired learner gets a Diploma | Standard switch; each unit
+  // can also open its own page (`unitHref`, when the shell provides one).
 
   interface Props {
     store: PortfolioStore;
+    /** Link to the unit page of one unit of one qualification (enrolment). Omit to hide the link. */
+    unitHref?: (qualEnrolmentId: string, unitId: string) => string;
   }
-  let { store }: Props = $props();
+  let { store, unitHref }: Props = $props();
+
+  const portfolio = $derived(store.activePortfolio);
+  const qualEnrolmentId = $derived(portfolio?.enrolment.id ?? store.enrolmentId);
 
   const open = new SvelteSet<string>();
   let editingUnit = $state<string | null>(null);
@@ -46,20 +54,40 @@
       dateError = 'Target date must be on or after the start date.';
       return;
     }
-    const ok = await store.setUnitDates({
-      units: [{ unitId, startDate: editStart || null, targetDate: editTarget || null }]
-    });
+    const ok = await store.setUnitDates(
+      { units: [{ unitId, startDate: editStart || null, targetDate: editTarget || null }] },
+      qualEnrolmentId
+    );
     if (ok) editingUnit = null;
     else dateError = 'Could not save the dates.';
   }
 </script>
 
+{#if store.portfolios.length > 1}
+  <div class="mb-4 inline-flex rounded-lg border p-0.5" role="group" aria-label="Qualification">
+    {#each store.portfolios as p (p.enrolment.id)}
+      <button
+        type="button"
+        class="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium {p.enrolment.id === qualEnrolmentId
+          ? 'bg-(--primary) text-(--primary-foreground)'
+          : 'hover:bg-(--muted)'}"
+        aria-pressed={p.enrolment.id === qualEnrolmentId}
+        onclick={() => (store.selectedQualId = p.enrolment.id)}
+      >
+        {p.programme.type === 'STANDARD' ? 'Standard' : 'Diploma'}
+        <span class="hidden max-w-48 truncate text-xs font-normal opacity-80 sm:inline">{p.programme.title}</span>
+      </button>
+    {/each}
+  </div>
+{/if}
+
 <div class="space-y-6">
-  {#each store.data?.qualifications ?? [] as qual (qual.id)}
+  {#each portfolio?.qualifications ?? [] as qual (qual.id)}
     <section aria-label={qual.title}>
       <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <h3 class="font-semibold">
+        <h3 class="flex flex-wrap items-center gap-2 font-semibold">
           {qual.title}
+          {#if portfolio?.programme.type}<ProgrammeTypeChip type={portfolio.programme.type} />{/if}
           {#if qual.reference}<span class="text-sm font-normal text-(--muted-foreground)">
               · {qual.reference}</span
             >{/if}
@@ -97,8 +125,18 @@
                 >
               </button>
 
-              <div class="justify-self-end md:justify-self-auto">
+              <div class="flex items-center gap-2 justify-self-end md:justify-self-auto">
                 <StatusChip status={unit.status} />
+                {#if unitHref}
+                  <a
+                    href={unitHref(qualEnrolmentId, unit.id)}
+                    class="p-1 text-(--muted-foreground) hover:text-(--foreground)"
+                    aria-label="Open unit page: {unit.title}"
+                    title="Open unit page"
+                  >
+                    <ExternalLinkIcon size={15} />
+                  </a>
+                {/if}
               </div>
 
               <!-- While editing, the date inputs + buttons take a full row so nothing overlaps. -->
@@ -184,6 +222,9 @@
                           {store}
                           criterionId={c.id}
                           label="Evidence for {c.code}"
+                          code={c.code}
+                          text={c.text}
+                          enrolmentId={qualEnrolmentId}
                           triggerClass="rounded-full border px-2.5 py-0.5 text-xs hover:bg-(--muted)"
                         >
                           {c.evidenceCount} evidence{c.pendingCount > 0 ? ` (${c.pendingCount} pending)` : ''}
@@ -195,7 +236,7 @@
                         aria-label="Add evidence for {c.code}"
                         disabled={store.evidenceBlocked}
                         title={store.evidenceBlocked ? store.blockedMessage : undefined}
-                        onclick={() => store.openNewEvidence([c.id])}
+                        onclick={() => store.openNewEvidence([c.id], null, qualEnrolmentId)}
                       >
                         <PlusIcon size={14} class="mr-1" /> Evidence
                       </Button>
