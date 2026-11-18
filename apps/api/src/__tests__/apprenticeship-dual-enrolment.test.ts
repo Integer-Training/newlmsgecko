@@ -5,6 +5,10 @@ import type { Actor } from '@cio/db/actor';
 // learner-check, and the folded learners list. All DB access is mocked; the rules under test live in the service.
 
 vi.mock('@cio/db/queries/apprenticeship', () => ({
+  lockApprEnrolment: vi.fn(async () => null),
+  moveOtjLogs: vi.fn(async () => 0),
+  listLinkedUnitCounts: vi.fn(async () => new Map()),
+  sumValidatedOtjLogMinutes: vi.fn(async () => 0),
   isProgrammeTutor: vi.fn(async () => false),
   isProgrammeTutorOfLinked: vi.fn(async () => false),
   getApprProgramme: vi.fn(),
@@ -56,6 +60,7 @@ vi.mock('@api/services/organization/allocation', () => ({ createTutorAllocation:
 vi.mock('@api/middlewares/guards/ownership', () => ({ isAllocatedTutor: vi.fn(async () => false) }));
 
 import * as q from '@cio/db/queries/apprenticeship';
+import { recomputeEnrolment } from '@api/services/apprenticeship/progress';
 import { recordAudit } from '@cio/db/audit';
 import { createOrgUser } from '@api/services/organization/users';
 import { createTutorAllocation } from '@api/services/organization/allocation';
@@ -495,6 +500,20 @@ describe('resolveApprenticeship / link / unlink', () => {
       expect(vi.mocked(recordAudit).mock.calls[0][0]).toMatchObject({ action: 'appr.enrolment.linked' });
     });
 
+    it('locks both rows in id order, moves the component logs to the carrier and recomputes the pair in the same tx', async () => {
+      await linkEnrolment(admin, B, { enrolmentId: A });
+      // Lock order is ascending id whichever half the caller named, and happens before the link is written.
+      expect(vi.mocked(q.lockApprEnrolment).mock.calls.map((c) => c[1])).toEqual([A, B]);
+      expect(vi.mocked(q.lockApprEnrolment).mock.invocationCallOrder[1]).toBeLessThan(
+        vi.mocked(q.linkApprEnrolments).mock.invocationCallOrder[0]
+      );
+      expect(q.moveOtjLogs).toHaveBeenCalledWith({ tx: true }, B, A);
+      expect(recomputeEnrolment).toHaveBeenCalledWith({ tx: true }, A, { claimGatewayReady: true });
+      const order = (fn: unknown) => (fn as { mock: { invocationCallOrder: number[] } }).mock.invocationCallOrder[0];
+      expect(order(q.linkApprEnrolments)).toBeLessThan(order(q.moveOtjLogs));
+      expect(order(q.moveOtjLogs)).toBeLessThan(order(recomputeEnrolment));
+    });
+
     it('locks the learner inside the transaction before reading the enrolments it checks', async () => {
       await linkEnrolment(admin, A, { enrolmentId: B });
       expect(q.lockLearnerEnrolments).toHaveBeenCalledWith({ tx: true }, LRN);
@@ -560,10 +579,21 @@ describe('resolveApprenticeship / link / unlink', () => {
       expect(vi.mocked(recordAudit).mock.calls[0][0]).toMatchObject({ action: 'appr.enrolment.unlinked' });
     });
 
+    it('locks the pair, re-checks cross-mapping in the tx, and re-derives BOTH halves after the split (logs stay on the carrier)', async () => {
+      await unlinkEnrolment(admin, 'component');
+      expect(vi.mocked(q.lockApprEnrolment).mock.calls.map((c) => c[1])).toEqual(['carrier', 'component']);
+      expect(vi.mocked(q.countCrossMappedEvidence).mock.calls[0][2]).toEqual({ tx: true });
+      expect(vi.mocked(recomputeEnrolment).mock.calls.map((c) => c[1])).toEqual(['carrier', 'component']);
+      const order = (fn: unknown) => (fn as { mock: { invocationCallOrder: number[] } }).mock.invocationCallOrder[0];
+      expect(order(q.unlinkApprEnrolment)).toBeLessThan(order(recomputeEnrolment));
+      expect(q.moveOtjLogs).not.toHaveBeenCalled();
+    });
+
     it('409 while evidence maps across the pair, and nothing is written', async () => {
       vi.mocked(q.countCrossMappedEvidence).mockResolvedValue(3);
       expect(await status(unlinkEnrolment(admin, 'carrier'))).toBe(409);
       expect(q.unlinkApprEnrolment).not.toHaveBeenCalled();
+      expect(recomputeEnrolment).not.toHaveBeenCalled();
     });
 
     it('400 for an enrolment that is not linked; admin only', async () => {
@@ -680,6 +710,29 @@ describe('learners list folds a pair into one row', () => {
     expect(item.overall.status).toBe(worst(item.status, item.linked!.status));
   });
 
+  it('a linked pair gateway readiness counts the component units too (AUTO_UNITS across both qualifications)', async () => {
+    const unitsOnly = [{ key: 'units', label: 'All units complete', kind: 'AUTO_UNITS' }];
+    const carrierRow = listRow({
+      id: 'carrier',
+      gatewayChecklist: unitsOnly,
+      unitsTotal: 2,
+      unitsComplete: 2,
+      linked: {
+        id: 'component',
+        programmeId: STD,
+        programmeTitle: 'L3 Standard',
+        programmeType: 'STANDARD',
+        actualPct: 20
+      }
+    });
+    vi.mocked(q.listEnrolmentRows).mockResolvedValue([carrierRow] as never);
+    vi.mocked(q.listLinkedUnitCounts).mockResolvedValue(new Map([['carrier', { total: 3, complete: 1 }]]));
+    expect((await listEnrolments(admin, query as never, NOW)).items[0].gatewayReady).toBe(false);
+    expect(q.listLinkedUnitCounts).toHaveBeenCalledWith(['carrier']);
+    vi.mocked(q.listLinkedUnitCounts).mockResolvedValue(new Map([['carrier', { total: 3, complete: 3 }]]));
+    expect((await listEnrolments(admin, query as never, NOW)).items[0].gatewayReady).toBe(true);
+  });
+
   it('status filter and counts use the rolled-up overall.status for a linked row (own status for an unlinked one)', async () => {
     // At NOW the expected % is ~41. The carrier's 60% is ahead of plan; its component's 5% is far behind (concern).
     const component = {
@@ -773,6 +826,22 @@ describe('portfolio gains programme.type and linked', () => {
       carrierId: 'carrier',
       counterpart: { enrolmentId: 'component', programmeId: STD, title: 'L3 Standard', type: 'STANDARD' }
     });
+  });
+
+  it('the gateway counts the counterpart units too: ready only when both halves are complete', async () => {
+    const unitsOnly = [{ key: 'units', label: 'All units complete', kind: 'AUTO_UNITS' }];
+    vi.mocked(q.getEnrolmentOverview).mockResolvedValue(
+      overview({
+        gatewayChecklist: unitsOnly,
+        counterpart: { enrolmentId: 'component', programmeId: STD, title: 'L3 Standard', type: 'STANDARD' }
+      }) as never
+    );
+    vi.mocked(q.listEnrolmentUnitRows).mockImplementation((async (id: string) =>
+      id === 'component' ? [{ completedAt: '2026-05-01' }, { completedAt: null }] : []) as never);
+    expect((await getPortfolio(admin, 'carrier')).gateway.ready).toBe(false);
+    vi.mocked(q.listEnrolmentUnitRows).mockImplementation((async (id: string) =>
+      id === 'component' ? [{ completedAt: '2026-05-01' }, { completedAt: '2026-05-02' }] : []) as never);
+    expect((await getPortfolio(admin, 'carrier')).gateway.ready).toBe(true);
   });
 
   it('the component sees its carrier; an unlinked enrolment has linked null', async () => {

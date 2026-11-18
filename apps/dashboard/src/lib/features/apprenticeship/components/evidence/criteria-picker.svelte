@@ -1,10 +1,13 @@
 <script lang="ts">
   import { SvelteSet } from 'svelte/reactivity';
   import { Checkbox } from '@cio/ui/base/checkbox';
+  import { Button } from '@cio/ui/base/button';
   import { Input } from '@cio/ui/base/input';
   import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
   import ChevronRightIcon from '@lucide/svelte/icons/chevron-right';
+  import { APPR_PROGRAMME_TYPE_LABELS, type ApprProgrammeType } from '@cio/utils/constants/apprenticeship';
   import type { PickerQualification } from '../../api/evidence.svelte';
+  import ProgrammeTypeChip from '../shared/programme-type-chip.svelte';
 
   // Criteria picker: qualification → units (collapsible) → criteria, with a search box, an optional "show unmet only"
   // filter (only when the caller knows which criteria are met), per-unit select-all and a selected count. Pre-ticked
@@ -17,8 +20,49 @@
     metIds?: Set<string> | null;
     disabled?: boolean;
     idPrefix?: string;
+    /** Show the "This learner is also on <other>. Map to its criteria too?" prompt (the evidence form, not the review). */
+    pairPrompt?: boolean;
   }
-  let { tree, selected = $bindable(), metIds = null, disabled = false, idPrefix = 'crit' }: Props = $props();
+  let {
+    tree,
+    selected = $bindable(),
+    metIds = null,
+    disabled = false,
+    idPrefix = 'crit',
+    pairPrompt = true
+  }: Props = $props();
+
+  // A linked pair arrives as two qualifications of different types: they get their own tabs.
+  const types = $derived(
+    (['DIPLOMA', 'STANDARD'] as ApprProgrammeType[]).filter((t) => tree.some((qual) => qual.type === t))
+  );
+  const tabbed = $derived(types.length > 1);
+  let pickedTab = $state<ApprProgrammeType | null>(null);
+  const activeType = $derived<ApprProgrammeType | null>(
+    pickedTab && types.includes(pickedTab)
+      ? pickedTab
+      : (types.find((t) =>
+          tree.some((qual) => qual.type === t && qual.units.some((u) => u.criteria.some((c) => chosen.has(c.id))))
+        ) ??
+          types[0] ??
+          null)
+  );
+  const tickedBy = (t: ApprProgrammeType) =>
+    tree
+      .filter((qual) => qual.type === t)
+      .reduce(
+        (n, qual) => n + qual.units.reduce((m, u) => m + u.criteria.filter((c) => chosen.has(c.id)).length, 0),
+        0
+      );
+  // Mapped to one side only → offer the other (non-blocking).
+  let promptDismissed = $state(false);
+  const otherSide = $derived.by(() => {
+    if (!pairPrompt || !tabbed || promptDismissed || selected.length === 0) return null;
+    const used = types.filter((t) => tickedBy(t) > 0);
+    if (used.length !== 1) return null;
+    const other = types.find((t) => t !== used[0])!;
+    return { type: other, title: tree.find((qual) => qual.type === other)?.title ?? APPR_PROGRAMME_TYPE_LABELS[other] };
+  });
 
   let search = $state('');
   let unmetOnly = $state(false);
@@ -38,6 +82,7 @@
   const q = $derived(search.trim().toLowerCase());
   const visible = $derived(
     tree
+      .filter((qual) => !tabbed || qual.type === activeType)
       .map((qual) => ({
         ...qual,
         units: qual.units
@@ -95,12 +140,45 @@
     <span class="ml-auto text-sm text-(--muted-foreground)" aria-live="polite">{selected.length} selected</span>
   </div>
 
+  {#if tabbed}
+    <div class="flex gap-1" role="tablist" aria-label="Qualification">
+      {#each types as t (t)}
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeType === t}
+          class="flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm {activeType === t
+            ? 'border-(--primary) bg-(--muted)'
+            : 'hover:bg-(--muted)/60'}"
+          onclick={() => (pickedTab = t)}
+        >
+          {APPR_PROGRAMME_TYPE_LABELS[t]}
+          <ProgrammeTypeChip type={t} />
+          {#if tickedBy(t) > 0}<span class="text-xs text-(--muted-foreground)">{tickedBy(t)}</span>{/if}
+        </button>
+      {/each}
+    </div>
+  {/if}
+
+  {#if otherSide}
+    <div
+      role="status"
+      class="flex flex-wrap items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-100"
+    >
+      <span class="min-w-0 flex-1">This learner is also on {otherSide.title}. Map to its criteria too?</span>
+      <Button type="button" size="sm" variant="outline" onclick={() => (pickedTab = otherSide.type)}>
+        Show {APPR_PROGRAMME_TYPE_LABELS[otherSide.type]} criteria
+      </Button>
+      <Button type="button" size="sm" variant="ghost" onclick={() => (promptDismissed = true)}>Not now</Button>
+    </div>
+  {/if}
+
   <div class="max-h-[22rem] overflow-y-auto rounded-md border">
     {#if visible.length === 0}
       <p class="p-3 text-sm text-(--muted-foreground)">No criteria match.</p>
     {/if}
     {#each visible as qual (qual.id)}
-      {#if tree.length > 1}
+      {#if tree.length > 1 && !tabbed}
         <p class="bg-(--muted)/50 px-3 py-1.5 text-xs font-medium tracking-wide text-(--muted-foreground) uppercase">
           {qual.title}
         </p>

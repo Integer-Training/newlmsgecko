@@ -9,6 +9,8 @@ import type { AuthSession } from '@api/types/auth';
 
 vi.mock('@cio/db/queries/apprenticeship', () => ({
   isProgrammeTutor: vi.fn(async () => false),
+  sumValidatedOtjLogMinutes: vi.fn(async () => 0),
+  listLinkedUnitCounts: vi.fn(async () => new Map()),
   isProgrammeTutorOfLinked: vi.fn(async () => false),
   getApprEnrolment: vi.fn(),
   getApprProgramme: vi.fn(),

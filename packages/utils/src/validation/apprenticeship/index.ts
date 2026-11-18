@@ -13,3 +13,4 @@ export * from './gateway';
 export * from './tutors';
 export * from './onboarding';
 export * from './iqa';
+export * from './otj';

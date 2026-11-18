@@ -12,6 +12,8 @@ vi.mock('@cio/db/queries/apprenticeship', () => ({
   getApprProgrammeStructure: vi.fn(),
   countEvidenceByCriterion: vi.fn(async () => new Map()),
   listCriterionAcceptedDates: vi.fn(async () => new Map()),
+  getLinkedEnrolment: vi.fn(async () => null),
+  sumValidatedOtjLogMinutes: vi.fn(async () => 0),
   getEvidenceTotals: vi.fn(async () => ({ submitted: 0, accepted: 0, referred: 0, otjMinutes: 0 })),
   listEnrolmentUnitRows: vi.fn(async () => []),
   sumGlhLogMinutes: vi.fn(async () => 0),

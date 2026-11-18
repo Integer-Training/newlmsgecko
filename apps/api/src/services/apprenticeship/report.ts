@@ -2,11 +2,15 @@ import { getEnrolmentForActor } from '@api/services/apprenticeship/access';
 import { getPortfolio } from '@api/services/apprenticeship/enrolment';
 import { listEnrolmentTasks } from '@api/services/apprenticeship/tasks';
 import { nameGatewayActors } from '@api/services/apprenticeship/gateway-names';
+import { buildApprenticeshipProgress } from '@api/services/apprenticeship/gateway';
 import type { Actor } from '@cio/db/actor';
 import { recordAudit } from '@cio/db/audit';
 import {
+  getApprEnrolment,
   getApprProgrammeStructure,
+  getLinkedEnrolment,
   listEvidenceForReport,
+  listOtjLogsForReport,
   listReviewsForEnrolment
 } from '@cio/db/queries/apprenticeship';
 import { APPR_PROGRESS_STATUS_LABELS } from '@cio/utils/constants/apprenticeship';
@@ -16,8 +20,12 @@ import { APPR_PROGRESS_STATUS_LABELS } from '@cio/utils/constants/apprenticeship
 // Access = getEnrolmentForActor (admin, tutor in reach, learner self; anything else 404). By design NOT included: IQA
 // samples, onboarding documents, and any file key / URL (evidence files are reported by NAME only).
 
+/** The report is of the whole apprenticeship: either half's id gives the carrier's report, with both qualifications. */
 export async function getPortfolioReport(actor: Actor, enrolmentId: string, now: Date = new Date()) {
-  const enrolment = await getEnrolmentForActor(actor, enrolmentId);
+  const opened = await getEnrolmentForActor(actor, enrolmentId);
+  const carrierRow = opened.primaryEnrolmentId ? await getApprEnrolment(opened.primaryEnrolmentId) : null;
+  const enrolment = carrierRow ?? opened;
+  const component = await getLinkedEnrolment(enrolment.id);
   const [portfolio, tasks, evidence, reviews, structure] = await Promise.all([
     getPortfolio(actor, enrolment.id),
     listEnrolmentTasks(actor, enrolment.id, now),
@@ -25,16 +33,35 @@ export async function getPortfolioReport(actor: Actor, enrolmentId: string, now:
     listReviewsForEnrolment(enrolment.id),
     getApprProgrammeStructure(enrolment.programmeId)
   ]);
-  const gateway = await nameGatewayActors(portfolio.gateway);
-  const glhByUnit = new Map(structure.units.map((u) => [u.id, u.glh ?? null]));
-  const firstQualification = portfolio.qualifications[0];
+  // The other qualification of a pair: its units, evidence and tasks join the report; the gateway is the pair's.
+  const [otherPortfolio, otherTasks, otherEvidence, otherStructure, pairProgress] = component
+    ? await Promise.all([
+        getPortfolio(actor, component.id),
+        listEnrolmentTasks(actor, component.id, now),
+        listEvidenceForReport(component.organizationId, component.programmeId, component.learnerId),
+        getApprProgrammeStructure(component.programmeId),
+        buildApprenticeshipProgress(enrolment.id)
+      ])
+    : [null, null, null, null, null];
+  const otjLogs = await listOtjLogsForReport(component ? [enrolment.id, component.id] : [enrolment.id]);
+  const gateway = await nameGatewayActors(pairProgress?.gateway ?? portfolio.gateway);
+  const glhByUnit = new Map([...structure.units, ...(otherStructure?.units ?? [])].map((u) => [u.id, u.glh ?? null]));
+  const qualifications = [
+    ...portfolio.qualifications.map((q) => ({ ...q, programmeTitle: portfolio.programme.title })),
+    ...(otherPortfolio?.qualifications ?? []).map((q) => ({ ...q, programmeTitle: otherPortfolio!.programme.title }))
+  ];
+  const allEvidence = [...evidence, ...(otherEvidence ?? [])].sort((x, y) =>
+    String(x.createdAt).localeCompare(String(y.createdAt))
+  );
+  const allTasks = [...tasks.items, ...(otherTasks?.items ?? [])];
+  const firstQualification = qualifications[0];
 
   await recordAudit({
     actor,
     action: 'appr.portfolio.report',
     entityType: 'appr_enrolment',
     entityId: enrolment.id,
-    metadata: { evidence: evidence.length }
+    metadata: { evidence: allEvidence.length, linked: Boolean(component) }
   });
 
   const e = portfolio.enrolment;
@@ -48,7 +75,8 @@ export async function getPortfolioReport(actor: Actor, enrolmentId: string, now:
       reference: portfolio.programme.reference,
       level: portfolio.programme.level,
       awardingBody: firstQualification?.awardingBody ?? null,
-      qualifications: portfolio.qualifications.map((q) => ({
+      qualifications: qualifications.map((q) => ({
+        programmeTitle: q.programmeTitle,
         title: q.title,
         reference: q.reference,
         level: q.level,
@@ -61,8 +89,8 @@ export async function getPortfolioReport(actor: Actor, enrolmentId: string, now:
       status: s.status,
       statusLabel: APPR_PROGRESS_STATUS_LABELS[s.status],
       achievedAt: e.achievedAt,
-      stage: s.stage,
-      stageLabel: s.stageLabel,
+      stage: gateway.stage,
+      stageLabel: gateway.stageLabel,
       epaBookedDate: gateway.epaBookedDate,
       epaResult: gateway.epaResult,
       epaResultDate: gateway.epaResultDate
@@ -76,18 +104,19 @@ export async function getPortfolioReport(actor: Actor, enrolmentId: string, now:
       status: s.otj.status
     },
     glh: s.glh,
-    units: portfolio.qualifications.flatMap((q) =>
+    units: qualifications.flatMap((q) =>
       q.units.map((u) => ({
         ref: u.code,
         title: u.title,
         qualificationTitle: q.title,
+        programmeTitle: q.programmeTitle,
         glh: glhByUnit.get(u.id) ?? null,
         completePct: u.actualPct,
         achievedAt: u.achievedAt,
         criteria: u.criteria.map((c) => ({ ref: c.code, title: c.text, met: c.met, achievedAt: c.achievedAt }))
       }))
     ),
-    evidence: evidence.map((ev) => ({
+    evidence: allEvidence.map((ev) => ({
       title: ev.title,
       typeLabel: ev.typeLabel,
       status: ev.status,
@@ -99,11 +128,19 @@ export async function getPortfolioReport(actor: Actor, enrolmentId: string, now:
       minutes: ev.minutes,
       includeOtj: ev.includeOtj
     })),
-    tasks: tasks.items.map((t) => ({
+    tasks: allTasks.map((t) => ({
       title: t.title,
       dueDate: t.dueDate,
       status: t.status,
       overdue: t.overdue
+    })),
+    // Off-the-job log: validated + pending entries (rejected are left out), both halves of a pair.
+    otjLog: otjLogs.map((l) => ({
+      title: l.title,
+      logDate: l.logDate,
+      minutes: l.minutes,
+      isOtj: l.isOtj,
+      status: l.status
     })),
     reviews: reviews.map((r) => ({
       scheduledDate: r.scheduledDate,

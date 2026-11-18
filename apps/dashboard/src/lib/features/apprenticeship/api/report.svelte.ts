@@ -14,6 +14,7 @@ export interface PortfolioReport {
     level: string | number | null;
     awardingBody: string | null;
     qualifications: {
+      programmeTitle?: string;
       title: string;
       reference: string | null;
       level: string | number | null;
@@ -40,6 +41,7 @@ export interface PortfolioReport {
     ref: string | null;
     title: string;
     qualificationTitle: string;
+    programmeTitle?: string;
     glh: number | null;
     completePct: number | null;
     achievedAt: string | null;
@@ -58,6 +60,8 @@ export interface PortfolioReport {
     includeOtj: boolean;
   }[];
   tasks: { title: string; dueDate: string | null; status: string; overdue: boolean }[];
+  /** Off-the-job log entries (validated + pending), both halves of a linked pair. */
+  otjLog?: { title: string; logDate: string; minutes: number; isOtj: boolean; status: string }[];
   reviews: {
     scheduledDate: string | null;
     heldDate: string | null;

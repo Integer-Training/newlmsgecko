@@ -423,6 +423,20 @@ export async function listEnrolmentIdsForProgramme(programmeId: string, client: 
   return rows.map((r) => r.id);
 }
 
+/**
+ * The CARRIER enrolment id of every apprenticeship homed on a programme, deduplicated, in ONE statement: a standalone
+ * enrolment is its own carrier; a component resolves to its primary enrolment (a pair appears once).
+ */
+export async function listCarrierIdsForProgramme(programmeId: string, client: DbOrTxClient = db): Promise<string[]> {
+  const rows = await client
+    .selectDistinct({
+      id: sql<string>`coalesce(${schema.apprEnrolment.primaryEnrolmentId}, ${schema.apprEnrolment.id})`
+    })
+    .from(schema.apprEnrolment)
+    .where(eq(schema.apprEnrolment.programmeId, programmeId));
+  return rows.map((r) => r.id);
+}
+
 // ── Reorder: ids that belong to a parent, and the sort write ──
 
 export async function listChildIds(

@@ -471,3 +471,16 @@ export function otjCompletionPct(doneMinutes: number, targetMinutes: number | nu
   if (targetMinutes === null || targetMinutes === undefined || targetMinutes <= 0) return null;
   return Math.min(100, Math.floor((Math.max(0, doneMinutes) / targetMinutes) * 100));
 }
+
+/** Minutes as "372 hours 30 minutes" / "1 hour" / "45 minutes" / "0 hours". */
+export function fmtHoursMinutes(minutes: number): string {
+  const total = Math.max(0, Math.round(Number.isFinite(minutes) ? minutes : 0));
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  const hPart = `${h} ${h === 1 ? 'hour' : 'hours'}`;
+  const mPart = `${m} ${m === 1 ? 'minute' : 'minutes'}`;
+  if (h === 0 && m === 0) return '0 hours';
+  if (h === 0) return mPart;
+  if (m === 0) return hPart;
+  return `${hPart} ${mPart}`;
+}

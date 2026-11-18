@@ -111,7 +111,10 @@ export async function downloadPortfolioPdf(report: PortfolioReport): Promise<voi
           prog.awardingBody ? `, ${prog.awardingBody}` : ''
         }`
       ],
-      ['Qualifications', prog.qualifications.map((q) => q.title).join('; ') || dash],
+      [
+        prog.qualifications.length > 1 ? 'Qualifications (both)' : 'Qualifications',
+        prog.qualifications.map((q) => q.title).join('; ') || dash
+      ],
       ['Start / planned end', `${date(e.startDate)} to ${date(e.plannedEndDate)}`],
       ['Stage / status', `${e.stageLabel} / ${e.statusLabel}`],
       ...(e.achievedAt ? [['Achieved', date(e.achievedAt)]] : []),
@@ -156,8 +159,15 @@ export async function downloadPortfolioPdf(report: PortfolioReport): Promise<voi
   // Units & criteria
   heading('Units and criteria');
   if (report.units.length === 0) para('No units.');
+  let lastQualification: string | null = null;
+  const multiQualification = prog.qualifications.length > 1;
   for (const u of report.units) {
     ensure(24);
+    if (multiQualification && u.qualificationTitle !== lastQualification) {
+      lastQualification = u.qualificationTitle;
+      y += 2;
+      para(`${u.programmeTitle ? `${u.programmeTitle} - ` : ''}${u.qualificationTitle}`, { bold: true, size: 10.5 });
+    }
     para(
       `${u.ref ? `${u.ref}  ` : ''}${u.title}  (${pct(u.completePct)} complete${u.achievedAt ? `, achieved ${date(u.achievedAt)}` : ''}${u.glh !== null ? `, ${u.glh} GLH` : ''})`,
       { bold: true }
@@ -190,6 +200,26 @@ export async function downloadPortfolioPdf(report: PortfolioReport): Promise<voi
         ev.reviewedAt ? `${text(ev.reviewedByName)}\n${date(ev.reviewedAt)}` : dash
       ]),
       styles: { ...tableStyle.styles, fontSize: 7.5 }
+    });
+    afterTable();
+  }
+
+  // Off-the-job log
+  heading('Off-the-job log');
+  const otjLog = report.otjLog ?? [];
+  if (otjLog.length === 0) para('No off-the-job log entries.');
+  else {
+    autoTable(doc, {
+      ...tableStyle,
+      startY: y,
+      head: [['Date', 'Title', 'Time', 'Status']],
+      body: otjLog.map((l) => [
+        date(l.logDate),
+        l.title,
+        hours(l.minutes),
+        `${l.status === 'VALIDATED' ? 'Validated' : 'Pending'}${l.isOtj ? '' : ' (not off-the-job)'}`
+      ]),
+      columnStyles: { 0: { cellWidth: 28 }, 2: { cellWidth: 22 }, 3: { cellWidth: 40 } }
     });
     afterTable();
   }

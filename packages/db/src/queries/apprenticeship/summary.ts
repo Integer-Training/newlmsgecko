@@ -73,3 +73,27 @@ export async function countIqaOpen(
     .where(and(...conditions));
   return { pending: row?.pending ?? 0, awaitingAck: row?.awaitingAck ?? 0 };
 }
+
+/**
+ * Units complete / total of the linked COMPONENT of each given carrier (a pair's gateway counts units across both
+ * qualifications). Carriers without a component are absent from the map. One statement.
+ */
+export async function listLinkedUnitCounts(carrierIds: string[], client: DbOrTxClient = db) {
+  if (carrierIds.length === 0) return new Map<string, { total: number; complete: number }>();
+  const ids = sql.join(
+    carrierIds.map((id) => sql`${id}::uuid`),
+    sql`, `
+  );
+  const res = await client.execute<{ carrier_id: string; total: number; complete: number }>(
+    sql`select c.primary_enrolment_id as carrier_id, count(eu.unit_id)::int as total,
+      (count(eu.unit_id) filter (where eu.completed_at is not null))::int as complete
+      from appr_enrolment c left join appr_enrolment_unit eu on eu.enrolment_id = c.id
+      where c.primary_enrolment_id in (${ids}) group by c.primary_enrolment_id`
+  );
+  const rows = (Array.isArray(res) ? res : ((res as { rows?: unknown[] }).rows ?? [])) as {
+    carrier_id: string;
+    total: number;
+    complete: number;
+  }[];
+  return new Map(rows.map((r) => [r.carrier_id, { total: Number(r.total), complete: Number(r.complete) }]));
+}

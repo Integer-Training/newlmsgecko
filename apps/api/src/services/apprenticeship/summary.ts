@@ -11,6 +11,7 @@ import {
   countTasksByStatus,
   getApprSettings,
   listEnrolmentRows,
+  listLinkedUnitCounts,
   listOverdueTasks
 } from '@cio/db/queries/apprenticeship';
 import type { ApprProgressStatus } from '@cio/utils/constants/apprenticeship';
@@ -67,6 +68,8 @@ export async function getSummary(actor: Actor, query: SummaryQueryInput, now: Da
     })
   ]);
 
+  // A linked pair is ONE row (the carrier), so every tile counts it once; its gateway counts units across BOTH halves.
+  const linkedUnits = await listLinkedUnitCounts(rows.filter((r) => r.linked).map((r) => r.id));
   const byStatus: Record<ApprProgressStatus, number> = { ON_TARGET: 0, BEHIND: 0, CONCERN: 0, NOT_SET: 0, COMPLETE: 0 };
   const otjByStatus: Record<OtjStatus, number> = { ON_TARGET: 0, BEHIND: 0, CONCERN: 0, NOT_SET: 0 };
   const gateway = { ready: 0, atGateway: 0, epaBooked: 0, achieved: 0, epaFailed: 0 };
@@ -89,8 +92,8 @@ export async function getSummary(actor: Actor, query: SummaryQueryInput, now: Da
     const stage = buildGatewayView({
       checklist: resolveChecklist(r.gatewayChecklist),
       manual: r.gatewayItems,
-      unitsTotal: r.unitsTotal ?? 0,
-      unitsComplete: r.unitsComplete ?? 0,
+      unitsTotal: (r.unitsTotal ?? 0) + (linkedUnits.get(r.id)?.total ?? 0),
+      unitsComplete: (r.unitsComplete ?? 0) + (linkedUnits.get(r.id)?.complete ?? 0),
       otjMinutes: r.otjMinutes,
       otjTargetMinutes: p.otjTargetMinutes,
       enrolment: {

@@ -1,5 +1,10 @@
 import { listTutorsForLearner, listTutorsForLearnerInOrg } from '@cio/db/queries/allocation';
-import { listOrgAdminIds, releaseGatewayReady } from '@cio/db/queries/apprenticeship';
+import {
+  getApprEnrolment,
+  listOrgAdminIds,
+  listTutorsForProgramme,
+  releaseGatewayReady
+} from '@cio/db/queries/apprenticeship';
 import { markNotificationsReadForEntity } from '@cio/db/queries/comms';
 import { emitNotification } from '@api/services/comms/notify';
 
@@ -13,15 +18,84 @@ export const TASK_ENTITY = 'appr_task';
 export const REVIEW_ENTITY = 'appr_review';
 export const ENROLMENT_ENTITY = 'appr_enrolment';
 
-/** Evidence submitted or resubmitted by the apprentice → their ALLOCATED tutor(s). No tutor → nothing sent. */
-export async function notifyEvidenceSubmitted(ctx: { evidenceId: string; learnerId: string }): Promise<void> {
-  const tutors = await listTutorsForLearner(ctx.learnerId);
-  if (tutors.length === 0) return;
+/**
+ * Evidence submitted or resubmitted by the apprentice → their ALLOCATED tutor(s). No tutor → nothing sent.
+ * For a linked Diploma + Standard pair pass `enrolmentId` + `pairEnrolmentId`: the programme tutors of BOTH
+ * enrolments are added too (deduped), because the evidence may be mapped to either qualification.
+ */
+export async function notifyEvidenceSubmitted(ctx: {
+  evidenceId: string;
+  learnerId: string;
+  enrolmentId?: string | null;
+  pairEnrolmentId?: string | null;
+}): Promise<void> {
+  const tutorIds = new Set((await listTutorsForLearner(ctx.learnerId)).map((t) => t.tutorId));
+  if (ctx.pairEnrolmentId) {
+    for (const id of await programmeTutorIdsOfEnrolments([ctx.enrolmentId, ctx.pairEnrolmentId])) tutorIds.add(id);
+  }
+  if (tutorIds.size === 0) return;
   await emitNotification({
     type: 'appr.evidence.submitted',
-    recipients: tutors.map((t) => ({ userId: t.tutorId })),
+    recipients: [...tutorIds].map((userId) => ({ userId })),
     entityType: EVIDENCE_ENTITY,
     entityId: ctx.evidenceId
+  });
+}
+
+/** Programme tutors of the programmes of the given enrolments (ids may repeat / be empty); deduped. */
+async function programmeTutorIdsOfEnrolments(enrolmentIds: (string | null | undefined)[]): Promise<string[]> {
+  const out = new Set<string>();
+  for (const id of new Set(enrolmentIds.filter((x): x is string => !!x))) {
+    const enrolment = await getApprEnrolment(id);
+    if (!enrolment) continue;
+    for (const t of await listTutorsForProgramme(enrolment.programmeId)) out.add(t.id);
+  }
+  return [...out];
+}
+
+/**
+ * Off-the-job log entry submitted by the apprentice (or staff, awaiting validation) → the learner's named tutors plus
+ * the programme tutors of the carrier (and linked) enrolment, deduped, never the author. Entity = the carrier enrolment.
+ */
+export async function notifyOtjSubmitted(ctx: {
+  carrierEnrolmentId: string;
+  componentEnrolmentId?: string | null;
+  learnerId: string;
+  exceptUserId?: string;
+}): Promise<void> {
+  const tutorIds = new Set((await listTutorsForLearner(ctx.learnerId)).map((t) => t.tutorId));
+  for (const id of await programmeTutorIdsOfEnrolments([ctx.carrierEnrolmentId, ctx.componentEnrolmentId])) {
+    tutorIds.add(id);
+  }
+  if (ctx.exceptUserId) tutorIds.delete(ctx.exceptUserId);
+  if (tutorIds.size === 0) return;
+  await emitNotification({
+    type: 'appr.otj.submitted',
+    recipients: [...tutorIds].map((userId) => ({ userId })),
+    entityType: ENROLMENT_ENTITY,
+    entityId: ctx.carrierEnrolmentId
+  });
+}
+
+/**
+ * An off-the-job log entry was validated or rejected → the apprentice. The tutors' "log submitted" alerts are keyed by
+ * the carrier enrolment (not the log), so they are marked read only once NO submitted log is left awaiting review
+ * (`remainingSubmitted === 0`); with other logs still pending the alert stays.
+ */
+export async function notifyOtjReviewed(ctx: {
+  carrierEnrolmentId: string;
+  learnerId: string;
+  outcome: 'VALIDATED' | 'REJECTED';
+  remainingSubmitted?: number;
+}): Promise<void> {
+  if (ctx.remainingSubmitted === 0) {
+    await markNotificationsReadForEntity(ENROLMENT_ENTITY, ctx.carrierEnrolmentId, ['appr.otj.submitted']);
+  }
+  await emitNotification({
+    type: 'appr.otj.reviewed',
+    recipients: [{ userId: ctx.learnerId }],
+    entityType: ENROLMENT_ENTITY,
+    entityId: ctx.carrierEnrolmentId
   });
 }
 

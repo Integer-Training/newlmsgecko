@@ -1,100 +1,107 @@
 <script lang="ts">
-  import * as Table from '@cio/ui/base/table';
-  import { Empty } from '@cio/ui/custom/empty';
-  import GlhSection from './glh-section.svelte';
+  import { Skeleton } from '@cio/ui/base/skeleton';
+  import { Button } from '@cio/ui/base/button';
+  import { isOrgAdmin, isOrgTeamMember } from '$lib/utils/store/org';
+  import { otjApi, type OtjRow, type OtjView } from '../../api/otj.svelte';
   import type { PortfolioStore } from '../../stores/portfolio.svelte';
-  import EvidenceStatusChip from '../shared/evidence-status-chip.svelte';
-  import StatusChip from '../shared/status-chip.svelte';
-  import { fmtDate, fmtMinutes } from '../shared/format';
+  import OverviewCard from '../otj/overview-card.svelte';
+  import LogTable from '../otj/log-table.svelte';
+  import LogDialog from '../otj/log-dialog.svelte';
+  import ReviewDialog from '../otj/review-dialog.svelte';
+  import DatesDialog from './dates-dialog.svelte';
+  import GlhSection from './glh-section.svelte';
 
-  // Off-the-job tab: the target (calculated or overridden, with its source), hours done, hours expected to date and
-  // the status, then the evidence that carries OTJ time. Only ACCEPTED time counts; pending is shown separately.
+  // OTJ progress page (staff portfolio tab and the learner /otj route): the overview card, then the merged log table
+  // (logs + OTJ evidence). Only VALIDATED / accepted time counts. GLH stays below. All figures come from the API.
 
   interface Props {
     store: PortfolioStore;
   }
   let { store }: Props = $props();
 
-  const d = $derived(store.data);
-  const otj = $derived(d?.summary.otj);
-  const source = $derived(
-    d?.enrolment.otjTargetMinutesOverride !== null && d?.enrolment.otjTargetMinutesOverride !== undefined
-      ? 'Manual override'
-      : d?.enrolment.contractedHoursWeek
-        ? `Calculated from ${d.enrolment.contractedHoursWeek} contracted hours a week`
-        : 'Not set — add contracted hours or an override'
-  );
-  const rows = $derived(store.evidence.filter((e) => e.includeOtj && e.minutes > 0));
+  const isStaff = $derived($isOrgTeamMember === true);
+  const isAdmin = $derived($isOrgAdmin === true);
+
+  let view = $state<OtjView | null>(null);
+  let error = $state<string | null>(null);
+  let loading = $state(true);
+  let reqId = 0;
+
+  let logOpen = $state(false);
+  let editing = $state<OtjRow | null>(null);
+  let reviewOpen = $state(false);
+  let reviewRow = $state<OtjRow | null>(null);
+  let reviewDecision = $state<'VALIDATE' | 'REJECT'>('VALIDATE');
+  let datesOpen = $state(false);
+
+  async function load() {
+    const id = ++reqId;
+    const res = await otjApi.get(store.enrolmentId);
+    if (id !== reqId) return;
+    loading = false;
+    if (res.ok) {
+      view = res.data;
+      error = null;
+    } else {
+      error = res.error;
+    }
+  }
+
+  // Reload when the portfolio changes (evidence reviewed, hours edited, ...) or the enrolment id resolves.
+  $effect(() => {
+    store.enrolmentId;
+    store.version;
+    load();
+  });
+
+  // A log changed: refresh the portfolio too so the header chips and summary agree (that bumps the version, which
+  // reloads this page).
+  async function changed() {
+    await Promise.all([load(), store.refresh()]);
+  }
+
+  function add() {
+    editing = null;
+    logOpen = true;
+  }
+  function edit(row: OtjRow) {
+    editing = row;
+    logOpen = true;
+  }
+  function review(row: OtjRow, decision: 'VALIDATE' | 'REJECT') {
+    reviewRow = row;
+    reviewDecision = decision;
+    reviewOpen = true;
+  }
 </script>
 
-{#if d && otj}
-  <div class="space-y-4">
-    <dl class="grid grid-cols-2 gap-3 md:grid-cols-4">
-      <div class="rounded-lg border p-3">
-        <dt class="text-xs text-(--muted-foreground)">Target</dt>
-        <dd class="text-lg font-semibold">{fmtMinutes(otj.targetMinutes)}</dd>
-        <p class="text-xs text-(--muted-foreground)">{source}</p>
-      </div>
-      <div class="rounded-lg border p-3">
-        <dt class="text-xs text-(--muted-foreground)">Done (accepted)</dt>
-        <dd class="text-lg font-semibold">{fmtMinutes(otj.minutes)}</dd>
-      </div>
-      <div class="rounded-lg border p-3">
-        <dt class="text-xs text-(--muted-foreground)">Expected to date</dt>
-        <dd class="text-lg font-semibold">{fmtMinutes(otj.expectedMinutes)}</dd>
-      </div>
-      <div class="rounded-lg border p-3">
-        <dt class="text-xs text-(--muted-foreground)">Status</dt>
-        <dd class="mt-1"><StatusChip status={otj.status} /></dd>
-      </div>
-    </dl>
+<div class="space-y-4">
+  {#if loading}
+    <div class="space-y-2" role="status" aria-label="Loading off-the-job progress">
+      <Skeleton class="h-40 w-full" />
+      <Skeleton class="h-48 w-full" />
+    </div>
+  {:else if error && !view}
+    <div class="rounded-lg border border-rose-200 p-6 text-center">
+      <p role="alert" class="text-sm text-rose-600">{error}</p>
+      <Button variant="outline" size="sm" class="mt-3" onclick={load}>Try again</Button>
+    </div>
+  {:else if view}
+    <OverviewCard summary={view.summary} {isAdmin} onEditHours={() => (datesOpen = true)} />
+    <LogTable
+      rows={view.rows}
+      pendingMinutes={view.summary.pendingMinutes}
+      onAdd={add}
+      onEdit={edit}
+      onReview={review}
+      onViewEvidence={(id) => store.openEvidence(id)}
+      onChanged={changed}
+    />
+  {/if}
 
-    <h3 class="font-semibold">Evidence with off-the-job time</h3>
-    {#if rows.length === 0}
-      <Empty
-        title="No off-the-job evidence"
-        description="Evidence added with “Include in off-the-job hours” appears here."
-      />
-    {:else}
-      <div class="overflow-x-auto rounded-lg border">
-        <Table.Root>
-          <Table.Header>
-            <Table.Row>
-              <Table.Head>Title</Table.Head>
-              <Table.Head>Status</Table.Head>
-              <Table.Head class="text-right">Time</Table.Head>
-              <Table.Head>Created</Table.Head>
-              <Table.Head>By</Table.Head>
-            </Table.Row>
-          </Table.Header>
-          <Table.Body>
-            {#each rows as e (e.id)}
-              <Table.Row class="cursor-pointer" onclick={() => store.openEvidence(e.id)}>
-                <Table.Cell class="font-medium">
-                  <button
-                    type="button"
-                    class="text-left hover:underline"
-                    onclick={(ev) => {
-                      ev.stopPropagation();
-                      store.openEvidence(e.id);
-                    }}>{e.title}</button
-                  >
-                </Table.Cell>
-                <Table.Cell>
-                  <EvidenceStatusChip status={e.status} />
-                  {#if e.status !== 'ACCEPTED'}<span class="ml-1 text-xs text-(--muted-foreground)"
-                      >not counted yet</span
-                    >{/if}
-                </Table.Cell>
-                <Table.Cell class="text-right">{fmtMinutes(e.minutes)}</Table.Cell>
-                <Table.Cell>{fmtDate(e.createdAt)}</Table.Cell>
-                <Table.Cell>{e.createdByName ?? '—'}</Table.Cell>
-              </Table.Row>
-            {/each}
-          </Table.Body>
-        </Table.Root>
-      </div>
-    {/if}
-    <GlhSection {store} />
-  </div>
-{/if}
+  <GlhSection {store} />
+</div>
+
+<LogDialog bind:open={logOpen} enrolmentId={store.enrolmentId} row={editing} {isStaff} onDone={changed} />
+<ReviewDialog bind:open={reviewOpen} row={reviewRow} decision={reviewDecision} onDone={changed} />
+{#if isAdmin}<DatesDialog bind:open={datesOpen} {store} />{/if}

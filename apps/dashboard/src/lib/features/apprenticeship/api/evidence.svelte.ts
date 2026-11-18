@@ -2,6 +2,7 @@ import axios from 'axios';
 import { classroomio } from '$lib/utils/services/api';
 import { snackbar } from '$features/ui/snackbar/store';
 import { call, type CallResult } from './call';
+import type { ApprProgrammeType } from '@cio/utils/constants/apprenticeship';
 import type { ProgressSummary, TutorsInput } from './enrolments.svelte';
 
 // Gecko Apprenticeships — admin client for evidence: list / detail / create / edit / review / notes, file upload
@@ -15,6 +16,35 @@ export interface EvidenceFile {
   type?: string;
   uploadedBy?: string;
   uploadedAt?: string;
+}
+
+/** One qualification a piece of evidence is mapped to (Deploy 3: a piece can count towards both of a linked pair). */
+export interface MappedQualification {
+  enrolmentId: string;
+  programmeId: string;
+  type: ApprProgrammeType;
+  title: string;
+  criterionCodes: string[];
+}
+
+/** The mapped qualifications other than the one the evidence lives on ("Also counts towards"). */
+export function alsoCountsTowards(homeEnrolmentId: string | null | undefined, mapped?: MappedQualification[] | null) {
+  return (mapped ?? []).filter((m) => m.enrolmentId !== homeEnrolmentId && m.criterionCodes.length > 0);
+}
+
+/** Which qualifications a set of criterion ids falls in, read from a picker tree (used when the API sends no list). */
+export function mappedFromTree(tree: PickerQualification[], criterionIds: Iterable<string>): MappedQualification[] {
+  const ids = new Set(criterionIds);
+  return tree
+    .filter((q) => q.type && q.enrolmentId && q.programmeId)
+    .map((q) => ({
+      enrolmentId: q.enrolmentId!,
+      programmeId: q.programmeId!,
+      type: q.type!,
+      title: q.title,
+      criterionCodes: q.units.flatMap((u) => u.criteria.filter((c) => ids.has(c.id)).map((c) => c.code))
+    }))
+    .filter((m) => m.criterionCodes.length > 0);
 }
 
 export interface EvidenceListItem {
@@ -33,6 +63,11 @@ export interface EvidenceListItem {
   reviewedAt?: string | null;
   criteriaCount: number;
   fileCount: number;
+  /** The enrolment the evidence lives on; for a linked enrolment the list holds the pair's evidence. */
+  homeEnrolmentId?: string;
+  mappedQualifications?: MappedQualification[];
+  /** Set client-side by the portfolio store (= homeEnrolmentId, or the enrolment the list was fetched for). */
+  qualEnrolmentId?: string;
 }
 
 export interface CriterionEvidenceItem {
@@ -42,6 +77,14 @@ export interface CriterionEvidenceItem {
   status: string;
   fileCount: number;
   createdAt: string;
+  /** Set when the evidence lives on the other qualification of the pair. */
+  homeEnrolmentId?: string;
+  homeType?: ApprProgrammeType;
+}
+
+export interface CriterionEvidence {
+  items: CriterionEvidenceItem[];
+  taskCount: number | null;
 }
 
 export interface EvidenceNote {
@@ -86,6 +129,8 @@ export interface EvidenceDetail {
   notes: EvidenceNote[];
   /** The learner's enrolment for this evidence — lets a sheet opened outside a portfolio still upload files. */
   enrolmentId: string | null;
+  /** Qualifications the evidence is mapped to (optional: the sheet falls back to the picker tree). */
+  mappedQualifications?: MappedQualification[];
   permissions: { canEdit: boolean; canReview: boolean };
 }
 
@@ -149,6 +194,10 @@ export interface EvidenceMutation {
 export interface PickerQualification {
   id: string;
   title: string;
+  /** Set for a linked pair: which qualification of the apprenticeship this is (drives the picker tabs). */
+  type?: ApprProgrammeType;
+  enrolmentId?: string;
+  programmeId?: string;
   units: {
     id: string;
     code: string | null;
@@ -186,13 +235,19 @@ class EvidenceApi {
     );
   }
 
-  forCriterion(criterionId: string, enrolmentId: string) {
-    return call<CriterionEvidenceItem[]>(() =>
+  /** Evidence on a criterion (either side of a pair) plus the task count; tolerates the older bare-array response. */
+  async forCriterion(criterionId: string, enrolmentId: string): Promise<CallResult<CriterionEvidence>> {
+    const res = await call<CriterionEvidenceItem[] | { items: CriterionEvidenceItem[]; taskCount?: number }>(() =>
       classroomio.apprenticeship.evidence.criteria[':criterionId'].evidence.$get({
         param: { criterionId },
         query: { enrolmentId }
       })
     );
+    if (!res.ok) return res;
+    const d = res.data;
+    return Array.isArray(d)
+      ? { ok: true, data: { items: d, taskCount: null } }
+      : { ok: true, data: { items: d.items ?? [], taskCount: d.taskCount ?? null } };
   }
 
   detail(id: string) {

@@ -6,7 +6,14 @@
   import PencilIcon from '@lucide/svelte/icons/pencil';
   import { APPR_NOTE_MAX } from '@cio/utils/constants/apprenticeship';
   import { snackbar } from '$features/ui/snackbar/store';
-  import { evidenceApi, type EvidenceDetail, type PickerQualification } from '../../api/evidence.svelte';
+  import {
+    evidenceApi,
+    mappedFromTree,
+    type EvidenceDetail,
+    type PickerQualification
+  } from '../../api/evidence.svelte';
+  import { APPR_PROGRAMME_TYPE_LABELS } from '@cio/utils/constants/apprenticeship';
+  import AlsoCounts from './also-counts.svelte';
   import CriteriaPicker from './criteria-picker.svelte';
   import EvidenceNotes from './evidence-notes.svelte';
   import EvidenceStatusChip from '../shared/evidence-status-chip.svelte';
@@ -40,6 +47,15 @@
 
   const ev = $derived(detail.evidence);
   const mappedIds = $derived(detail.criteria.flatMap((q) => q.units.flatMap((u) => u.criteria.map((c) => c.id))));
+
+  // Where the piece lives and which qualifications it is mapped to (the API's list, else read from the picker tree).
+  const mapped = $derived(
+    detail.mappedQualifications?.length ? detail.mappedQualifications : mappedFromTree(tree, mappedIds)
+  );
+  const homeEnrolmentId = $derived(
+    mapped.find((m) => m.programmeId === ev.programmeId)?.enrolmentId ?? detail.enrolmentId
+  );
+  const mappedBoth = $derived(new Set(mapped.map((m) => m.type)).size > 1);
 
   // svelte-ignore state_referenced_locally
   let selected = $state<string[]>([...mappedIds]);
@@ -77,12 +93,28 @@
     {/if}
   </div>
 
+  {#if mappedBoth}
+    <p
+      role="note"
+      class="rounded-md border border-violet-200 bg-violet-50 px-3 py-2 text-sm text-violet-900 dark:border-violet-900 dark:bg-violet-950 dark:text-violet-100"
+    >
+      Mapped in both {APPR_PROGRAMME_TYPE_LABELS.DIPLOMA} and {APPR_PROGRAMME_TYPE_LABELS.STANDARD}
+      {#if detail.permissions.canReview}— your decision applies to every mapped criterion{/if}
+    </p>
+  {/if}
+
   <Table.Root>
     <Table.Body>
       {#if learnerName}
         <Table.Row><Table.Head class="w-36">Learner</Table.Head><Table.Cell>{learnerName}</Table.Cell></Table.Row>
       {/if}
       <Table.Row><Table.Head class="w-36">Type</Table.Head><Table.Cell>{ev.typeLabel}</Table.Cell></Table.Row>
+      {#if mappedBoth}
+        <Table.Row>
+          <Table.Head class="w-36">Counts towards</Table.Head>
+          <Table.Cell><AlsoCounts home={homeEnrolmentId} {mapped} /></Table.Cell>
+        </Table.Row>
+      {/if}
       <Table.Row>
         <Table.Head>Time</Table.Head>
         <Table.Cell>
@@ -128,7 +160,7 @@
         >{/if}
     </h3>
     {#if detail.permissions.canReview}
-      <CriteriaPicker {tree} bind:selected {metIds} idPrefix="rev-crit" disabled={busy !== null} />
+      <CriteriaPicker {tree} bind:selected {metIds} idPrefix="rev-crit" disabled={busy !== null} pairPrompt={false} />
     {:else if detail.criteria.length === 0}
       <p class="text-sm text-(--muted-foreground)">No criteria mapped.</p>
     {:else}

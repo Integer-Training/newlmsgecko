@@ -5,6 +5,8 @@
   import { Button } from '@cio/ui/base/button';
   import type { TaskItem } from '../../api/tasks.svelte';
   import { evidenceApi, type EvidenceDetail, type PickerQualification } from '../../api/evidence.svelte';
+  import { enrolmentsApi, type Portfolio } from '../../api/enrolments.svelte';
+  import type { PortfolioLinked } from '../../api/overview.types';
   import EvidenceForm from './evidence-form.svelte';
   import EvidenceReview from './evidence-review.svelte';
   import EvidenceIqaPanel from './evidence-iqa-panel.svelte';
@@ -63,6 +65,47 @@
   // To mark has no portfolio, so fall back to the enrolment the API returns with the evidence (file uploads need it).
   const formEnrolmentId = $derived(enrolmentId ?? detail?.enrolmentId ?? null);
 
+  type PortfolioWithLink = Portfolio & {
+    programme: { type?: PickerQualification['type'] };
+    linked?: PortfolioLinked | null;
+  };
+  const treeOf = (p: PortfolioWithLink): PickerQualification[] =>
+    p.qualifications.map((q) => ({
+      id: q.id,
+      title: q.title,
+      type: p.programme.type,
+      enrolmentId: p.enrolment.id,
+      programmeId: p.programme.id,
+      units: q.units.map((u) => ({
+        id: u.id,
+        code: u.code,
+        title: u.title,
+        criteria: u.criteria.map((c) => ({ id: c.id, code: c.code, text: c.text }))
+      }))
+    }));
+
+  // The marking queue has no portfolio: for a linked pair load BOTH qualifications (Diploma first) so the criteria
+  // picker and the "mapped in both" banner work as in the portfolio; otherwise just the evidence's own programme.
+  async function loadTree(enrolmentId: string, programmeId: string): Promise<PickerQualification[] | null> {
+    const own = await enrolmentsApi.getPortfolio(enrolmentId);
+    if (own.ok) {
+      const ownP = own.data as PortfolioWithLink;
+      const l = ownP.linked ?? null;
+      const otherId = l ? (l.role === 'COMPONENT' ? l.carrierId : l.counterpart.enrolmentId) : null;
+      if (otherId) {
+        const other = await enrolmentsApi.getPortfolio(otherId);
+        if (other.ok) {
+          return [ownP, other.data as PortfolioWithLink]
+            .sort((a, b) => (a.programme.type === 'STANDARD' ? 1 : 0) - (b.programme.type === 'STANDARD' ? 1 : 0))
+            .flatMap(treeOf);
+        }
+      }
+      return treeOf(ownP);
+    }
+    const t = await evidenceApi.programmeTree(programmeId);
+    return t.ok ? t.data.qualifications : null;
+  }
+
   async function loadDetail() {
     if (!evidenceId) return;
     const id = ++reqId;
@@ -75,8 +118,8 @@
       loadError = null;
       nonce += 1;
       if (!tree && !fetched) {
-        const t = await evidenceApi.programmeTree(res.data.evidence.programmeId);
-        if (id === reqId && t.ok) fetched = t.data.qualifications;
+        const t = await loadTree(res.data.enrolmentId, res.data.evidence.programmeId);
+        if (id === reqId && t) fetched = t;
       }
     } else {
       loadError = res.error;

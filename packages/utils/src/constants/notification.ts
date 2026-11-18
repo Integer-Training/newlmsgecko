@@ -32,7 +32,10 @@ export const NOTIFICATION_TYPES = [
   'appr.onboarding.submitted',
   'appr.onboarding.reviewed',
   'appr.onboarding.complete',
-  'appr.iqa.outcome'
+  'appr.iqa.outcome',
+  // Deploy 3: off-the-job log entry submitted (-> named tutors), reviewed (-> apprentice). Links open ?tab=otj.
+  'appr.otj.submitted',
+  'appr.otj.reviewed'
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
@@ -69,7 +72,9 @@ export const NOTIFICATION_TYPE_CATEGORY: Record<NotificationType, NotificationCa
   'appr.onboarding.submitted': 'coursework',
   'appr.onboarding.reviewed': 'coursework',
   'appr.onboarding.complete': 'coursework',
-  'appr.iqa.outcome': 'coursework'
+  'appr.iqa.outcome': 'coursework',
+  'appr.otj.submitted': 'coursework',
+  'appr.otj.reviewed': 'coursework'
 };
 
 export function categoryForNotificationType(type: NotificationType): NotificationCategory {

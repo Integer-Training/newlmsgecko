@@ -45,3 +45,17 @@ export function fmtBytes(n: number | undefined): string {
   if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
+
+/** "372 hours 30 minutes" — the OTJ overview format. */
+export { fmtHoursMinutes } from '@cio/utils/functions/apprenticeship-progress';
+
+export const OTJ_STATUS_LABEL: Record<string, string> = {
+  SUBMITTED: 'Submitted',
+  VALIDATED: 'Validated',
+  REJECTED: 'Rejected'
+};
+export const OTJ_STATUS_CLASS: Record<string, string> = {
+  SUBMITTED: EVIDENCE_STATUS_CLASS.SUBMITTED,
+  VALIDATED: EVIDENCE_STATUS_CLASS.ACCEPTED,
+  REJECTED: EVIDENCE_STATUS_CLASS.REFERRED
+};

@@ -5342,3 +5342,57 @@ export const apprIqaSample = pgTable(
     index('idx_appr_iqa_sample_assessor').on(table.assessorId)
   ]
 );
+
+// ── Apprenticeship Standard: off-the-job training log ──
+// Learner-entered OTJ entries, always carried by the enrolment. status SUBMITTED|VALIDATED|REJECTED; only VALIDATED
+// entries with is_otj = true count towards OTJ hours. minutes 1..100000 is enforced by the API validators.
+export const apprOtjLog = pgTable(
+  'appr_otj_log',
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    organizationId: uuid('organization_id').notNull(),
+    enrolmentId: uuid('enrolment_id').notNull(),
+    learnerId: uuid('learner_id').notNull(),
+    title: varchar({ length: 120 }).notNull(),
+    details: text().default('').notNull(),
+    logDate: date('log_date', { mode: 'string' }).notNull(),
+    minutes: integer().notNull(),
+    isOtj: boolean('is_otj').default(true).notNull(),
+    status: varchar().default('SUBMITTED').notNull(),
+    reviewNote: text('review_note'),
+    reviewedBy: uuid('reviewed_by'),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true, mode: 'string' }),
+    createdBy: uuid('created_by'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId],
+      foreignColumns: [organization.id],
+      name: 'appr_otj_log_organization_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.enrolmentId],
+      foreignColumns: [apprEnrolment.id],
+      name: 'appr_otj_log_enrolment_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.learnerId],
+      foreignColumns: [profile.id],
+      name: 'appr_otj_log_learner_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.reviewedBy],
+      foreignColumns: [profile.id],
+      name: 'appr_otj_log_reviewed_by_fkey'
+    }).onDelete('set null'),
+    foreignKey({
+      columns: [table.createdBy],
+      foreignColumns: [profile.id],
+      name: 'appr_otj_log_created_by_fkey'
+    }).onDelete('set null'),
+    index('idx_appr_otj_log_enrolment_status').on(table.enrolmentId, table.status),
+    index('idx_appr_otj_log_org_status').on(table.organizationId, table.status, table.createdAt)
+  ]
+);

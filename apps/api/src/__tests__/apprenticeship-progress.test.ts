@@ -4,6 +4,7 @@ import {
   averagePct,
   apprenticeshipRollup,
   otjCompletionPct,
+  fmtHoursMinutes,
   computeEnrolmentProgress,
   criteriaActualPct,
   criterionMet,
@@ -455,5 +456,16 @@ describe('otjCompletionPct', () => {
   it('is null when there is no target', () => {
     expect(otjCompletionPct(10, null)).toBeNull();
     expect(otjCompletionPct(10, 0)).toBeNull();
+  });
+});
+
+describe('fmtHoursMinutes', () => {
+  it('formats hours and minutes', () => {
+    expect(fmtHoursMinutes(22350)).toBe('372 hours 30 minutes');
+    expect(fmtHoursMinutes(60)).toBe('1 hour');
+    expect(fmtHoursMinutes(61)).toBe('1 hour 1 minute');
+    expect(fmtHoursMinutes(45)).toBe('45 minutes');
+    expect(fmtHoursMinutes(0)).toBe('0 hours');
+    expect(fmtHoursMinutes(-5)).toBe('0 hours');
   });
 });

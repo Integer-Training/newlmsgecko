@@ -5,20 +5,30 @@ import {
   getProgrammeForActor,
   requireAuthed
 } from '@api/services/apprenticeship/access';
-import { resolveChecklist } from '@api/services/apprenticeship/gateway-core';
+import { buildGatewayView, resolveChecklist } from '@api/services/apprenticeship/gateway-core';
 import { nameGatewayActors } from '@api/services/apprenticeship/gateway-names';
 import { notifyGatewayReadyOrRelease } from '@api/services/apprenticeship/notifications';
-import { buildEnrolmentProgress, recomputeEnrolment, todayIso } from '@api/services/apprenticeship/progress';
+import {
+  buildEnrolmentProgress,
+  recomputeEnrolment,
+  todayIso,
+  type EnrolmentProgressDetail
+} from '@api/services/apprenticeship/progress';
 import type { Actor } from '@cio/db/actor';
 import { recordAudit } from '@cio/db/audit';
-import { runInTransaction } from '@cio/db/drizzle';
+import { runInTransaction, type DbOrTxClient, type TxClient } from '@cio/db/drizzle';
 import {
+  claimGatewayReady,
+  clearGatewayReady,
+  getApprEnrolment,
   getApprProgramme,
+  getLinkedEnrolment,
   getEnrolmentLearnerIds,
-  listEnrolmentIdsForProgramme,
+  listCarrierIdsForProgramme,
   passGateway,
   reopenGateway as reopenGatewayRow,
   setEpa,
+  setLinkedAchievedAt,
   setGatewayTick,
   updateApprProgramme
 } from '@cio/db/queries/apprenticeship';
@@ -43,6 +53,64 @@ const conflict = (message: string) => new AppError(message, ErrorCodes.CONFLICT,
 const audit = (actor: Actor, action: string, entityId: string, metadata: Record<string, unknown> = {}) =>
   recordAudit({ actor, action, entityType: 'appr_enrolment', entityId, metadata });
 
+/**
+ * Gateway endpoints act on the CARRIER of an apprenticeship: given a component id they follow the link (access was
+ * checked on the id the caller passed). A standalone enrolment is its own carrier.
+ */
+async function carrierOf<T extends { id: string; primaryEnrolmentId: string | null }>(enrolment: T): Promise<T> {
+  if (!enrolment.primaryEnrolmentId) return enrolment;
+  const carrier = await getApprEnrolment(enrolment.primaryEnrolmentId);
+  return (carrier ?? enrolment) as unknown as T;
+}
+
+/**
+ * The carrier's progress with the gateway worked out for the whole apprenticeship: for a linked pair the "all units
+ * complete" item counts units complete / total summed across BOTH qualifications (checklist, ticks and the gateway /
+ * EPA fields all live on the carrier). Reads only. Standalone = buildEnrolmentProgress unchanged.
+ */
+export async function buildApprenticeshipProgress(
+  carrierId: string,
+  client?: DbOrTxClient
+): Promise<EnrolmentProgressDetail | null> {
+  const detail = await buildEnrolmentProgress(carrierId, client);
+  if (!detail) return null;
+  const component = await getLinkedEnrolment(carrierId, client);
+  if (!component || component.id === carrierId) return detail;
+  const [other, enrolment] = await Promise.all([
+    buildEnrolmentProgress(component.id, client),
+    getApprEnrolment(carrierId, client)
+  ]);
+  if (!other || !enrolment) return detail;
+  const programme = await getApprProgramme(enrolment.programmeId, client);
+  const complete = (d: EnrolmentProgressDetail) => d.units.filter((u) => u.status === 'COMPLETE').length;
+  const gateway = buildGatewayView({
+    checklist: resolveChecklist(programme?.gatewayChecklist),
+    manual: enrolment.gatewayItems,
+    unitsTotal: detail.units.length + other.units.length,
+    unitsComplete: complete(detail) + complete(other),
+    otjMinutes: detail.otjMinutes,
+    otjTargetMinutes: detail.otjTargetMinutes,
+    enrolment
+  });
+  return { ...detail, gateway };
+}
+
+/** Re-derive the caches and the ready flag (pair-aware) inside the caller's transaction. */
+async function recomputeApprenticeship(tx: TxClient, carrierId: string) {
+  const component = await getLinkedEnrolment(carrierId, tx);
+  if (!component || component.id === carrierId) return recomputeEnrolment(tx, carrierId, { claimGatewayReady: true });
+  // recomputeEnrolment on a linked enrolment refreshes BOTH halves (component first), so one call is enough.
+  await recomputeEnrolment(tx, carrierId);
+  const full = await buildApprenticeshipProgress(carrierId, tx);
+  if (!full) return null;
+  // Readiness is the pair's, not the carrier's own: override the flag recomputeEnrolment set from the carrier alone.
+  if (!full.gateway.locked) {
+    if (!full.gateway.ready) await clearGatewayReady(tx, carrierId);
+    else full.gatewayReadyClaimed = await claimGatewayReady(tx, carrierId);
+  }
+  return full;
+}
+
 // ── Programme checklist ──
 
 export async function getGatewayChecklist(actor: Actor, programmeId: string) {
@@ -59,16 +127,19 @@ export async function putGatewayChecklist(actor: Actor, programmeId: string, inp
   // Readiness may change for every learner of the programme (confirmed learners are locked and untouched). Recompute in
   // batches so one transaction never holds hundreds of enrolments; each batch claims the ready flag and the alerts go
   // out only after that batch has committed.
-  const ids = await listEnrolmentIdsForProgramme(programmeId);
+  // The gateway lives on the carrier of a linked pair, so recompute through the carrier (recomputeEnrolment hops to the
+  // counterpart and refreshes both sides): a component id resolves to its carrier, a pair is done once, and the claim /
+  // alert always names the carrier.
+  const ids = await listCarrierIdsForProgramme(programmeId);
   for (let i = 0; i < ids.length; i += GATEWAY_RECOMPUTE_BATCH) {
     const batch = ids.slice(i, i + GATEWAY_RECOMPUTE_BATCH);
     const claimed = await runInTransaction(async (tx) => {
-      const out: string[] = [];
+      const out = new Set<string>();
       for (const id of batch) {
         const detail = await recomputeEnrolment(tx, id, { claimGatewayReady: true });
-        if (detail?.gatewayReadyClaimed) out.push(id);
+        if (detail?.gatewayReadyClaimed) out.add(detail.gatewayReadyEnrolmentId ?? id);
       }
-      return out;
+      return [...out];
     });
     if (claimed.length === 0) continue;
     const learners = await getEnrolmentLearnerIds(claimed);
@@ -91,15 +162,15 @@ export async function putGatewayChecklist(actor: Actor, programmeId: string, inp
 
 /** Gateway + stage for one learner (live auto items). Learners read their own. */
 export async function getGateway(actor: Actor, enrolmentId: string) {
-  const enrolment = await getEnrolmentForActor(actor, enrolmentId);
-  const detail = await buildEnrolmentProgress(enrolment.id);
+  const enrolment = await carrierOf(await getEnrolmentForActor(actor, enrolmentId));
+  const detail = await buildApprenticeshipProgress(enrolment.id);
   if (!detail) throw new AppError('Learner portfolio not found', ErrorCodes.NOT_FOUND, 404);
   return { ...(await nameGatewayActors(detail.gateway)), glh: detail.glh };
 }
 
 export async function setGatewayItem(actor: Actor, enrolmentId: string, key: string, input: GatewayTickInput) {
   const a = assertStaff(actor);
-  const enrolment = await getEnrolmentForActor(actor, enrolmentId);
+  const enrolment = await carrierOf(await getEnrolmentForActor(actor, enrolmentId));
   if (enrolment.gatewayPassedAt) throw conflict('The gateway has been confirmed, so the checklist is locked');
 
   const programme = await getApprProgramme(enrolment.programmeId);
@@ -116,7 +187,7 @@ export async function setGatewayItem(actor: Actor, enrolmentId: string, key: str
       at: new Date().toISOString()
     });
     if (!row) throw conflict('The gateway has been confirmed, so the checklist is locked');
-    return recomputeEnrolment(tx, enrolment.id, { claimGatewayReady: true });
+    return recomputeApprenticeship(tx, enrolment.id);
   });
   if (result?.gatewayReadyClaimed) await sendReady(enrolment);
   await audit(actor, 'appr.gateway.item_set', enrolment.id, { key, done: input.done });
@@ -125,11 +196,11 @@ export async function setGatewayItem(actor: Actor, enrolmentId: string, key: str
 
 export async function confirmGateway(actor: Actor, enrolmentId: string) {
   const a = assertStaff(actor);
-  const enrolment = await getEnrolmentForActor(actor, enrolmentId);
+  const enrolment = await carrierOf(await getEnrolmentForActor(actor, enrolmentId));
   if (enrolment.gatewayPassedAt) throw conflict('The gateway has already been confirmed');
   await runInTransaction(async (tx) => {
     // Readiness is re-derived inside the transaction, so a referral landing first stops the confirmation.
-    const detail = await buildEnrolmentProgress(enrolment.id, tx);
+    const detail = await buildApprenticeshipProgress(enrolment.id, tx);
     if (!detail?.gateway.ready)
       throw badRequest('Every checklist item must be complete before the gateway can be confirmed');
     const row = await passGateway(tx, enrolment.id, a.userId);
@@ -143,7 +214,7 @@ export async function confirmGateway(actor: Actor, enrolmentId: string) {
 export async function reopenGateway(actor: Actor, enrolmentId: string) {
   const a = requireAuthed(actor);
   if (a.role !== 'ADMIN') throw new AppError('Only an admin can reopen the gateway', ErrorCodes.FORBIDDEN, 403);
-  const enrolment = await getEnrolmentForActor(actor, enrolmentId);
+  const enrolment = await carrierOf(await getEnrolmentForActor(actor, enrolmentId));
   if (!enrolment.gatewayPassedAt) throw conflict('The gateway has not been confirmed');
   if (enrolment.epaResult) throw conflict('An EPA result has been recorded, so the gateway cannot be reopened');
   const row = await runInTransaction((tx) => reopenGatewayRow(tx, enrolment.id));
@@ -158,7 +229,7 @@ export async function reopenGateway(actor: Actor, enrolmentId: string) {
  */
 export async function updateEpa(actor: Actor, enrolmentId: string, input: EpaUpdateInput, now: Date = new Date()) {
   const a = assertStaff(actor);
-  const enrolment = await getEnrolmentForActor(actor, enrolmentId);
+  const enrolment = await carrierOf(await getEnrolmentForActor(actor, enrolmentId));
   if (!enrolment.gatewayPassedAt) throw conflict('Confirm the gateway before booking or recording the EPA');
 
   // Once a result is recorded, changing or clearing it (or its date) is an admin decision.
@@ -197,8 +268,10 @@ export async function updateEpa(actor: Actor, enrolmentId: string, input: EpaUpd
   const achievedAt =
     result && APPR_EPA_ACHIEVING_RESULTS.includes(result) && resultDate ? `${resultDate}T00:00:00.000Z` : null;
 
-  const row = await runInTransaction((tx) =>
-    setEpa(
+  // One EPA for the whole apprenticeship: the result lives on the carrier, and achieved_at is set (or cleared) on BOTH
+  // halves of a pair in the same transaction.
+  const row = await runInTransaction(async (tx) => {
+    const updated = await setEpa(
       tx,
       enrolment.id,
       { epaBookedDate: booked, epaResult: result, epaResultDate: resultDate, achievedAt },
@@ -208,8 +281,10 @@ export async function updateEpa(actor: Actor, enrolmentId: string, input: EpaUpd
         epaResult: enrolment.epaResult,
         epaResultDate: enrolment.epaResultDate
       }
-    )
-  );
+    );
+    if (updated) await setLinkedAchievedAt(tx, enrolment.id, achievedAt);
+    return updated;
+  });
   if (!row) throw conflict('The end-point assessment was just changed or the gateway reopened - reload and try again');
   await audit(actor, 'appr.epa.updated', enrolment.id, { fields: Object.keys(input), result: result ?? null });
   return getGateway(actor, enrolment.id);

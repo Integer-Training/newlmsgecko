@@ -11,6 +11,8 @@ vi.mock('@cio/db/queries/allocation', () => ({
 vi.mock('@cio/db/queries/apprenticeship', () => ({
   isProgrammeTutor: vi.fn(async () => false),
   isProgrammeTutorOfLinked: vi.fn(async () => false),
+  getApprEnrolment: vi.fn(async (id: string) => ({ id, programmeId: `prog-${id}` })),
+  listTutorsForProgramme: vi.fn(async () => []),
   listOrgAdminIds: vi.fn(async () => []),
   releaseGatewayReady: vi.fn(async () => undefined)
 }));
@@ -18,7 +20,7 @@ vi.mock('@cio/db/queries/comms', () => ({ markNotificationsReadForEntity: vi.fn(
 vi.mock('@api/services/comms/notify', () => ({ emitNotification: vi.fn(async () => undefined) }));
 
 import { listTutorsForLearner, listTutorsForLearnerInOrg } from '@cio/db/queries/allocation';
-import { listOrgAdminIds, releaseGatewayReady } from '@cio/db/queries/apprenticeship';
+import { listOrgAdminIds, listTutorsForProgramme, releaseGatewayReady } from '@cio/db/queries/apprenticeship';
 import { markNotificationsReadForEntity } from '@cio/db/queries/comms';
 import { emitNotification } from '@api/services/comms/notify';
 import {
@@ -26,6 +28,8 @@ import {
   notifyGatewayReadyOrRelease,
   notifyEvidenceReviewed,
   notifyEvidenceSubmitted,
+  notifyOtjReviewed,
+  notifyOtjSubmitted,
   notifySafely
 } from '@api/services/apprenticeship/notifications';
 
@@ -52,6 +56,64 @@ describe('notifyEvidenceSubmitted', () => {
     vi.mocked(listTutorsForLearner).mockResolvedValue([]);
     await notifyEvidenceSubmitted({ evidenceId: 'ev-1', learnerId: 'l-1' });
     expect(emitNotification).not.toHaveBeenCalled();
+  });
+});
+
+describe('notifyEvidenceSubmitted across a linked pair', () => {
+  it('adds the programme tutors of BOTH enrolments, deduped with the named tutors', async () => {
+    vi.mocked(listTutorsForLearner).mockResolvedValue([{ tutorId: 't1', email: null }] as never);
+    vi.mocked(listTutorsForProgramme).mockImplementation((async (programmeId: string) =>
+      programmeId === 'prog-e1' ? [{ id: 't1', name: 'a' }] : [{ id: 't2', name: 'b' }]) as never);
+    await notifyEvidenceSubmitted({ evidenceId: 'ev-1', learnerId: 'l-1', enrolmentId: 'e1', pairEnrolmentId: 'e2' });
+    expect(vi.mocked(emitNotification).mock.calls[0][0].recipients).toEqual([{ userId: 't1' }, { userId: 't2' }]);
+  });
+});
+
+describe('off-the-job notifications', () => {
+  it('submitted → named + programme tutors of both enrolments, deduped, never the author; entity = carrier', async () => {
+    vi.mocked(listTutorsForLearner).mockResolvedValue([
+      { tutorId: 't1', email: null },
+      { tutorId: 'me', email: null }
+    ] as never);
+    vi.mocked(listTutorsForProgramme).mockResolvedValue([
+      { id: 't1', name: 'a' },
+      { id: 't3', name: 'c' }
+    ] as never);
+    await notifyOtjSubmitted({
+      carrierEnrolmentId: 'c1',
+      componentEnrolmentId: 'c2',
+      learnerId: 'l-1',
+      exceptUserId: 'me'
+    });
+    expect(emitNotification).toHaveBeenCalledWith({
+      type: 'appr.otj.submitted',
+      recipients: [{ userId: 't1' }, { userId: 't3' }],
+      entityType: 'appr_enrolment',
+      entityId: 'c1'
+    });
+  });
+
+  it('reviewed with no log left waiting marks the tutors submitted alert read; with logs left it keeps it', async () => {
+    vi.mocked(markNotificationsReadForEntity).mockClear();
+    await notifyOtjReviewed({
+      carrierEnrolmentId: 'c1',
+      learnerId: 'l-1',
+      outcome: 'VALIDATED',
+      remainingSubmitted: 2
+    });
+    expect(markNotificationsReadForEntity).not.toHaveBeenCalled();
+    await notifyOtjReviewed({ carrierEnrolmentId: 'c1', learnerId: 'l-1', outcome: 'REJECTED', remainingSubmitted: 0 });
+    expect(markNotificationsReadForEntity).toHaveBeenCalledWith('appr_enrolment', 'c1', ['appr.otj.submitted']);
+  });
+
+  it('reviewed → the apprentice only', async () => {
+    await notifyOtjReviewed({ carrierEnrolmentId: 'c1', learnerId: 'l-1', outcome: 'VALIDATED' });
+    expect(emitNotification).toHaveBeenCalledWith({
+      type: 'appr.otj.reviewed',
+      recipients: [{ userId: 'l-1' }],
+      entityType: 'appr_enrolment',
+      entityId: 'c1'
+    });
   });
 });
 

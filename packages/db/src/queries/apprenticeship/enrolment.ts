@@ -263,7 +263,11 @@ export async function upsertEnrolmentUnitDates(
     });
 }
 
-/** Per-criterion evidence counts for one learner on one programme, REFERRED excluded (they are not "in play"). */
+/**
+ * Per-criterion evidence counts for one learner on one programme, REFERRED excluded (they are not "in play"). Counted
+ * by the CRITERION's programme (criterion -> unit -> qualification), not the evidence's home programme, so evidence
+ * homed on the other half of a linked pair still counts. Unlinked data gives the same result as before.
+ */
 export async function countEvidenceByCriterion(programmeId: string, learnerId: string, client: DbOrTxClient = db) {
   const ev = schema.apprEvidence;
   const rows = await client
@@ -274,8 +278,15 @@ export async function countEvidenceByCriterion(programmeId: string, learnerId: s
     })
     .from(schema.apprEvidenceCriterion)
     .innerJoin(ev, eq(ev.id, schema.apprEvidenceCriterion.evidenceId))
+    .innerJoin(schema.apprCriterion, eq(schema.apprCriterion.id, schema.apprEvidenceCriterion.criterionId))
+    .innerJoin(schema.apprUnit, eq(schema.apprUnit.id, schema.apprCriterion.unitId))
+    .innerJoin(schema.apprQualification, eq(schema.apprQualification.id, schema.apprUnit.qualificationId))
     .where(
-      and(eq(ev.programmeId, programmeId), eq(ev.learnerId, learnerId), inArray(ev.status, ['ACCEPTED', 'SUBMITTED']))
+      and(
+        eq(schema.apprQualification.programmeId, programmeId),
+        eq(ev.learnerId, learnerId),
+        inArray(ev.status, ['ACCEPTED', 'SUBMITTED'])
+      )
     )
     .groupBy(schema.apprEvidenceCriterion.criterionId);
   return new Map(rows.map((r) => [r.criterionId, { accepted: r.accepted, submitted: r.submitted }]));
@@ -288,7 +299,12 @@ export async function listAcceptedEvidenceTitles(programmeId: string, learnerId:
     .select({ criterionId: schema.apprEvidenceCriterion.criterionId, title: ev.title })
     .from(schema.apprEvidenceCriterion)
     .innerJoin(ev, eq(ev.id, schema.apprEvidenceCriterion.evidenceId))
-    .where(and(eq(ev.programmeId, programmeId), eq(ev.learnerId, learnerId), eq(ev.status, 'ACCEPTED')))
+    .innerJoin(schema.apprCriterion, eq(schema.apprCriterion.id, schema.apprEvidenceCriterion.criterionId))
+    .innerJoin(schema.apprUnit, eq(schema.apprUnit.id, schema.apprCriterion.unitId))
+    .innerJoin(schema.apprQualification, eq(schema.apprQualification.id, schema.apprUnit.qualificationId))
+    .where(
+      and(eq(schema.apprQualification.programmeId, programmeId), eq(ev.learnerId, learnerId), eq(ev.status, 'ACCEPTED'))
+    )
     .orderBy(asc(ev.createdAt));
   const map = new Map<string, string[]>();
   for (const r of rows) map.set(r.criterionId, [...(map.get(r.criterionId) ?? []), r.title]);
@@ -297,7 +313,7 @@ export async function listAcceptedEvidenceTitles(programmeId: string, learnerId:
 
 /**
  * ACCEPTED evidence dates per criterion (ascending ISO UTC strings): coalesce(reviewed_at, updated_at). Feeds the
- * criterion / unit achieved date. Scoped to the learner's enrolment programme like the other portfolio reads.
+ * criterion / unit achieved date. Scoped by the criterion's programme (see countEvidenceByCriterion).
  */
 export async function listCriterionAcceptedDates(programmeId: string, learnerId: string, client: DbOrTxClient = db) {
   const ev = schema.apprEvidence;
@@ -306,7 +322,12 @@ export async function listCriterionAcceptedDates(programmeId: string, learnerId:
     .select({ criterionId: schema.apprEvidenceCriterion.criterionId, acceptedAt })
     .from(schema.apprEvidenceCriterion)
     .innerJoin(ev, eq(ev.id, schema.apprEvidenceCriterion.evidenceId))
-    .where(and(eq(ev.programmeId, programmeId), eq(ev.learnerId, learnerId), eq(ev.status, 'ACCEPTED')))
+    .innerJoin(schema.apprCriterion, eq(schema.apprCriterion.id, schema.apprEvidenceCriterion.criterionId))
+    .innerJoin(schema.apprUnit, eq(schema.apprUnit.id, schema.apprCriterion.unitId))
+    .innerJoin(schema.apprQualification, eq(schema.apprQualification.id, schema.apprUnit.qualificationId))
+    .where(
+      and(eq(schema.apprQualification.programmeId, programmeId), eq(ev.learnerId, learnerId), eq(ev.status, 'ACCEPTED'))
+    )
     .orderBy(sql`coalesce(${ev.reviewedAt}, ${ev.updatedAt}) asc`, asc(ev.id));
   const map = new Map<string, string[]>();
   for (const r of rows) map.set(r.criterionId, [...(map.get(r.criterionId) ?? []), r.acceptedAt]);

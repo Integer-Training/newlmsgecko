@@ -11,6 +11,7 @@ import { tasksRouter } from '@api/routes/apprenticeship/tasks';
 import { tutorsRouter } from '@api/routes/apprenticeship/tutors';
 import { iqaRouter } from '@api/routes/apprenticeship/iqa';
 import { summaryRouter } from '@api/routes/apprenticeship/summary';
+import { otjRouter } from '@api/routes/apprenticeship/otj';
 import { overviewRouter } from '@api/routes/apprenticeship/overview';
 
 // Gecko Apprenticeships API, mounted at /apprenticeship in app.ts.
@@ -27,4 +28,5 @@ export const apprenticeshipRouter = new Hono()
   .route('/', onboardingRouter)
   .route('/', iqaRouter)
   .route('/', summaryRouter)
-  .route('/', overviewRouter);
+  .route('/', overviewRouter)
+  .route('/', otjRouter);

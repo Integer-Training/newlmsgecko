@@ -5,9 +5,16 @@ import type { Actor } from '@cio/db/actor';
 // DB queries mocked; the rules module and the real progress/recompute service are used.
 
 vi.mock('@cio/db/queries/apprenticeship', () => ({
+  listCarrierIdsForProgramme: vi.fn(async () => []),
+  listLinkedUnitCounts: vi.fn(async () => new Map()),
   isProgrammeTutor: vi.fn(async () => false),
   isProgrammeTutorOfLinked: vi.fn(async () => false),
   getApprEnrolment: vi.fn(),
+  getLinkedEnrolment: vi.fn(async () => null),
+  sumValidatedOtjLogMinutes: vi.fn(async () => 0),
+  listLinkedUnitCounts: vi.fn(async () => new Map()),
+  setLinkedAchievedAt: vi.fn(async () => undefined),
+  listOtjLogsForReport: vi.fn(async () => []),
   getApprProgramme: vi.fn(),
   getApprSettings: vi.fn(async () => ({ concernGapPct: 15, otjFactor: 0.2, otjWeeklyCapHours: 30 })),
   listProgrammeUnits: vi.fn(),
@@ -136,6 +143,7 @@ beforeEach(() => {
   vi.mocked(q.setEpa).mockResolvedValue({} as never);
   vi.mocked(q.claimGatewayReady).mockResolvedValue(true);
   vi.mocked(q.listEnrolmentIdsForProgramme).mockResolvedValue(['enr-1', 'enr-2']);
+  vi.mocked(q.listCarrierIdsForProgramme).mockResolvedValue(['enr-1', 'enr-2']);
   vi.mocked(notifyGatewayReadyOrRelease).mockResolvedValue(undefined);
 });
 
@@ -462,7 +470,7 @@ describe('ready alert survives a failed send', () => {
 describe('programme checklist recompute is batched', () => {
   it('recomputes in transactions of 100, claims the ready flag, and notifies only after each batch', async () => {
     const ids = Array.from({ length: 250 }, (_, i) => `e${i}`);
-    vi.mocked(q.listEnrolmentIdsForProgramme).mockResolvedValue(ids);
+    vi.mocked(q.listCarrierIdsForProgramme).mockResolvedValue(ids);
     vi.mocked(q.getApprEnrolment).mockImplementation((async (id: string) =>
       enrolment({ id, gatewayItems: ALL_MANUAL_DONE })) as never);
     vi.mocked(q.getEnrolmentLearnerIds).mockImplementation(
@@ -508,6 +516,7 @@ describe('programme checklist', () => {
       { gatewayChecklist: [{ key: 'a', label: 'A', kind: 'MANUAL' }] },
       { tx: true }
     );
+    expect(q.listCarrierIdsForProgramme).toHaveBeenCalledTimes(1);
     expect(q.writeEnrolmentCache).toHaveBeenCalledTimes(2);
     await putGatewayChecklist(admin, PROG, { checklist: null });
     expect(vi.mocked(q.updateApprProgramme).mock.calls.at(-1)![1]).toEqual({ gatewayChecklist: null });
@@ -597,5 +606,36 @@ describe('unit GLH edits', () => {
     vi.mocked(q.listEnrolmentIdsForProgramme).mockClear();
     await updateUnit(admin, PROG, 'q1', 'u1', { title: 'Renamed' });
     expect(q.listEnrolmentIdsForProgramme).not.toHaveBeenCalled();
+  });
+});
+
+describe('linked pair: one gateway and one EPA for the apprenticeship', () => {
+  const COMP = '55555555-5555-4555-8555-555555555555';
+  const givenPair = (carrier: Record<string, unknown> = {}) => {
+    const car = enrolment({ gatewayPassedAt: '2026-05-01T00:00:00Z', primaryEnrolmentId: null, ...carrier });
+    const comp = enrolment({ id: COMP, programmeId: 'p2', primaryEnrolmentId: ENR });
+    vi.mocked(q.getApprEnrolment).mockImplementation((async (id: string) => (id === COMP ? comp : car)) as never);
+    vi.mocked(q.getLinkedEnrolment).mockImplementation((async (id: string) => (id === ENR ? comp : car)) as never);
+  };
+
+  it('an EPA update through the component id acts on the carrier and stamps achieved_at on both halves', async () => {
+    givenPair();
+    await updateEpa(admin, COMP, { epaResult: 'PASS', epaResultDate: '2026-07-01' });
+    expect(vi.mocked(q.setEpa).mock.calls[0][1]).toBe(ENR);
+    expect(vi.mocked(q.setEpa).mock.calls[0][2]).toMatchObject({ achievedAt: '2026-07-01T00:00:00.000Z' });
+    expect(q.setLinkedAchievedAt).toHaveBeenCalledWith(expect.anything(), ENR, '2026-07-01T00:00:00.000Z');
+  });
+
+  it('FAIL clears achieved_at on both halves', async () => {
+    givenPair({ epaResult: 'PASS', epaResultDate: '2026-07-01', achievedAt: '2026-07-01T00:00:00Z' });
+    await updateEpa(admin, ENR, { epaResult: 'FAIL' });
+    expect(q.setLinkedAchievedAt).toHaveBeenCalledWith(expect.anything(), ENR, null);
+  });
+
+  it('a lost race does not touch the component', async () => {
+    givenPair();
+    vi.mocked(q.setEpa).mockResolvedValueOnce(null as never);
+    await expect(updateEpa(admin, ENR, { epaBookedDate: '2026-06-01' })).rejects.toMatchObject({ statusCode: 409 });
+    expect(q.setLinkedAchievedAt).not.toHaveBeenCalled();
   });
 });

@@ -7,7 +7,13 @@ import type { Actor } from '@cio/db/actor';
 vi.mock('@cio/db/queries/apprenticeship', () => ({
   isProgrammeTutor: vi.fn(async () => false),
   isProgrammeTutorOfLinked: vi.fn(async () => false),
+  lockApprEnrolment: vi.fn(async () => null),
   getApprEnrolment: vi.fn(),
+  getLinkedEnrolment: vi.fn(async () => null),
+  sumValidatedOtjLogMinutes: vi.fn(async () => 0),
+  listLinkedUnitCounts: vi.fn(async () => new Map()),
+  setLinkedAchievedAt: vi.fn(async () => undefined),
+  listOtjLogsForReport: vi.fn(async () => []),
   listCriterionAcceptedDates: vi.fn(async () => new Map()),
   getApprSettings: vi.fn(async () => ({ concernGapPct: 15, otjFactor: 0.2, otjWeeklyCapHours: 30 })),
   listEnrolmentRows: vi.fn(async () => []),
@@ -248,6 +254,36 @@ describe('getSummary', () => {
     ] as never);
     const s = await getSummary(admin, {}, NOW);
     expect(s.gateway).toEqual({ ready: 1, atGateway: 1, epaBooked: 1, achieved: 1, epaFailed: 0 });
+  });
+
+  it('a linked pair is one row and its gateway counts units across both qualifications', async () => {
+    // Carrier: 2/2 units complete + OTJ done; component: 0/1 -> NOT ready. Same pair with the component done -> ready.
+    const done = {
+      unitsTotal: 2,
+      unitsComplete: 2,
+      gatewayChecklist: [{ key: 'u', label: 'Units', kind: 'AUTO_UNITS' }]
+    };
+    vi.mocked(q.listEnrolmentRows).mockResolvedValue([
+      row({
+        id: 'p1',
+        ...done,
+        linked: { id: 'c1', programmeId: 'x', programmeTitle: 'Std', programmeType: 'STANDARD' }
+      }),
+      row({
+        id: 'p2',
+        ...done,
+        linked: { id: 'c2', programmeId: 'x', programmeTitle: 'Std', programmeType: 'STANDARD' }
+      })
+    ] as never);
+    vi.mocked(q.listLinkedUnitCounts).mockResolvedValue(
+      new Map([
+        ['p1', { total: 1, complete: 0 }],
+        ['p2', { total: 1, complete: 1 }]
+      ])
+    );
+    const s = await getSummary(admin, {}, NOW);
+    expect(s.learners.total).toBe(2);
+    expect(s.gateway.ready).toBe(1);
   });
 });
 

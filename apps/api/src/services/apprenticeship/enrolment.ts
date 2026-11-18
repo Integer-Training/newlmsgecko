@@ -10,6 +10,7 @@ import { buildGatewayView, buildGlhView, resolveChecklist } from '@api/services/
 import { nameGatewayActors } from '@api/services/apprenticeship/gateway-names';
 import { notifyGatewayReadyOrRelease } from '@api/services/apprenticeship/notifications';
 import { ensureOnboardingTypes } from '@api/services/apprenticeship/onboarding';
+import { lockEnrolmentsInOrder } from '@api/services/apprenticeship/pair-lock';
 import { recomputeEnrolment, todayIso, type EnrolmentProgressDetail } from '@api/services/apprenticeship/progress';
 import { createOrgUser } from '@api/services/organization/users';
 import { createTutorAllocation } from '@api/services/organization/allocation';
@@ -35,6 +36,7 @@ import {
   getApprSettings,
   getEnrolmentOverview,
   getEvidenceTotals,
+  sumValidatedOtjLogMinutes,
   insertApprEnrolment,
   insertApprReview,
   sumGlhLogMinutes,
@@ -49,6 +51,8 @@ import {
   listApprPickerPeople,
   listEnrolmentRows,
   listEnrolmentUnitRows,
+  listLinkedUnitCounts,
+  moveOtjLogs,
   updateApprEnrolment,
   upsertEnrolmentUnitDates
 } from '@cio/db/queries/apprenticeship';
@@ -242,14 +246,16 @@ export async function listEnrolments(actor: Actor, query: EnrolmentListQuery, no
 
   const [rows, settings] = await Promise.all([listEnrolmentRows(scope), getApprSettings(a.orgId)]);
   const today = todayIso(now);
+  // A linked pair is one row (the carrier) and its gateway counts units across BOTH qualifications.
+  const linkedUnits = await listLinkedUnitCounts(rows.filter((r) => r.linked).map((r) => r.id));
 
   const computed = rows.map((r) => {
     const p = computeRowProgress(r, settings, today);
     const gateway = buildGatewayView({
       checklist: resolveChecklist(r.gatewayChecklist),
       manual: r.gatewayItems,
-      unitsTotal: r.unitsTotal ?? 0,
-      unitsComplete: r.unitsComplete ?? 0,
+      unitsTotal: (r.unitsTotal ?? 0) + (linkedUnits.get(r.id)?.total ?? 0),
+      unitsComplete: (r.unitsComplete ?? 0) + (linkedUnits.get(r.id)?.complete ?? 0),
       otjMinutes: r.otjMinutes,
       otjTargetMinutes: p.otjTargetMinutes,
       enrolment: {
@@ -657,6 +663,7 @@ export async function linkEnrolment(actor: Actor, enrolmentId: string, input: En
 
   let carrier: ApprLearnerEnrolmentRef;
   let component: ApprLearnerEnrolmentRef;
+  let claimed: string[] = [];
   try {
     [carrier, component] = await runInTransaction(async (tx) => {
       // Per-learner lock first, then read + check the learner's enrolments (so a concurrent enrol/link cannot slip in
@@ -690,9 +697,16 @@ export async function linkEnrolment(actor: Actor, enrolmentId: string, input: En
         `${firstRef.createdAt}${firstRef.id}` <= `${secondRef.createdAt}${secondRef.id}`
           ? [firstRef, secondRef]
           : [secondRef, firstRef];
+      // Pair lock (id order, shared with every OTJ / evidence write) before the link is written.
+      await lockEnrolmentsInOrder(tx, [pair[0].id, pair[1].id]);
       if (!(await linkApprEnrolments(tx, pair[0].id, pair[1].id))) {
         throw new AppError('One of these enrolments is already linked', ErrorCodes.CONFLICT, 409, 'enrolmentId');
       }
+      // Off-the-job logs are stored on the CARRIER only: any the component already held move across, then both halves'
+      // caches are re-derived in this transaction (the pair now shares evidence counts, OTJ minutes and gateway units).
+      await moveOtjLogs(tx, pair[1].id, pair[0].id);
+      const detail = await recomputeEnrolment(tx, pair[0].id, { claimGatewayReady: true });
+      claimed = detail?.gatewayReadyClaimed ? [pair[0].id] : [];
       return pair;
     });
   } catch (error) {
@@ -700,6 +714,13 @@ export async function linkEnrolment(actor: Actor, enrolmentId: string, input: En
     throw error;
   }
 
+  if (claimed.length > 0) {
+    await notifyGatewayReadyOrRelease({
+      enrolmentId: carrier.id,
+      learnerId: first.learnerId,
+      organizationId: first.organizationId
+    });
+  }
   await recordAudit({
     actor,
     action: 'appr.enrolment.linked',
@@ -718,15 +739,39 @@ export async function unlinkEnrolment(actor: Actor, enrolmentId: string) {
   const { carrier, component } = await resolveApprenticeship(enrolmentId);
   if (!component) throw badRequest('This enrolment is not linked to another');
 
-  const crossMapped = await countCrossMappedEvidence(carrier.learnerId, [carrier.programmeId, component.programmeId]);
-  if (crossMapped > 0) {
-    throw new AppError(
-      `${crossMapped} piece${crossMapped === 1 ? '' : 's'} of evidence ${crossMapped === 1 ? 'is' : 'are'} mapped to both qualifications — remove those mappings first`,
-      ErrorCodes.CONFLICT,
-      409
+  // Under the pair lock (so no evidence write can add a cross-mapping between the check and the split), re-check, split,
+  // and re-derive both caches: the halves stop sharing evidence counts, OTJ minutes and gateway units.
+  // Off-the-job LOGS stay on the carrier: they are learner-level records and have no programme to follow, so the
+  // component starts with none (only its own OTJ evidence counts toward its minutes).
+  const claimed = await runInTransaction(async (tx) => {
+    await lockEnrolmentsInOrder(tx, [carrier.id, component.id]);
+    const crossMapped = await countCrossMappedEvidence(
+      carrier.learnerId,
+      [carrier.programmeId, component.programmeId],
+      tx
     );
+    if (crossMapped > 0) {
+      throw new AppError(
+        `${crossMapped} piece${crossMapped === 1 ? '' : 's'} of evidence ${crossMapped === 1 ? 'is' : 'are'} mapped to both qualifications — remove those mappings first`,
+        ErrorCodes.CONFLICT,
+        409
+      );
+    }
+    await unlinkApprEnrolment(tx, component.id);
+    const claims: string[] = [];
+    for (const id of [carrier.id, component.id]) {
+      const detail = await recomputeEnrolment(tx, id, { claimGatewayReady: true });
+      if (detail?.gatewayReadyClaimed) claims.push(id);
+    }
+    return claims;
+  });
+  for (const id of claimed) {
+    await notifyGatewayReadyOrRelease({
+      enrolmentId: id,
+      learnerId: carrier.learnerId,
+      organizationId: carrier.organizationId
+    });
   }
-  await runInTransaction((tx) => unlinkApprEnrolment(tx, component.id));
 
   await recordAudit({
     actor,
@@ -817,15 +862,26 @@ async function loadPortfolio(actor: Actor, enrolmentId: string, now: Date = new 
     throw notFound();
   }
   const { enrolment } = overview;
-  const [structure, counts, totals, unitRows, settings, loggedGlh, acceptedDates] = await Promise.all([
-    getApprProgrammeStructure(enrolment.programmeId),
-    countEvidenceByCriterion(enrolment.programmeId, enrolment.learnerId),
-    getEvidenceTotals(enrolment.programmeId, enrolment.learnerId),
-    listEnrolmentUnitRows(enrolment.id),
-    getApprSettings(enrolment.organizationId),
-    sumGlhLogMinutes(enrolment.id),
-    listCriterionAcceptedDates(enrolment.programmeId, enrolment.learnerId)
-  ]);
+  // Same learner-level numbers as buildEnrolmentProgress: a CARRIER counts both halves of a pair plus its validated OTJ logs.
+  const isComponent = !!enrolment.primaryEnrolmentId;
+  const pairComponent = isComponent ? null : await getLinkedEnrolment(enrolment.id);
+  const [structure, counts, evidenceTotals, unitRows, settings, loggedGlh, acceptedDates, loggedOtj] =
+    await Promise.all([
+      getApprProgrammeStructure(enrolment.programmeId),
+      countEvidenceByCriterion(enrolment.programmeId, enrolment.learnerId),
+      getEvidenceTotals(
+        enrolment.programmeId,
+        enrolment.learnerId,
+        undefined,
+        pairComponent ? { programmeIds: [enrolment.programmeId, pairComponent.programmeId] } : {}
+      ),
+      listEnrolmentUnitRows(enrolment.id),
+      getApprSettings(enrolment.organizationId),
+      sumGlhLogMinutes(enrolment.id),
+      listCriterionAcceptedDates(enrolment.programmeId, enrolment.learnerId),
+      isComponent ? Promise.resolve(0) : sumValidatedOtjLogMinutes(enrolment.id)
+    ]);
+  const totals = { ...evidenceTotals, otjMinutes: evidenceTotals.otjMinutes + loggedOtj };
 
   const datesByUnit = new Map(unitRows.map((r) => [r.unitId, r]));
   const criteriaByUnit = new Map<string, typeof structure.criteria>();
@@ -923,11 +979,15 @@ async function loadPortfolio(actor: Actor, enrolmentId: string, now: Date = new 
     loggedGlh,
     progress.expectedPct
   );
+  // The gateway's AUTO_UNITS item counts units across BOTH halves of a linked pair (the counterpart's cached unit rows).
+  const counterpartUnits = overview.counterpart ? await listEnrolmentUnitRows(overview.counterpart.enrolmentId) : [];
   const gateway = buildGatewayView({
     checklist: resolveChecklist(overview.gatewayChecklist),
     manual: enrolment.gatewayItems,
-    unitsTotal: structure.units.length,
-    unitsComplete: structure.units.filter((u) => progressByUnit.get(u.id)?.status === 'COMPLETE').length,
+    unitsTotal: structure.units.length + counterpartUnits.length,
+    unitsComplete:
+      structure.units.filter((u) => progressByUnit.get(u.id)?.status === 'COMPLETE').length +
+      counterpartUnits.filter((u) => u.completedAt).length,
     otjMinutes: progress.otjMinutes,
     otjTargetMinutes: progress.otjTargetMinutes,
     enrolment

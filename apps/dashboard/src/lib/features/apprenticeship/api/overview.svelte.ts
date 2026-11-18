@@ -7,12 +7,9 @@ import type { OverviewPayload } from './overview.types';
 // either enrolment of a pair; the API resolves it to the carrier. Every number is the API's: nothing is recomputed here.
 class OverviewApi {
   get(enrolmentId: string): Promise<CallResult<OverviewPayload>> {
-    // The route is added by the overview API in the same deploy; typed loosely so this client compiles either way.
-    const enrolments = classroomio.apprenticeship.enrolments as unknown as Record<
-      string,
-      { overview: { $get: (a: { param: { id: string } }) => Promise<Response> } }
-    >;
-    return call<OverviewPayload>(() => enrolments[':id'].overview.$get({ param: { id: enrolmentId } }));
+    return call<OverviewPayload>(() =>
+      classroomio.apprenticeship.enrolments[':id'].overview.$get({ param: { id: enrolmentId } })
+    );
   }
 
   /** Download the portfolio CSV for one enrolment, optionally for one unit (the API builds it). */

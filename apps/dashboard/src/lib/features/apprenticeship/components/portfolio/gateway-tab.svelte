@@ -33,7 +33,7 @@
 
   // Why an automatic item is (not) done, from the portfolio the page already holds.
   const unitStats = $derived.by(() => {
-    const units = (store.data?.qualifications ?? []).flatMap((q) => q.units);
+    const units = store.portfolios.flatMap((p) => p.qualifications).flatMap((q) => q.units);
     return { total: units.length, complete: units.filter((u) => u.status === 'COMPLETE').length };
   });
   function why(item: GatewayItem): string | null {

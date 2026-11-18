@@ -6,6 +6,7 @@
   import { APPR_EVIDENCE_STATUSES, APPR_EVIDENCE_STATUS_LABELS } from '@cio/utils/constants/apprenticeship';
   import { evidenceApi } from '../../api/evidence.svelte';
   import type { PortfolioStore } from '../../stores/portfolio.svelte';
+  import AlsoCounts from '../evidence/also-counts.svelte';
   import ProgrammeTypeChip from '../shared/programme-type-chip.svelte';
   import EvidenceStatusChip from '../shared/evidence-status-chip.svelte';
   import { fmtDate, fmtMinutes } from '../shared/format';
@@ -107,6 +108,11 @@
                 >
                   {e.title}
                 </button>
+                <AlsoCounts
+                  home={e.homeEnrolmentId ?? e.qualEnrolmentId}
+                  mapped={e.mappedQualifications}
+                  viewing={store.scoped ? store.enrolmentId : null}
+                />
               </Table.Cell>
               <Table.Cell>{e.typeLabel ?? e.typeKey}</Table.Cell>
               {#if store.pair}

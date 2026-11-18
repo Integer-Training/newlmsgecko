@@ -1,6 +1,6 @@
 import * as schema from '@db/schema';
 
-import { and, asc, db, eq, sql, type DbOrTxClient } from '@db/drizzle';
+import { and, asc, db, eq, inArray, sql, type DbOrTxClient } from '@db/drizzle';
 
 // Gecko Apprenticeships — the PDF portfolio report. No access control here: the service resolves the enrolment first.
 
@@ -40,4 +40,18 @@ export async function listEvidenceForReport(
     )
     .where(and(eq(ev.programmeId, programmeId), eq(ev.learnerId, learnerId)))
     .orderBy(asc(ev.createdAt), asc(ev.id));
+}
+
+/**
+ * Off-the-job log entries of the given enrolments for the report (validated + pending; rejected are left out), oldest
+ * first. Read-only; no access control (the service resolved the enrolments).
+ */
+export async function listOtjLogsForReport(enrolmentIds: string[], client: DbOrTxClient = db) {
+  if (enrolmentIds.length === 0) return [];
+  const l = schema.apprOtjLog;
+  return client
+    .select({ title: l.title, logDate: l.logDate, minutes: l.minutes, isOtj: l.isOtj, status: l.status })
+    .from(l)
+    .where(and(inArray(l.enrolmentId, enrolmentIds), inArray(l.status, ['VALIDATED', 'SUBMITTED'])))
+    .orderBy(asc(l.logDate), asc(l.createdAt), asc(l.id));
 }

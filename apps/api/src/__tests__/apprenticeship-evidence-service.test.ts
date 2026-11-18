@@ -5,8 +5,11 @@ import type { Actor } from '@cio/db/actor';
 // with the DB queries mocked (the rules module is the real one).
 
 vi.mock('@cio/db/queries/apprenticeship', () => ({
+  lockApprEnrolment: vi.fn(async () => null),
+  listLinkedUnitCounts: vi.fn(async () => new Map()),
   isProgrammeTutor: vi.fn(async () => false),
   isProgrammeTutorOfLinked: vi.fn(async () => false),
+  getLinkedEnrolment: vi.fn(async () => null),
   countOnboardingTypes: vi.fn(async () => 1),
   getApprEnrolment: vi.fn(),
   getApprEnrolmentByProgrammeLearner: vi.fn(),
@@ -100,6 +103,12 @@ describe('reviewEvidence', () => {
       async (_tx, _id, patch) => ({ ...evidence('x'), ...patch }) as never
     );
     vi.mocked(q.filterCriterionIdsInProgramme).mockImplementation(async (_p, ids) => ids);
+  });
+
+  it('takes the pair lock (enrolment rows) BEFORE the evidence row is changed, for staff too', async () => {
+    await reviewEvidence(tutor, EV, { decision: 'ACCEPT', criterionIds: [CRIT] });
+    const lock = vi.mocked(q.lockApprEnrolment).mock.invocationCallOrder[0];
+    expect(lock).toBeLessThan(vi.mocked(q.updateApprEvidence).mock.invocationCallOrder[0]);
   });
 
   it('ACCEPT writes status + reviewer, replaces the mapping as STAFF, adds the audit note and recomputes in the same tx', async () => {

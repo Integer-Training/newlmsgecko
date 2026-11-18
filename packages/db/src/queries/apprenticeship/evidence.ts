@@ -1,6 +1,6 @@
 import * as schema from '@db/schema';
 
-import { and, asc, db, desc, eq, inArray, sql, type DbOrTxClient, type SQL } from '@db/drizzle';
+import { and, asc, db, desc, eq, inArray, or, sql, type DbOrTxClient, type SQL } from '@db/drizzle';
 import { tutorReachSql, tutorsDisplaySql } from './tutors';
 import { profileDisplayName } from './names';
 
@@ -18,21 +18,26 @@ export async function getApprEvidence(evidenceId: string, client: DbOrTxClient =
   return row ?? null;
 }
 
-/** The Evidence tab of one learner/programme: one statement, type label + creator name joined. */
+/**
+ * The Evidence tab of one learner: one statement, type label + creator name joined. `programmeIds` is the enrolment's
+ * programme, plus its linked counterpart's for a Diploma + Standard pair (evidence homed on either half is listed).
+ */
 export async function listEvidenceForLearner(
   organizationId: string,
-  programmeId: string,
+  programmeIds: string[],
   learnerId: string,
   filter: { status?: string; typeKey?: string },
   client: DbOrTxClient = db
 ) {
   const ev = schema.apprEvidence;
-  const conditions: (SQL | undefined)[] = [eq(ev.programmeId, programmeId), eq(ev.learnerId, learnerId)];
+  const conditions: (SQL | undefined)[] = [inArray(ev.programmeId, programmeIds), eq(ev.learnerId, learnerId)];
   if (filter.status) conditions.push(eq(ev.status, filter.status));
   if (filter.typeKey) conditions.push(eq(ev.typeKey, filter.typeKey));
   return client
     .select({
       id: ev.id,
+      /** The evidence's HOME programme (the service maps it to the home enrolment). */
+      homeProgrammeId: ev.programmeId,
       title: ev.title,
       typeKey: ev.typeKey,
       typeLabel: schema.apprEvidenceType.label,
@@ -58,6 +63,34 @@ export async function listEvidenceForLearner(
     .leftJoin(schema.profile, eq(schema.profile.id, ev.createdBy))
     .where(and(...conditions))
     .orderBy(desc(ev.createdAt));
+}
+
+/**
+ * Which programmes (and criterion codes) each of these evidence rows is mapped to, in programme display order. Feeds the
+ * "Also counts towards..." / "From Diploma|Standard" chips for a linked pair. Evidence with no mapping is absent.
+ */
+export async function listEvidenceMappings(evidenceIds: string[], client: DbOrTxClient = db) {
+  if (evidenceIds.length === 0) return [];
+  return client
+    .select({
+      evidenceId: schema.apprEvidenceCriterion.evidenceId,
+      programmeId: schema.apprProgramme.id,
+      programmeTitle: schema.apprProgramme.title,
+      programmeType: schema.apprProgramme.type,
+      code: schema.apprCriterion.code
+    })
+    .from(schema.apprEvidenceCriterion)
+    .innerJoin(schema.apprCriterion, eq(schema.apprCriterion.id, schema.apprEvidenceCriterion.criterionId))
+    .innerJoin(schema.apprUnit, eq(schema.apprUnit.id, schema.apprCriterion.unitId))
+    .innerJoin(schema.apprQualification, eq(schema.apprQualification.id, schema.apprUnit.qualificationId))
+    .innerJoin(schema.apprProgramme, eq(schema.apprProgramme.id, schema.apprQualification.programmeId))
+    .where(inArray(schema.apprEvidenceCriterion.evidenceId, evidenceIds))
+    .orderBy(
+      asc(schema.apprQualification.sort),
+      asc(schema.apprUnit.sort),
+      asc(schema.apprCriterion.sort),
+      asc(schema.apprCriterion.createdAt)
+    );
 }
 
 /** Which of these criterion ids belong to the programme (chain join). Callers compare lengths to reject foreign ids. */
@@ -152,12 +185,15 @@ export async function listEvidenceCriteriaDetail(evidenceId: string, client: DbO
       unitCode: schema.apprUnit.code,
       unitTitle: schema.apprUnit.title,
       qualificationId: schema.apprQualification.id,
-      qualificationTitle: schema.apprQualification.title
+      qualificationTitle: schema.apprQualification.title,
+      programmeId: schema.apprQualification.programmeId,
+      programmeType: schema.apprProgramme.type
     })
     .from(schema.apprEvidenceCriterion)
     .innerJoin(schema.apprCriterion, eq(schema.apprCriterion.id, schema.apprEvidenceCriterion.criterionId))
     .innerJoin(schema.apprUnit, eq(schema.apprUnit.id, schema.apprCriterion.unitId))
     .innerJoin(schema.apprQualification, eq(schema.apprQualification.id, schema.apprUnit.qualificationId))
+    .innerJoin(schema.apprProgramme, eq(schema.apprProgramme.id, schema.apprQualification.programmeId))
     .where(eq(schema.apprEvidenceCriterion.evidenceId, evidenceId))
     .orderBy(
       asc(schema.apprQualification.sort),
@@ -194,7 +230,10 @@ export async function getProfileName(profileId: string, client: DbOrTxClient = d
   return row?.name ?? null;
 }
 
-/** The "List evidence" popover: every piece mapped to one criterion for one learner. */
+/**
+ * The "List evidence" popover: every piece of the learner mapped to one criterion, whichever programme of a linked pair
+ * it is homed on (the criterion's own programme decides whose it is; the evidence's home programme is returned).
+ */
 export async function listEvidenceForCriterion(
   programmeId: string,
   learnerId: string,
@@ -205,6 +244,7 @@ export async function listEvidenceForCriterion(
   return client
     .select({
       id: ev.id,
+      homeProgrammeId: ev.programmeId,
       title: ev.title,
       snippet: sql<string>`left(${ev.details}, 200)`,
       status: ev.status,
@@ -213,14 +253,30 @@ export async function listEvidenceForCriterion(
     })
     .from(schema.apprEvidenceCriterion)
     .innerJoin(ev, eq(ev.id, schema.apprEvidenceCriterion.evidenceId))
+    .innerJoin(schema.apprCriterion, eq(schema.apprCriterion.id, schema.apprEvidenceCriterion.criterionId))
+    .innerJoin(schema.apprUnit, eq(schema.apprUnit.id, schema.apprCriterion.unitId))
+    .innerJoin(schema.apprQualification, eq(schema.apprQualification.id, schema.apprUnit.qualificationId))
     .where(
       and(
         eq(schema.apprEvidenceCriterion.criterionId, criterionId),
-        eq(ev.programmeId, programmeId),
+        eq(schema.apprQualification.programmeId, programmeId),
         eq(ev.learnerId, learnerId)
       )
     )
     .orderBy(desc(ev.createdAt));
+}
+
+/** How many tasks (of these enrolments) target one criterion: the Tasks tile of the criterion popover. */
+export async function countTasksForCriterion(enrolmentIds: string[], criterionId: string, client: DbOrTxClient = db) {
+  if (enrolmentIds.length === 0) return 0;
+  const [row] = await client
+    .select({ n: sql<number>`count(distinct ${schema.apprTask.id})::int` })
+    .from(schema.apprTaskCriterion)
+    .innerJoin(schema.apprTask, eq(schema.apprTask.id, schema.apprTaskCriterion.taskId))
+    .where(
+      and(eq(schema.apprTaskCriterion.criterionId, criterionId), inArray(schema.apprTask.enrolmentId, enrolmentIds))
+    );
+  return row?.n ?? 0;
 }
 
 export interface ToMarkScope {
@@ -238,7 +294,17 @@ export async function listToMark(
 ) {
   const ev = schema.apprEvidence;
   const conditions: (SQL | undefined)[] = [eq(ev.organizationId, scope.organizationId), eq(ev.status, 'SUBMITTED')];
-  if (scope.programmeId) conditions.push(eq(ev.programmeId, scope.programmeId));
+  if (scope.programmeId) {
+    // Home programme, or mapped to one of its criteria (evidence homed on the other half of a pair shows in both queues).
+    conditions.push(
+      or(
+        eq(ev.programmeId, scope.programmeId),
+        sql`exists (select 1 from appr_evidence_criterion mc join appr_criterion mcr on mcr.id = mc.criterion_id
+          join appr_unit mu on mu.id = mcr.unit_id join appr_qualification mq on mq.id = mu.qualification_id
+          where mc.evidence_id = ${ev.id} and mq.programme_id = ${scope.programmeId})`
+      )
+    );
+  }
   if (scope.restrictToTutorId) {
     conditions.push(
       tutorReachSql('"appr_evidence"."learner_id"', '"appr_evidence"."programme_id"', scope.restrictToTutorId)

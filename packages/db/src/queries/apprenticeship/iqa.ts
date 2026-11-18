@@ -306,18 +306,24 @@ export interface IqaUnitCoverageRow {
   sampled: number;
 }
 
-/** Per unit that has accepted evidence: distinct ACCEPTED evidence mapped to one of its criteria vs how much is sampled. */
+/**
+ * Per unit that has accepted evidence: distinct ACCEPTED evidence mapped to one of its criteria vs how much is sampled.
+ * Grouped and filtered by the CRITERION's programme (not the evidence's home), so evidence cross-mapped across a linked
+ * pair counts - and is sampled - on both qualifications' units.
+ */
 export async function listIqaUnitCoverage(
   organizationId: string,
   filter: Pick<IqaFilter, 'programmeId'>,
   client: DbOrTxClient = db
 ): Promise<IqaUnitCoverageRow[]> {
-  const programmeCond = filter.programmeId ? sql`and e.programme_id = ${filter.programmeId}::uuid` : sql``;
+  const programmeCond = filter.programmeId ? sql`and cq.programme_id = ${filter.programmeId}::uuid` : sql``;
   return (await client.execute(sql`
     with ue as (
       select distinct c.unit_id, ec.evidence_id
       from appr_evidence_criterion ec
       join appr_criterion c on c.id = ec.criterion_id
+      join appr_unit cu on cu.id = c.unit_id
+      join appr_qualification cq on cq.id = cu.qualification_id
       join appr_evidence e on e.id = ec.evidence_id
       where e.organization_id = ${organizationId}::uuid and e.status = 'ACCEPTED' ${programmeCond})
     select un.id as "unitId", un.title as "unitTitle", un.code as "unitRef", pr.id as "programmeId", pr.title as "programmeTitle",

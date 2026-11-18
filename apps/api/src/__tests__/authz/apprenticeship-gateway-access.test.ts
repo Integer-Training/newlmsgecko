@@ -8,9 +8,16 @@ import type { AuthSession } from '@api/types/auth';
 // allocated learners only (404 otherwise); an admin of another org gets 404 on every id; programme checklist is ADMIN only.
 
 vi.mock('@cio/db/queries/apprenticeship', () => ({
+  listCarrierIdsForProgramme: vi.fn(async () => []),
+  listLinkedUnitCounts: vi.fn(async () => new Map()),
   isProgrammeTutor: vi.fn(async () => false),
   isProgrammeTutorOfLinked: vi.fn(async () => false),
+  getLinkedEnrolment: vi.fn(async () => null),
+  sumValidatedOtjLogMinutes: vi.fn(async () => 0),
+  lockApprEnrolment: vi.fn(async () => null),
   getApprEnrolment: vi.fn(),
+  getLinkedEnrolment: vi.fn(async () => null),
+  setLinkedAchievedAt: vi.fn(async () => undefined),
   getApprProgramme: vi.fn(),
   getApprSettings: vi.fn(async () => ({ concernGapPct: 15, otjFactor: 0.2, otjWeeklyCapHours: 30 })),
   listProgrammeUnits: vi.fn(async () => [{ unitId: 'u1', qualificationId: 'q1', glh: 5 }]),

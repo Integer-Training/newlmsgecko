@@ -11,6 +11,7 @@ import {
 import {
   getEnrolmentLinkTargets,
   getEvidenceLinkTargets,
+  getEvidenceProgrammeTitles,
   getOnboardingDocLinkTargets,
   getReviewLinkTargets,
   getTaskLinkTargets
@@ -51,12 +52,14 @@ interface ApprTargets {
   reviews: ReviewTargets;
   enrolments?: EnrolmentTargets;
   onboardingDocs?: OnboardingDocTargets;
+  /** evidenceId → titles of the programmes it is mapped to (a cross-mapped Diploma + Standard names both). */
+  evidenceProgrammes?: Map<string, string[]>;
 }
 
 /** Gecko Apprenticeships: open the portfolio on a tab (tasks / reviews) — in the reader's own shell. */
 function portfolioTabLink(
   enrolmentId: string | undefined,
-  tab: 'tasks' | 'reviews' | 'gateway' | 'onboarding',
+  tab: 'tasks' | 'reviews' | 'gateway' | 'onboarding' | 'otj',
   isStaff: boolean
 ): string {
   if (!enrolmentId) return isStaff ? '/caseload/apprenticeships' : '/lms/apprenticeship';
@@ -113,12 +116,28 @@ function enrich(
     case 'appr.evidence.referred': {
       const ev = row.entityId ? evidence.get(row.entityId) : undefined;
       const verb = row.type === 'appr.evidence.accepted' ? 'Evidence accepted' : 'Evidence referred back to you';
+      const quals = row.entityId ? (appr.evidenceProgrammes?.get(row.entityId) ?? []) : [];
+      const both = quals.length > 1 ? ` (counts towards ${quals.join(' and ')})` : '';
       return {
         ...base,
-        subject: `${verb} — ${ev?.title ?? 'your apprenticeship evidence'}`,
+        subject: `${verb} — ${ev?.title ?? 'your apprenticeship evidence'}${both}`,
         link: evidenceLink(row, evidence, isStaff)
       };
     }
+    case 'appr.otj.submitted': {
+      const who = row.entityId ? appr.enrolments?.get(row.entityId)?.learnerName : null;
+      return {
+        ...base,
+        subject: `Off-the-job log to validate — ${who ?? 'an apprentice'}`,
+        link: portfolioTabLink(row.entityId ?? undefined, 'otj', isStaff)
+      };
+    }
+    case 'appr.otj.reviewed':
+      return {
+        ...base,
+        subject: 'Your off-the-job training log was reviewed',
+        link: portfolioTabLink(row.entityId ?? undefined, 'otj', isStaff)
+      };
     case 'appr.iqa.outcome': {
       // Sent to the assessor (staff) when the IQA decides on their sampled evidence: opens that evidence's sheet.
       const ev = row.entityId ? evidence.get(row.entityId) : undefined;
@@ -227,7 +246,12 @@ export async function getNotificationCentre(
   const reviewIds = idsOf('appr_review');
   const enrolmentIds = idsOf('appr_enrolment');
   const onboardingDocIds = idsOf('appr_onboarding_doc');
+  const reviewedEvidenceIds = rows
+    .filter((r) => r.type === 'appr.evidence.accepted' || r.type === 'appr.evidence.referred')
+    .map((r) => r.entityId)
+    .filter((id): id is string => !!id);
   const appr: ApprTargets = {
+    evidenceProgrammes: reviewedEvidenceIds.length ? await getEvidenceProgrammeTitles(reviewedEvidenceIds) : new Map(),
     enrolments: enrolmentIds.length ? await getEnrolmentLinkTargets(enrolmentIds) : new Map(),
     tasks: taskIds.length ? await getTaskLinkTargets(taskIds) : new Map(),
     reviews: reviewIds.length ? await getReviewLinkTargets(reviewIds) : new Map(),

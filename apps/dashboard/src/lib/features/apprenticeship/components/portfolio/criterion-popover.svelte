@@ -7,6 +7,7 @@
   import { Spinner } from '@cio/ui/base/spinner';
   import { evidenceApi, type CriterionEvidenceItem } from '../../api/evidence.svelte';
   import type { PortfolioStore } from '../../stores/portfolio.svelte';
+  import ProgrammeTypeChip from '../shared/programme-type-chip.svelte';
   import EvidenceStatusChip from '../shared/evidence-status-chip.svelte';
   import TaskStatusChip from '../shared/task-status-chip.svelte';
   import { fmtDate } from '../shared/format';
@@ -34,6 +35,7 @@
 
   let open = $state(false);
   let items = $state<CriterionEvidenceItem[]>([]);
+  let apiTaskCount = $state<number | null>(null);
   let loading = $state(false);
   let error = $state<string | null>(null);
   let tab = $state('evidence');
@@ -50,7 +52,8 @@
       if (cancelled) return;
       loading = false;
       if (res.ok) {
-        items = res.data;
+        items = res.data.items;
+        apiTaskCount = res.data.taskCount;
         error = null;
       } else {
         error = res.error;
@@ -70,6 +73,18 @@
   });
 
   const tasks = $derived(store.tasks.filter((t) => t.criteria.some((c) => c.id === criterionId)));
+  // The API's count covers this learner's tasks on the criterion; the store list is the fallback (older API).
+  const taskTotal = $derived(apiTaskCount ?? tasks.length);
+  const viewing = $derived(enrolmentId ?? store.enrolmentId);
+  // "From Diploma/Standard": evidence that lives on the other qualification of the pair.
+  function fromType(item: CriterionEvidenceItem) {
+    if (!item.homeEnrolmentId || item.homeEnrolmentId === viewing) return null;
+    if (item.homeType) return item.homeType;
+    const home = store.portfolioFor(item.homeEnrolmentId)?.programme.type;
+    if (home) return home;
+    const here = store.portfolioFor(viewing)?.programme.type;
+    return here ? (here === 'DIPLOMA' ? 'STANDARD' : 'DIPLOMA') : null;
+  }
   const filtered = $derived(
     items.filter((i) => {
       const q = search.trim().toLowerCase();
@@ -103,14 +118,14 @@
       </div>
       <div class="rounded-lg border p-3">
         <dt class="text-xs text-(--muted-foreground)">Tasks</dt>
-        <dd class="text-xl font-semibold">{tasks.length}</dd>
+        <dd class="text-xl font-semibold">{taskTotal}</dd>
       </div>
     </dl>
 
     <Tabs.Root bind:value={tab}>
       <Tabs.List>
         <Tabs.Trigger value="evidence">Evidence</Tabs.Trigger>
-        <Tabs.Trigger value="tasks">Tasks</Tabs.Trigger>
+        <Tabs.Trigger value="tasks">Tasks ({taskTotal})</Tabs.Trigger>
       </Tabs.List>
 
       <Tabs.Content value="evidence" class="mt-3 space-y-2">
@@ -144,6 +159,12 @@
                   <tr>
                     <td class="px-3 py-2 font-medium">
                       {item.title}
+                      {#if fromType(item)}
+                        {@const ft = fromType(item)}
+                        <span class="ml-1 inline-flex items-center gap-1 text-xs font-normal text-(--muted-foreground)"
+                          >From <ProgrammeTypeChip type={ft!} /></span
+                        >
+                      {/if}
                       <span class="block text-xs font-normal text-(--muted-foreground)">{fmtDate(item.createdAt)}</span>
                     </td>
                     <td class="max-w-56 px-3 py-2 text-(--muted-foreground)">

@@ -7,7 +7,12 @@ import type { Actor } from '@cio/db/actor';
 vi.mock('@cio/db/queries/apprenticeship', () => ({
   isProgrammeTutor: vi.fn(async () => false),
   isProgrammeTutorOfLinked: vi.fn(async () => false),
+  getLinkedEnrolment: vi.fn(async () => null),
+  sumValidatedOtjLogMinutes: vi.fn(async () => 0),
+  lockApprEnrolment: vi.fn(async () => null),
   getApprEnrolment: vi.fn(),
+  getLinkedEnrolment: vi.fn(async () => null),
+  listOtjLogsForReport: vi.fn(async () => []),
   getApprSettings: vi.fn(async () => ({ concernGapPct: 15, otjFactor: 0.2, otjWeeklyCapHours: 30 })),
   getEnrolmentOverview: vi.fn(),
   getApprProgrammeStructure: vi.fn(),

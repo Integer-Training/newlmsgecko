@@ -15,6 +15,7 @@ vi.mock('@cio/db/queries/apprenticeship', () => ({
   isProgrammeTutor: vi.fn(async () => false),
   isProgrammeTutorOfLinked: vi.fn(async () => false),
   getEvidenceLinkTargets: vi.fn(async () => new Map()),
+  getEvidenceProgrammeTitles: vi.fn(async () => new Map()),
   getTaskLinkTargets: vi.fn(async () => new Map()),
   getReviewLinkTargets: vi.fn(async () => new Map()),
   getEnrolmentLinkTargets: vi.fn(async () => new Map()),
@@ -31,6 +32,7 @@ import {
 import {
   getEnrolmentLinkTargets,
   getEvidenceLinkTargets,
+  getEvidenceProgrammeTitles,
   getReviewLinkTargets,
   getTaskLinkTargets
 } from '@cio/db/queries/apprenticeship';
@@ -239,6 +241,34 @@ describe('Gecko Apprenticeships gateway-ready alert', () => {
         link: '/caseload/apprenticeships/learners/enr-1?tab=gateway'
       });
     }
+  });
+});
+
+describe('Gecko Apprenticeships off-the-job + cross-mapped evidence alerts', () => {
+  it('otj alerts open the OTJ tab in the reader’s shell', async () => {
+    vi.mocked(getEnrolmentLinkTargets).mockResolvedValue(new Map([['enr-1', { learnerName: 'Amy Apprentice' }]]));
+    mList.mockResolvedValue([
+      row({ id: 'n1', type: 'appr.otj.submitted', entityType: 'appr_enrolment', entityId: 'enr-1' }),
+      row({ id: 'n2', type: 'appr.otj.reviewed', entityType: 'appr_enrolment', entityId: 'enr-1' })
+    ] as never);
+    const tutor: Actor = { authenticated: true, userId: 'x', role: 'TUTOR', status: 'ACTIVE', orgId: 'o1' };
+    const learner: Actor = { authenticated: true, userId: 'y', role: 'LEARNER', status: 'ACTIVE', orgId: 'o1' };
+    expect((await getNotificationCentre(tutor)).items[0]).toMatchObject({
+      subject: 'Off-the-job log to validate — Amy Apprentice',
+      link: '/caseload/apprenticeships/learners/enr-1?tab=otj'
+    });
+    expect((await getNotificationCentre(learner)).items[1].link).toBe('/lms/apprenticeship/enr-1?tab=otj');
+  });
+
+  it('a reviewed evidence mapped to both qualifications names both', async () => {
+    vi.mocked(getEvidenceProgrammeTitles).mockResolvedValue(new Map([['ev-1', ['L3 Diploma', 'L3 Standard']]]));
+    mList.mockResolvedValue([
+      row({ type: 'appr.evidence.accepted', entityType: 'appr_evidence', entityId: 'ev-1' })
+    ] as never);
+    const learner: Actor = { authenticated: true, userId: 'y', role: 'LEARNER', status: 'ACTIVE', orgId: 'o1' };
+    expect((await getNotificationCentre(learner)).items[0].subject).toContain(
+      'counts towards L3 Diploma and L3 Standard'
+    );
   });
 });
 

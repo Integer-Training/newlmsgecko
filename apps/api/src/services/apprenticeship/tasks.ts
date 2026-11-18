@@ -7,7 +7,12 @@ import {
   getEnrolmentForActor,
   requireAuthed
 } from '@api/services/apprenticeship/access';
-import { assertActiveType, assertAllowedFile, assertCriteriaInProgramme } from '@api/services/apprenticeship/checks';
+import {
+  assertActiveType,
+  assertAllowedFile,
+  assertCriteriaInProgrammes,
+  getPairProgrammes
+} from '@api/services/apprenticeship/checks';
 import { todayIso } from '@api/services/apprenticeship/progress';
 import type { Actor } from '@cio/db/actor';
 import { recordAudit } from '@cio/db/audit';
@@ -259,7 +264,11 @@ export async function createTask(actor: Actor, enrolmentId: string, input: TaskC
   const a = assertStaff(actor);
   const enrolment = await getEnrolmentForActor(actor, enrolmentId);
   await assertActiveType(enrolment.organizationId, input.typeKey);
-  const criterionIds = await assertCriteriaInProgramme(enrolment.programmeId, input.criterionIds);
+  // A task's criteria may come from either qualification of a linked pair (a task still belongs to one enrolment).
+  const criterionIds = await assertCriteriaInProgrammes(
+    (await getPairProgrammes(enrolment)).programmeIds,
+    input.criterionIds
+  );
 
   if (input.files.length > 0 && !input.id) throw badRequest('Upload the files before saving', 'files');
   const taskId = input.id ?? randomUUID();
@@ -303,7 +312,10 @@ export async function updateTask(actor: Actor, taskId: string, input: TaskUpdate
     await assertActiveType(task.organizationId, input.typeKey);
   }
   const criterionIds = input.criterionIds
-    ? await assertCriteriaInProgramme(task.programmeId, input.criterionIds)
+    ? await assertCriteriaInProgrammes(
+        (await getPairProgrammes({ id: task.enrolmentId, programmeId: task.programmeId })).programmeIds,
+        input.criterionIds
+      )
     : undefined;
   if (input.files) {
     await assertBriefFiles(

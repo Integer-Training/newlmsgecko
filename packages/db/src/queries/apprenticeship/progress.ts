@@ -87,15 +87,23 @@ export async function listProgrammeUnits(programmeId: string, client: DbOrTxClie
     .orderBy(schema.apprQualification.sort, schema.apprUnit.sort);
 }
 
-/** Per-criterion count of COUNTING (accepted) evidence for one learner on one programme. */
+/**
+ * Per-criterion count of COUNTING (accepted) evidence of one learner for the criteria of one programme. The criterion's
+ * programme (criterion -> unit -> qualification) decides whose progress it is; the evidence's home programme does not
+ * matter, so evidence homed on the other half of a linked Diploma + Standard pair counts too. For unlinked data the
+ * result is identical to filtering on the evidence's own programme (mappings never left it).
+ */
 export async function countAcceptedByCriterion(programmeId: string, learnerId: string, client: DbOrTxClient = db) {
   const rows = await client
     .select({ criterionId: schema.apprEvidenceCriterion.criterionId, count: sql<number>`count(*)::int` })
     .from(schema.apprEvidenceCriterion)
     .innerJoin(schema.apprEvidence, eq(schema.apprEvidence.id, schema.apprEvidenceCriterion.evidenceId))
+    .innerJoin(schema.apprCriterion, eq(schema.apprCriterion.id, schema.apprEvidenceCriterion.criterionId))
+    .innerJoin(schema.apprUnit, eq(schema.apprUnit.id, schema.apprCriterion.unitId))
+    .innerJoin(schema.apprQualification, eq(schema.apprQualification.id, schema.apprUnit.qualificationId))
     .where(
       and(
-        eq(schema.apprEvidence.programmeId, programmeId),
+        eq(schema.apprQualification.programmeId, programmeId),
         eq(schema.apprEvidence.learnerId, learnerId),
         inArray(schema.apprEvidence.status, [...APPR_COUNTING_EVIDENCE_STATUSES])
       )
@@ -104,8 +112,18 @@ export async function countAcceptedByCriterion(programmeId: string, learnerId: s
   return new Map(rows.map((r) => [r.criterionId, r.count]));
 }
 
-/** Evidence totals for one learner on one programme: count per status + counting OTJ minutes. One query. */
-export async function getEvidenceTotals(programmeId: string, learnerId: string, client: DbOrTxClient = db) {
+/**
+ * Evidence totals for one learner: count per status + counting OTJ minutes. One query. Evidence is counted by its HOME
+ * programme: `programmeIds` defaults to [programmeId]; the CARRIER of a linked pair passes both programmes so its
+ * counts and OTJ minutes are the whole apprenticeship's (a component keeps its own home evidence only).
+ */
+export async function getEvidenceTotals(
+  programmeId: string,
+  learnerId: string,
+  client: DbOrTxClient = db,
+  opts: { programmeIds?: string[] } = {}
+) {
+  const programmeIds = opts.programmeIds?.length ? opts.programmeIds : [programmeId];
   const counting = sql.join(
     APPR_COUNTING_EVIDENCE_STATUSES.map((s) => sql`${s}`),
     sql`, `
@@ -118,7 +136,7 @@ export async function getEvidenceTotals(programmeId: string, learnerId: string, 
       otjMinutes: sql<number>`coalesce(sum(${schema.apprEvidence.minutes}) filter (where ${schema.apprEvidence.includeOtj} and ${schema.apprEvidence.status} in (${counting})), 0)::int`
     })
     .from(schema.apprEvidence)
-    .where(and(eq(schema.apprEvidence.programmeId, programmeId), eq(schema.apprEvidence.learnerId, learnerId)));
+    .where(and(inArray(schema.apprEvidence.programmeId, programmeIds), eq(schema.apprEvidence.learnerId, learnerId)));
   return row ?? { submitted: 0, accepted: 0, referred: 0, otjMinutes: 0 };
 }
 

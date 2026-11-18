@@ -11,8 +11,11 @@ import type { AuthSession } from '@api/types/auth';
 // later phases only have to open routes.
 
 vi.mock('@cio/db/queries/apprenticeship', () => ({
+  listLinkedUnitCounts: vi.fn(async () => new Map()),
   isProgrammeTutor: vi.fn(async () => false),
   isProgrammeTutorOfLinked: vi.fn(async () => false),
+  getLinkedEnrolment: vi.fn(async () => null),
+  sumValidatedOtjLogMinutes: vi.fn(async () => 0),
   countOnboardingTypes: vi.fn(async () => 1),
   getApprProgramme: vi.fn(),
   getApprEnrolment: vi.fn(),
@@ -48,6 +51,8 @@ vi.mock('@cio/db/queries/apprenticeship', () => ({
   listEvidenceCriteriaDetail: vi.fn(async () => []),
   listEvidenceNotes: vi.fn(async () => []),
   listEvidenceForCriterion: vi.fn(async () => []),
+  countTasksForCriterion: vi.fn(async () => 0),
+  listEvidenceMappings: vi.fn(async () => []),
   listToMark: vi.fn(async () => []),
   listApprPickerPeople: vi.fn(async () => ({ tutors: [], learners: [] }))
 }));
@@ -633,7 +638,12 @@ describe('evidence notifications fire at each step of the loop (and never break 
   }
   it("the apprentice's new evidence → their tutors are told", async () => {
     expect((await callAs(EVIDENCE_ROUTES[1], selfActor)).status).toBe(201);
-    expect(notifyEvidenceSubmitted).toHaveBeenCalledWith({ evidenceId: expect.any(String), learnerId: LRN });
+    expect(notifyEvidenceSubmitted).toHaveBeenCalledWith({
+      evidenceId: expect.any(String),
+      learnerId: LRN,
+      enrolmentId: ENR,
+      pairEnrolmentId: null
+    });
     expect(notifyEvidenceReviewed).not.toHaveBeenCalled();
   });
   it('staff evidence added as Submitted tells nobody; added as Accepted tells the apprentice', async () => {
@@ -663,7 +673,12 @@ describe('evidence notifications fire at each step of the loop (and never break 
   it('fixing referred evidence → the tutors are told again; a plain edit tells nobody', async () => {
     vi.mocked(q.getApprEvidence).mockResolvedValue({ ...EVIDENCE, status: 'REFERRED' } as never);
     expect((await callAs(EVIDENCE_ROUTES[7], selfActor)).status).toBe(200);
-    expect(notifyEvidenceSubmitted).toHaveBeenCalledWith({ evidenceId: EV, learnerId: LRN });
+    expect(notifyEvidenceSubmitted).toHaveBeenCalledWith({
+      evidenceId: EV,
+      learnerId: LRN,
+      enrolmentId: ENR,
+      pairEnrolmentId: null
+    });
     vi.mocked(notifyEvidenceSubmitted).mockClear();
     vi.mocked(q.getApprEvidence).mockResolvedValue({ ...EVIDENCE, status: 'SUBMITTED' } as never);
     expect((await callAs(EVIDENCE_ROUTES[7], selfActor)).status).toBe(200);
@@ -741,10 +756,10 @@ describe('at end-point assessment (gateway confirmed) the apprentice can no long
     expect(q.insertApprEvidence).not.toHaveBeenCalled();
     expect(q.updateApprEvidence).not.toHaveBeenCalled();
     expect(q.lockApprEnrolment).toHaveBeenCalled();
-    // staff never take the lock path
+    // staff take the same pair lock (one lock order for everyone) but are never refused, even at the gateway
     vi.mocked(q.lockApprEnrolment).mockClear();
     expect((await call(EVIDENCE_ROUTES[1], 'admin')).status).toBe(201);
-    expect(q.lockApprEnrolment).not.toHaveBeenCalled();
+    expect(q.lockApprEnrolment).toHaveBeenCalled();
   });
 
   it('staff are unaffected (admin and allocated tutor can still add evidence)', async () => {
@@ -791,5 +806,81 @@ describe('CSV export carries GLH target / done / expected (null-safe)', () => {
     vi.mocked(q.getApprProgrammeStructure).mockResolvedValue(structure(null) as never);
     const noGlh = await lines();
     expect(noGlh[1].endsWith(',,,,,')).toBe(true);
+  });
+});
+
+describe('Deploy 3 — evidence across a linked Diploma + Standard pair', () => {
+  const CARRIER = '99999999-9999-4999-8999-999999999991';
+  const COMPONENT = '99999999-9999-4999-8999-999999999992';
+  const STD = '99999999-9999-4999-8999-99999999999a';
+  const carrier = { ...ENROLMENT, id: CARRIER, primaryEnrolmentId: null };
+  const component = { ...ENROLMENT, id: COMPONENT, programmeId: STD, primaryEnrolmentId: CARRIER };
+  const selfActor = { ...ACTORS.learner, userId: LRN } as Actor;
+  function callAs(r: Route, actor: Actor) {
+    ACTORS.self = actor;
+    return call(r, 'self');
+  }
+  const listPath = (id: string) => ({ method: 'GET', path: `/apprenticeship/evidence/enrolments/${id}/evidence` });
+
+  beforeEach(() => {
+    vi.mocked(q.getApprEnrolment).mockImplementation(
+      async (id: string) => (id === CARRIER ? carrier : id === COMPONENT ? component : null) as never
+    );
+    vi.mocked(q.getLinkedEnrolment).mockImplementation(
+      async (id: string) => (id === CARRIER ? component : id === COMPONENT ? carrier : null) as never
+    );
+  });
+
+  it('the Evidence tab of either half lists the pair (both programmes queried, ids bound to the actor org)', async () => {
+    for (const id of [CARRIER, COMPONENT]) {
+      vi.mocked(q.listEvidenceForLearner).mockClear();
+      expect((await call(listPath(id), 'admin')).status).toBe(200);
+      expect(vi.mocked(q.listEvidenceForLearner).mock.calls[0][1].sort()).toEqual([PROG, STD].sort());
+    }
+    expect((await call(listPath(CARRIER), 'otherAdmin')).status).toBe(404);
+  });
+
+  it('a tutor with no reach to the pair gets 404; a programme tutor of the Standard reaches the whole pair', async () => {
+    expect((await call(listPath(CARRIER), 'tutor')).status).toBe(404);
+    vi.mocked(q.isProgrammeTutorOfLinked).mockResolvedValueOnce(true);
+    expect((await call(listPath(CARRIER), 'tutor')).status).toBe(200);
+  });
+
+  it("a criterion of a third programme is a 400 even for a pair; the pair's own criteria pass", async () => {
+    vi.mocked(q.filterCriterionIdsInProgramme).mockImplementation(async (_p, ids) => ids.filter((i) => i === CRIT));
+    const body = { ...CREATE_BODY, criterionIds: [CRIT, UNIT] };
+    const create = (id: string) => ({
+      method: 'POST',
+      path: `/apprenticeship/evidence/enrolments/${id}/evidence`,
+      body
+    });
+    expect((await call(create(CARRIER), 'admin')).status).toBe(400);
+    expect((await call({ ...create(CARRIER), body: CREATE_BODY }, 'admin')).status).toBe(201);
+  });
+
+  it("the apprentice is locked out once the CARRIER's gateway is confirmed, from the component too", async () => {
+    const atGateway = { ...carrier, gatewayPassedAt: '2026-05-01T00:00:00Z' };
+    vi.mocked(q.getApprEnrolment).mockImplementation(
+      async (id: string) => (id === CARRIER ? atGateway : id === COMPONENT ? component : null) as never
+    );
+    const create = {
+      method: 'POST',
+      path: `/apprenticeship/evidence/enrolments/${COMPONENT}/evidence`,
+      body: CREATE_BODY
+    };
+    expect((await callAs(create, selfActor)).status).toBe(403);
+    expect(q.insertApprEvidence).not.toHaveBeenCalled();
+  });
+
+  it('the criterion popover answers { items, taskCount }', async () => {
+    vi.mocked(q.listEvidenceForCriterion).mockResolvedValue([{ id: EV, homeProgrammeId: PROG }] as never);
+    vi.mocked(q.countTasksForCriterion).mockResolvedValue(3);
+    vi.mocked(q.getApprEnrolment).mockResolvedValue(ENROLMENT as never);
+    vi.mocked(q.getLinkedEnrolment).mockResolvedValue(null as never);
+    const res = await call(EVIDENCE_ROUTES[5], 'admin');
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { data: { items: { homeEnrolmentId: string }[]; taskCount: number } };
+    expect(json.data.taskCount).toBe(3);
+    expect(json.data.items[0].homeEnrolmentId).toBe(ENR);
   });
 });

@@ -63,7 +63,11 @@ function audit(
   return recordAudit({ actor, action, entityType, entityId, metadata });
 }
 
-/** Recompute the progress cache of every enrolment on the programme. Returns how many were refreshed. */
+/**
+ * Recompute the progress cache of every enrolment on the programme. Returns how many were refreshed. recomputeEnrolment
+ * also recomputes the linked counterpart of each (a Diploma + Standard pair), so enrolments on the paired programme are
+ * refreshed too (they are not in the returned count).
+ */
 async function recomputeProgramme(tx: TxClient, programmeId: string): Promise<number> {
   const ids = await listEnrolmentIdsForProgramme(programmeId, tx);
   for (const id of ids) await recomputeEnrolment(tx, id);

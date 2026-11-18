@@ -42,6 +42,11 @@ export class PortfolioStore {
   data = $state<PortfolioView | null>(null);
   /** The other enrolment of the pair (null when standalone or scoped). */
   pair = $state<PortfolioView | null>(null);
+  /**
+   * Scoped pages only: the other qualification's portfolio, loaded just so the evidence picker offers both
+   * qualifications. It never changes which evidence / tasks the page lists or which portfolios the page shows.
+   */
+  pickerPair = $state<PortfolioView | null>(null);
   overview = $state<OverviewPayload | null>(null);
   overviewError = $state<string | null>(null);
   evidence = $state<EvidenceListItem[]>([]);
@@ -113,6 +118,9 @@ export class PortfolioStore {
     return (p?.qualifications ?? []).map((q) => ({
       id: q.id,
       title: q.title,
+      type: p?.programme.type,
+      enrolmentId: p?.enrolment.id,
+      programmeId: p?.programme.id,
       units: q.units.map((u) => ({
         id: u.id,
         code: u.code,
@@ -123,11 +131,17 @@ export class PortfolioStore {
   }
 
   /**
-   * The programme structure for the evidence sheet: the enrolment a new piece is being added to (Deploy 3 widens the
-   * picker to both qualifications of a pair).
+   * The programme structure for the evidence sheet: for a linked pair BOTH qualifications (Diploma first, so one piece
+   * can map to criteria on either side); otherwise the one qualification being worked on.
    */
   pickerTree = $derived<PickerQualification[]>(
-    this.#treeOf(this.portfolioFor(this.sheet.qualEnrolmentId) ?? this.activePortfolio)
+    this.pair
+      ? this.portfolios.flatMap((p) => this.#treeOf(p))
+      : this.pickerPair && this.data
+        ? [this.data, this.pickerPair]
+            .sort((a, b) => (a.programme.type === 'STANDARD' ? 1 : 0) - (b.programme.type === 'STANDARD' ? 1 : 0))
+            .flatMap((p) => this.#treeOf(p))
+        : this.#treeOf(this.portfolioFor(this.sheet.qualEnrolmentId) ?? this.activePortfolio)
   );
 
   /** The enrolment the evidence sheet saves to. */
@@ -138,9 +152,15 @@ export class PortfolioStore {
 
   /** Criteria already met in the programme the sheet is working on. */
   get sheetMetIds(): Set<string> {
-    const p = this.portfolioFor(this.sheet.qualEnrolmentId) ?? this.activePortfolio;
+    const ps = this.pair
+      ? this.portfolios
+      : this.pickerPair && this.data
+        ? [this.data, this.pickerPair]
+        : [this.portfolioFor(this.sheet.qualEnrolmentId) ?? this.activePortfolio];
     return new Set(
-      (p?.qualifications ?? []).flatMap((q) => q.units.flatMap((u) => u.criteria.filter((c) => c.met).map((c) => c.id)))
+      ps
+        .flatMap((p) => p?.qualifications ?? [])
+        .flatMap((q) => q.units.flatMap((u) => u.criteria.filter((c) => c.met).map((c) => c.id)))
     );
   }
 
@@ -175,11 +195,10 @@ export class PortfolioStore {
 
     const id = this.enrolmentId;
     const fetchPortfolio = (eid: string) => enrolmentsApi.getPortfolio(eid) as Promise<CallResult<PortfolioView>>;
-    const [p, pp, e, pe, t, r, g, o] = await Promise.all([
+    const [p, pp, e, t, r, g, o] = await Promise.all([
       carrierRes ?? fetchPortfolio(id),
       this.#pairId ? (pairRes ?? fetchPortfolio(this.#pairId)) : Promise.resolve(null),
       evidenceApi.forEnrolment(id),
-      this.#pairId && !this.scoped ? evidenceApi.forEnrolment(this.#pairId) : Promise.resolve(null),
       tasksApi.forEnrolment(id),
       this.scoped ? Promise.resolve(null) : reviewsApi.forEnrolment(id),
       this.scoped ? Promise.resolve(null) : gatewayApi.glhLogs(id),
@@ -194,13 +213,22 @@ export class PortfolioStore {
       this.error = p.error;
     }
     if (pp?.ok) this.pair = pp.data;
+    // Scoped page of a linked enrolment: fetch the other qualification only for the picker (the listing stays scoped).
+    if (this.scoped && p.ok) {
+      const l = p.data.linked ?? null;
+      const otherId = l ? (l.role === 'COMPONENT' ? l.carrierId : l.counterpart.enrolmentId) : null;
+      if (otherId) {
+        const o = await fetchPortfolio(otherId);
+        if (reqId !== this.#reqId) return;
+        this.pickerPair = o.ok ? o.data : null;
+      } else {
+        this.pickerPair = null;
+      }
+    }
     if (e.ok) {
-      // Evidence added on the paired enrolment (e.g. the Standard) is merged in, tagged with where it lives.
-      const tag = (items: EvidenceListItem[], qid: string) => items.map((x) => ({ ...x, qualEnrolmentId: qid }));
-      const merged = [...tag(e.data, id), ...(pe?.ok && this.#pairId ? tag(pe.data, this.#pairId) : [])];
-      const seen = new Set<string>();
-      this.evidence = merged
-        .filter((x) => (seen.has(x.id) ? false : (seen.add(x.id), true)))
+      // The API returns the whole pair's evidence for a linked enrolment (rows carry homeEnrolmentId): no client merge.
+      this.evidence = e.data
+        .map((x) => ({ ...x, qualEnrolmentId: x.homeEnrolmentId ?? id }))
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     }
     // Tasks / reviews fail independently: the rest of the portfolio still works.

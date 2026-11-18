@@ -155,8 +155,10 @@ export async function listGatewayReadyCandidates(limit: number, afterId?: string
       gatewayChecklist: p.gatewayChecklist,
       otjFactor: schema.apprSettings.otjFactor,
       otjWeeklyCapHours: schema.apprSettings.otjWeeklyCapHours,
-      unitsTotal: sql<number>`(select count(*) from appr_enrolment_unit eu where eu.enrolment_id = ${sql.raw('"appr_enrolment"."id"')})::int`,
-      unitsComplete: sql<number>`(select count(*) from appr_enrolment_unit ec where ec.enrolment_id = ${sql.raw('"appr_enrolment"."id"')} and ec.completed_at is not null)::int`
+      // A carrier's AUTO_UNITS item counts units across BOTH qualifications of a linked pair: its own plus its
+      // component's (rows whose primary_enrolment_id is this enrolment). A component is never scanned (the service drops it).
+      unitsTotal: sql<number>`(select count(*) from appr_enrolment_unit eu join appr_enrolment ee on ee.id = eu.enrolment_id where ee.id = ${sql.raw('"appr_enrolment"."id"')} or ee.primary_enrolment_id = ${sql.raw('"appr_enrolment"."id"')})::int`,
+      unitsComplete: sql<number>`(select count(*) from appr_enrolment_unit ec join appr_enrolment ce on ce.id = ec.enrolment_id where (ce.id = ${sql.raw('"appr_enrolment"."id"')} or ce.primary_enrolment_id = ${sql.raw('"appr_enrolment"."id"')}) and ec.completed_at is not null)::int`
     })
     .from(e)
     .innerJoin(p, eq(p.id, e.programmeId))
@@ -171,4 +173,12 @@ export async function listGatewayReadyCandidates(limit: number, afterId?: string
     )
     .orderBy(e.id)
     .limit(limit);
+}
+
+/**
+ * An EPA outcome applies to the whole apprenticeship: stamp (or clear, with null) `achieved_at` on the linked COMPONENT
+ * of a pair. The carrier own `achieved_at` is written by setEpa. No-op when the carrier has no component.
+ */
+export async function setLinkedAchievedAt(tx: DbOrTxClient, carrierId: string, achievedAt: string | null) {
+  await tx.update(e).set({ achievedAt }).where(eq(e.primaryEnrolmentId, carrierId));
 }
