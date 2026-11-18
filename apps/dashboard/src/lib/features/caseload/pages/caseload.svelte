@@ -9,6 +9,7 @@
   import { announcementsApi } from '$features/announcements/api/announcements.svelte';
   import AnnouncementsList from '$features/announcements/components/announcements-list.svelte';
   import BroadcastBanner from '$features/announcements/components/broadcast-banner.svelte';
+  import ApprenticeshipsCard from '$features/apprenticeship/components/caseload/apprenticeships-card.svelte';
   import { profile } from '$lib/utils/store/user';
 
   const firstName = $derived($profile.fullname?.trim().split(/\s+/)[0] || '');
@@ -139,6 +140,8 @@
     <AnnouncementsList items={announcementsApi.items} showScope={false} />
   </div>
 {/if}
+
+<ApprenticeshipsCard />
 
 <!-- Primary KPI tiles -->
 <div class="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">

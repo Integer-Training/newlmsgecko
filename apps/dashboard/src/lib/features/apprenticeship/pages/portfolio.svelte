@@ -11,6 +11,8 @@
   import { replaceState } from '$app/navigation';
   import { currentOrg, isOrgAdmin, isOrgTeamMember } from '$lib/utils/store/org';
   import { apprenticeshipsBase } from '../utils/paths';
+  import { tutorNames } from '../api/enrolments.svelte';
+  import ProgrammeTypeChip from '../components/shared/programme-type-chip.svelte';
   import { PortfolioStore } from '../stores/portfolio.svelte';
   import SummaryStrip from '../components/portfolio/summary-strip.svelte';
   import UnitsTab from '../components/portfolio/units-tab.svelte';
@@ -58,6 +60,12 @@
   // svelte-ignore state_referenced_locally
   const store = new PortfolioStore(enrolmentId);
   let datesOpen = $state(false);
+  // Which qualification the dates dialog edits (the carrier by default).
+  let datesTarget = $state<string | undefined>(undefined);
+  function editDates(qualEnrolmentId?: string) {
+    datesTarget = qualEnrolmentId;
+    datesOpen = true;
+  }
   let tutorsOpen = $state(false);
   let spreadOpen = $state(false);
 
@@ -122,7 +130,23 @@
       {#if showBack}
         <BackButton href={backHref} label={isStaffViewer ? 'All learners' : 'My apprenticeships'} />
       {/if}
-      <Page.Title>{isStaffViewer ? 'Portfolio' : 'My apprenticeship'}</Page.Title>
+      <Page.Title>{isStaffViewer ? (store.data?.learner.name ?? 'Portfolio') : 'My apprenticeship'}</Page.Title>
+      {#if isStaffViewer && store.data}
+        <Page.Subtitle>
+          <span class="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span>Apprentice</span>
+            {#each store.portfolios as p, i (p.enrolment.id)}
+              <span aria-hidden="true">{i === 0 ? '·' : '+'}</span>
+              <span class="inline-flex items-center gap-1.5">
+                {p.programme.title}
+                {#if p.programme.type}<ProgrammeTypeChip type={p.programme.type} />{/if}
+              </span>
+            {/each}
+            <span aria-hidden="true">·</span>
+            <span>Tutor: {tutorNames(store.data.tutors)}</span>
+          </span>
+        </Page.Subtitle>
+      {/if}
     </Page.HeaderContent>
     {#if store.data}
       <Page.Action><PdfDownloadButton enrolmentId={store.activePortfolio?.enrolment.id ?? enrolmentId} /></Page.Action>
@@ -144,12 +168,7 @@
         </div>
       {:else if store.data}
         <div class="space-y-4">
-          <SummaryStrip
-            {store}
-            onEditDates={() => (datesOpen = true)}
-            onSpread={() => (spreadOpen = true)}
-            onTutors={() => (tutorsOpen = true)}
-          />
+          <SummaryStrip {store} onSpread={() => (spreadOpen = true)} onTutors={() => (tutorsOpen = true)} />
           {#if store.evidenceBlocked}
             <p
               role="status"
@@ -160,51 +179,61 @@
           {/if}
 
           <Tabs.Root bind:value={store.tab}>
-            <Tabs.List class="ui:h-auto ui:flex-wrap">
-              <Tabs.Trigger value="overview">Overview</Tabs.Trigger>
-              <Tabs.Trigger value="units">Units</Tabs.Trigger>
-              <Tabs.Trigger value="evidence">
-                Evidence
-                <span class="text-xs text-(--muted-foreground)">({store.evidence.length})</span>
-              </Tabs.Trigger>
-              <Tabs.Trigger value="tasks">
-                Tasks
-                <span class="text-xs text-(--muted-foreground)">({store.tasks.length})</span>
-                {#if store.overdueTaskCount > 0}
-                  <span
-                    class="ml-1 rounded-full bg-rose-600 px-1.5 text-xs font-medium text-white"
-                    aria-label="{store.overdueTaskCount} overdue">{store.overdueTaskCount}</span
-                  >
-                {/if}
-              </Tabs.Trigger>
-              <Tabs.Trigger value="otj">OTJ progress</Tabs.Trigger>
-              <DropdownMenu.Root>
-                <DropdownMenu.Trigger
-                  class="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-sm font-medium whitespace-nowrap hover:bg-(--background)/60 {moreActive
-                    ? 'bg-(--background) shadow-sm'
-                    : 'text-(--muted-foreground)'}"
-                >
-                  {moreActive?.label ?? 'More'}
-                  {#if store.nextReview?.overdue && !moreActive}
-                    <span class="size-2 rounded-full bg-rose-600" aria-label="Review overdue"></span>
+            <div class="-mx-1 overflow-x-auto px-1 pb-1" role="presentation">
+              <Tabs.List class="ui:h-auto ui:w-max ui:min-w-full ui:flex-nowrap ui:justify-start">
+                <Tabs.Trigger value="overview">Overview</Tabs.Trigger>
+                <Tabs.Trigger value="units">Units</Tabs.Trigger>
+                <Tabs.Trigger value="evidence">
+                  Evidence
+                  <span class="text-xs text-(--muted-foreground)">({store.evidence.length})</span>
+                </Tabs.Trigger>
+                <Tabs.Trigger value="tasks">
+                  Tasks
+                  <span class="text-xs text-(--muted-foreground)">({store.tasks.length})</span>
+                  {#if store.overdueTaskCount > 0}
+                    <span
+                      class="ml-1 rounded-full bg-rose-600 px-1.5 text-xs font-medium text-white"
+                      aria-label="{store.overdueTaskCount} overdue">{store.overdueTaskCount}</span
+                    >
                   {/if}
-                  <ChevronDownIcon size={14} />
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Content align="start">
-                  {#each MORE_TABS as t (t.value)}
-                    <DropdownMenu.Item onclick={() => (store.tab = t.value)}>
-                      {t.label}
-                      {#if t.value === 'reviews' && store.nextReview?.overdue}
-                        <span class="ml-2 rounded-full bg-rose-600 px-1.5 text-xs font-medium text-white">Overdue</span>
-                      {/if}
-                    </DropdownMenu.Item>
-                  {/each}
-                </DropdownMenu.Content>
-              </DropdownMenu.Root>
-            </Tabs.List>
+                </Tabs.Trigger>
+                <Tabs.Trigger value="otj">OTJ progress</Tabs.Trigger>
+                <DropdownMenu.Root>
+                  <DropdownMenu.Trigger
+                    class="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-sm font-medium whitespace-nowrap hover:bg-(--background)/60 {moreActive
+                      ? 'bg-(--background) shadow-sm'
+                      : 'text-(--muted-foreground)'}"
+                  >
+                    {moreActive?.label ?? 'More'}
+                    {#if store.nextReview?.overdue && !moreActive}
+                      <span class="size-2 rounded-full bg-rose-600" aria-label="Review overdue"></span>
+                    {/if}
+                    <ChevronDownIcon size={14} />
+                  </DropdownMenu.Trigger>
+                  <DropdownMenu.Content align="start">
+                    {#each MORE_TABS as t (t.value)}
+                      <DropdownMenu.Item onclick={() => (store.tab = t.value)}>
+                        {t.label}
+                        {#if t.value === 'reviews' && store.nextReview?.overdue}
+                          <span class="ml-2 rounded-full bg-rose-600 px-1.5 text-xs font-medium text-white"
+                            >Overdue</span
+                          >
+                        {/if}
+                      </DropdownMenu.Item>
+                    {/each}
+                  </DropdownMenu.Content>
+                </DropdownMenu.Root>
+              </Tabs.List>
+            </div>
             <div class="mt-4 min-h-64">
               <Tabs.Content value="overview">
-                <OverviewTab {store} mode={viewMode} qualHref={toQual} unitHref={toUnit} />
+                <OverviewTab
+                  {store}
+                  mode={viewMode}
+                  qualHref={toQual}
+                  unitHref={toUnit}
+                  onEditDates={isStaffViewer && $isOrgAdmin ? editDates : undefined}
+                />
               </Tabs.Content>
               <Tabs.Content value="units"><UnitsTab {store} unitHref={toUnit} /></Tabs.Content>
               <Tabs.Content value="evidence"><EvidenceTab {store} /></Tabs.Content>
@@ -220,7 +249,7 @@
         </div>
 
         {#if isStaffViewer}
-          <DatesDialog bind:open={datesOpen} {store} />
+          <DatesDialog bind:open={datesOpen} {store} enrolmentId={datesTarget} />
           {#if $isOrgAdmin}<TutorsDialog bind:open={tutorsOpen} {store} />{/if}
           <SpreadDialog bind:open={spreadOpen} {store} />
         {/if}

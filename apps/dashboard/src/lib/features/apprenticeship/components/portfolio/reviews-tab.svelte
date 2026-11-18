@@ -66,11 +66,7 @@
   }
 
   // Who signed and when, one short line per party that has signed ("Tutor: Tina T · 3 Nov").
-  const shortDate = (iso: string | null) => {
-    if (!iso) return '';
-    const dt = new Date(iso);
-    return Number.isNaN(dt.getTime()) ? '' : dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-  };
+  const shortDate = (iso: string | null) => (iso ? fmtDate(iso) : '');
   const signers = (r: ReviewItem) =>
     [
       { role: 'Tutor', name: r.tutorSignedName, at: r.tutorSignedAt },

@@ -10,6 +10,9 @@
   }
   let { store }: Props = $props();
 
+  const portfolio = $derived(store.activePortfolio);
+  const qualEnrolmentId = $derived(portfolio?.enrolment.id ?? store.enrolmentId);
+
   const CELL = {
     met: 'bg-emerald-100 text-emerald-900 border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-200 dark:border-emerald-500/40',
     pending:
@@ -19,6 +22,24 @@
 </script>
 
 <div class="space-y-6">
+  {#if store.portfolios.length > 1}
+    <div class="inline-flex rounded-lg border p-0.5" role="group" aria-label="Qualification">
+      {#each store.portfolios as p (p.enrolment.id)}
+        <button
+          type="button"
+          class="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium {p.enrolment.id === qualEnrolmentId
+            ? 'bg-(--primary) text-(--primary-foreground)'
+            : 'hover:bg-(--muted)'}"
+          aria-pressed={p.enrolment.id === qualEnrolmentId}
+          onclick={() => (store.selectedQualId = p.enrolment.id)}
+        >
+          {p.programme.type === 'STANDARD' ? 'Standard' : 'Diploma'}
+          <span class="hidden max-w-48 truncate text-xs font-normal opacity-80 sm:inline">{p.programme.title}</span>
+        </button>
+      {/each}
+    </div>
+  {/if}
+
   <ul class="flex flex-wrap gap-3 text-xs text-(--muted-foreground)" aria-label="Legend">
     <li class="flex items-center gap-1.5"><span class="size-3 rounded border {CELL.none}"></span> Not started</li>
     <li class="flex items-center gap-1.5">
@@ -27,13 +48,13 @@
     <li class="flex items-center gap-1.5"><span class="size-3 rounded border {CELL.met}"></span> Met</li>
   </ul>
 
-  {#each store.data?.qualifications ?? [] as qual (qual.id)}
+  {#each portfolio?.qualifications ?? [] as qual (qual.id)}
     <section aria-label={qual.title}>
       <h3 class="mb-2 font-semibold">{qual.title}</h3>
       <div class="divide-y rounded-lg border">
         {#each qual.units as unit (unit.id)}
           <div class="grid grid-cols-1 gap-2 px-3 py-2 md:grid-cols-[16rem_1fr]">
-            <p class="truncate text-sm font-medium" title={unit.title}>
+            <p class="text-sm font-medium break-words" title={unit.title}>
               {unit.code ? `${unit.code} · ` : ''}{unit.title}
             </p>
             <div class="flex flex-wrap gap-1.5">
@@ -42,6 +63,7 @@
                 <CriterionPopover
                   {store}
                   criterionId={c.id}
+                  enrolmentId={qualEnrolmentId}
                   label="{c.code}: {c.met ? 'met' : c.pendingCount > 0 ? 'pending' : 'not started'}"
                   triggerClass="min-w-10 rounded border px-2 py-1 text-xs font-medium transition-colors hover:ring-2 hover:ring-(--primary)/40 {CELL[
                     kind

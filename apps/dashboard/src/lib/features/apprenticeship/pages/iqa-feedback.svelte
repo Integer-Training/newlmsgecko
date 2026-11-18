@@ -9,6 +9,8 @@
   import { apprenticeshipsBase } from '../utils/paths';
   import { apprIqaApi, type IqaSample } from '../api/iqa.svelte';
   import EvidenceStatusChip from '../components/shared/evidence-status-chip.svelte';
+  import ProgrammeTypeChip from '../components/shared/programme-type-chip.svelte';
+  import { enrolmentsApi } from '../api/enrolments.svelte';
   import IqaOutcomeChip from '../components/shared/iqa-outcome-chip.svelte';
   import { fmtDate } from '../components/shared/format';
 
@@ -88,7 +90,10 @@
               <div class="flex flex-wrap items-start justify-between gap-3">
                 <div class="min-w-0">
                   <p class="font-medium">{s.evidenceTitle}</p>
-                  <p class="text-sm text-(--muted-foreground)">{s.learnerName ?? 'Learner'} · {s.programmeTitle}</p>
+                  <p class="text-sm text-(--muted-foreground)">
+                    {s.learnerName ?? 'Learner'} · {s.programmeTitle}
+                    {#if typeOf(s.programmeId)}<ProgrammeTypeChip type={typeOf(s.programmeId)!} />{/if}
+                  </p>
                 </div>
                 <div class="flex items-center gap-2">
                   <EvidenceStatusChip status={s.evidenceStatus} />

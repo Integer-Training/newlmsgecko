@@ -2,10 +2,14 @@
   import { page } from '$app/state';
   import { currentOrg } from '$lib/utils/store/org';
   import Qualification from '$features/apprenticeship/pages/qualification.svelte';
+  import { loadCrumbNames } from '$features/apprenticeship/components/shell/crumbs.svelte';
   import { apprenticeshipsBase } from '$features/apprenticeship/utils/paths';
 
   const enrolmentId = $derived(page.params.enrolmentId ?? '');
   const qualEnrolmentId = $derived(page.params.qualEnrolmentId ?? '');
+  $effect(() => {
+    loadCrumbNames({ learnerEnrolmentId: enrolmentId, qualEnrolmentId });
+  });
   const learnerHref = $derived(
     `${apprenticeshipsBase(page.url.pathname, $currentOrg.siteName)}/learners/${enrolmentId}`
   );

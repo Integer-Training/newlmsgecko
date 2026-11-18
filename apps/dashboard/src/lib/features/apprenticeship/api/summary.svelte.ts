@@ -28,7 +28,7 @@ export interface SummaryOverdueTask {
 
 export interface ApprSummary {
   scope: string;
-  learners: { total: number; byStatus: Record<ApprProgressStatus, number> };
+  learners: { total: number; byStatus: Record<ApprProgressStatus, number>; both: number };
   otj: {
     byStatus: Record<Exclude<ApprProgressStatus, 'COMPLETE'>, number>;
     minutesDone: number;
@@ -53,9 +53,11 @@ export interface ApprSummary {
 }
 
 class ApprSummaryApi {
-  get(programmeId?: string) {
+  get(programmeId?: string, type?: 'DIPLOMA' | 'STANDARD') {
     return call<ApprSummary>(() =>
-      classroomio.apprenticeship.summary.$get({ query: programmeId ? { programmeId } : {} })
+      classroomio.apprenticeship.summary.$get({
+        query: { ...(programmeId ? { programmeId } : {}), ...(type ? { type } : {}) }
+      })
     );
   }
 }

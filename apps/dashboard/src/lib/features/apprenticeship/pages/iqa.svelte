@@ -23,6 +23,7 @@
   import { enrolmentsApi } from '../api/enrolments.svelte';
   import { apprIqaApi, type IqaCoverage, type IqaOutcome, type IqaSample } from '../api/iqa.svelte';
   import EvidenceStatusChip from '../components/shared/evidence-status-chip.svelte';
+  import ProgrammeTypeChip from '../components/shared/programme-type-chip.svelte';
   import IqaOutcomeChip from '../components/shared/iqa-outcome-chip.svelte';
   import { fmtDate } from '../components/shared/format';
 
@@ -71,6 +72,17 @@
   const targetPct = $derived(coverage?.targetPct ?? null);
   const targetNumber = $derived(Number(targetInput));
   const targetValid = $derived(Number.isInteger(targetNumber) && targetNumber >= 1 && targetNumber <= 100);
+  const typeOf = (pid: string) => enrolmentsApi.programmes.find((p) => p.id === pid)?.type;
+  // Units grouped under their qualification (programme) header.
+  const unitGroups = $derived.by(() => {
+    const m = new Map<string, { id: string; title: string; units: IqaCoverage['units'] }>();
+    for (const u of coverage?.units ?? []) {
+      const g = m.get(u.programmeId) ?? { id: u.programmeId, title: u.programmeTitle, units: [] };
+      g.units.push(u);
+      m.set(u.programmeId, g);
+    }
+    return [...m.values()];
+  });
   const hasFilters = $derived(!!programmeId || !!assessorId || !!outcome);
   const canSave = $derived(!!decision && (decision !== 'DISAGREE' || feedback.trim().length > 0));
 
@@ -370,32 +382,36 @@
             {#if coverage.units.length === 0}
               <p class="text-sm text-(--muted-foreground)">No units with accepted evidence yet.</p>
             {:else}
-              <div class="overflow-x-auto rounded-lg border">
-                <Table.Root>
-                  <Table.Header>
-                    <Table.Row>
-                      <Table.Head>Unit</Table.Head>
-                      <Table.Head>Programme</Table.Head>
-                      <Table.Head class="text-right">Accepted</Table.Head>
-                      <Table.Head class="text-right">Sampled</Table.Head>
-                      <Table.Head>Coverage</Table.Head>
-                    </Table.Row>
-                  </Table.Header>
-                  <Table.Body>
-                    {#each coverage.units as u (u.unitId)}
+              {#each unitGroups as g (g.id)}
+                <h3 class="mt-3 mb-1 flex flex-wrap items-center gap-2 text-sm font-medium">
+                  {g.title}
+                  {#if typeOf(g.id)}<ProgrammeTypeChip type={typeOf(g.id)!} />{/if}
+                </h3>
+                <div class="mb-3 overflow-x-auto rounded-lg border">
+                  <Table.Root>
+                    <Table.Header>
                       <Table.Row>
-                        <Table.Cell class="font-medium">
-                          {u.unitRef ? `${u.unitRef} · ` : ''}{u.unitTitle}
-                        </Table.Cell>
-                        <Table.Cell>{u.programmeTitle}</Table.Cell>
-                        <Table.Cell class="text-right">{u.accepted}</Table.Cell>
-                        <Table.Cell class="text-right">{u.sampled}</Table.Cell>
-                        <Table.Cell>{@render pctCell(u.pct, u.accepted)}</Table.Cell>
+                        <Table.Head class="sticky left-0 bg-(--background)">Unit</Table.Head>
+                        <Table.Head class="text-right">Accepted</Table.Head>
+                        <Table.Head class="text-right">Sampled</Table.Head>
+                        <Table.Head>Coverage</Table.Head>
                       </Table.Row>
-                    {/each}
-                  </Table.Body>
-                </Table.Root>
-              </div>
+                    </Table.Header>
+                    <Table.Body>
+                      {#each g.units as u (u.unitId)}
+                        <Table.Row>
+                          <Table.Cell class="sticky left-0 bg-(--background) font-medium">
+                            {u.unitRef ? `${u.unitRef} · ` : ''}{u.unitTitle}
+                          </Table.Cell>
+                          <Table.Cell class="text-right">{u.accepted}</Table.Cell>
+                          <Table.Cell class="text-right">{u.sampled}</Table.Cell>
+                          <Table.Cell>{@render pctCell(u.pct, u.accepted)}</Table.Cell>
+                        </Table.Row>
+                      {/each}
+                    </Table.Body>
+                  </Table.Root>
+                </div>
+              {/each}
             {/if}
           </section>
 
@@ -429,7 +445,10 @@
                       <Table.Row class="cursor-pointer" onclick={() => openReview(s)}>
                         <Table.Cell>
                           <p class="font-medium">{s.learnerName ?? '—'}</p>
-                          <p class="text-xs text-(--muted-foreground)">{s.programmeTitle}</p>
+                          <p class="flex flex-wrap items-center gap-1.5 text-xs text-(--muted-foreground)">
+                            {s.programmeTitle}
+                            {#if typeOf(s.programmeId)}<ProgrammeTypeChip type={typeOf(s.programmeId)!} />{/if}
+                          </p>
                         </Table.Cell>
                         <Table.Cell class="max-w-64 break-words whitespace-normal!">
                           <p>{s.evidenceTitle}</p>

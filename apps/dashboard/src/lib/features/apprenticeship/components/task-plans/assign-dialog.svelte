@@ -441,6 +441,11 @@
                     <Checkbox checked={chosen.has(r.id)} onCheckedChange={(v) => toggle(r.id, v === true)} />
                     <span class="min-w-0 flex-1">
                       <span class="block truncate font-medium">{r.learner.name}</span>
+                      {#if r.linked}
+                        <span class="block truncate text-xs text-(--muted-foreground)"
+                          >+ {r.linked.programmeTitle} ({r.linked.type === 'STANDARD' ? 'Standard' : 'Diploma'})</span
+                        >
+                      {/if}
                       {#if r.learner.email}
                         <span class="block truncate text-xs text-(--muted-foreground)">{r.learner.email}</span>
                       {/if}

@@ -1,7 +1,8 @@
 import * as schema from '@db/schema';
 
-import { and, db, eq, sql, type DbOrTxClient, type SQL } from '@db/drizzle';
+import { and, asc, db, eq, lt, ne, sql, type DbOrTxClient, type SQL } from '@db/drizzle';
 import { tutorReachSql } from './tutors';
+import { profileDisplayName } from './names';
 
 // Gecko Apprenticeships — summary dashboard aggregates. No access control here: the service passes the scope in
 // (ADMIN → org, TUTOR → restrictToTutorId). Learner/OTJ/review/gateway numbers are NOT here: the service derives them
@@ -10,8 +11,14 @@ import { tutorReachSql } from './tutors';
 export interface SummaryScope {
   organizationId: string;
   programmeId?: string;
+  /** Programme type of the row's OWN programme (evidence / task belong to one half of a pair). */
+  type?: 'DIPLOMA' | 'STANDARD';
   /** TUTOR actor: only rows this tutor reaches (named tutor or programme tutor). */
   restrictToTutorId?: string;
+}
+
+function typeSql(programmeIdCol: string, type: string): SQL {
+  return sql`exists (select 1 from appr_programme tp where tp.id = ${sql.raw(programmeIdCol)} and tp.type = ${type})`;
 }
 
 /** Evidence rows per status (SUBMITTED = the To mark queue, same rule), scoped like the To mark list. */
@@ -19,6 +26,7 @@ export async function countEvidenceByStatus(scope: SummaryScope, client: DbOrTxC
   const ev = schema.apprEvidence;
   const conditions: (SQL | undefined)[] = [eq(ev.organizationId, scope.organizationId)];
   if (scope.programmeId) conditions.push(eq(ev.programmeId, scope.programmeId));
+  if (scope.type) conditions.push(typeSql('"appr_evidence"."programme_id"', scope.type));
   if (scope.restrictToTutorId) {
     conditions.push(
       tutorReachSql('"appr_evidence"."learner_id"', '"appr_evidence"."programme_id"', scope.restrictToTutorId)
@@ -37,6 +45,7 @@ export async function countTasksByStatus(scope: SummaryScope, client: DbOrTxClie
   const t = schema.apprTask;
   const conditions: (SQL | undefined)[] = [eq(t.organizationId, scope.organizationId)];
   if (scope.programmeId) conditions.push(eq(t.programmeId, scope.programmeId));
+  if (scope.type) conditions.push(typeSql('"appr_task"."programme_id"', scope.type));
   if (scope.restrictToTutorId) {
     conditions.push(tutorReachSql('"appr_task"."learner_id"', '"appr_task"."programme_id"', scope.restrictToTutorId));
   }
@@ -53,7 +62,7 @@ export async function countTasksByStatus(scope: SummaryScope, client: DbOrTxClie
  * has not acknowledged. For a tutor (`assessorId`) only samples on evidence they accepted; admin → the whole org.
  */
 export async function countIqaOpen(
-  scope: { organizationId: string; programmeId?: string; assessorId?: string },
+  scope: { organizationId: string; programmeId?: string; type?: 'DIPLOMA' | 'STANDARD'; assessorId?: string },
   client: DbOrTxClient = db
 ) {
   const s = schema.apprIqaSample;
@@ -62,6 +71,11 @@ export async function countIqaOpen(
   if (scope.programmeId) {
     conditions.push(
       sql`exists (select 1 from appr_enrolment ie where ie.id = ${sql.raw('"appr_iqa_sample"."enrolment_id"')} and ie.programme_id = ${scope.programmeId})`
+    );
+  }
+  if (scope.type) {
+    conditions.push(
+      sql`exists (select 1 from appr_enrolment ie join appr_programme ip on ip.id = ie.programme_id where ie.id = ${sql.raw('"appr_iqa_sample"."enrolment_id"')} and ip.type = ${scope.type})`
     );
   }
   const [row] = await client
@@ -96,4 +110,46 @@ export async function listLinkedUnitCounts(carrierIds: string[], client: DbOrTxC
     complete: number;
   }[];
   return new Map(rows.map((r) => [r.carrier_id, { total: Number(r.total), complete: Number(r.complete) }]));
+}
+
+/**
+ * Overdue tasks like listOverdueTasks (tasks.ts) but also scoped by the task's programme TYPE. The summary uses this
+ * only when its type filter is set; same columns, order and window total.
+ */
+export async function listOverdueTasksByType(
+  scope: SummaryScope,
+  today: string,
+  page: { limit: number; offset: number },
+  client: DbOrTxClient = db
+) {
+  const t = schema.apprTask;
+  const conditions: (SQL | undefined)[] = [
+    eq(t.organizationId, scope.organizationId),
+    lt(t.dueDate, today),
+    ne(t.status, 'COMPLETE')
+  ];
+  if (scope.programmeId) conditions.push(eq(t.programmeId, scope.programmeId));
+  if (scope.type) conditions.push(eq(schema.apprProgramme.type, scope.type));
+  if (scope.restrictToTutorId) {
+    conditions.push(tutorReachSql('"appr_task"."learner_id"', '"appr_task"."programme_id"', scope.restrictToTutorId));
+  }
+  return client
+    .select({
+      id: t.id,
+      title: t.title,
+      dueDate: t.dueDate,
+      enrolmentId: t.enrolmentId,
+      learnerId: t.learnerId,
+      learnerName: profileDisplayName,
+      programmeId: t.programmeId,
+      programmeTitle: schema.apprProgramme.title,
+      total: sql<number>`count(*) over()::int`
+    })
+    .from(t)
+    .innerJoin(schema.profile, eq(schema.profile.id, t.learnerId))
+    .innerJoin(schema.apprProgramme, eq(schema.apprProgramme.id, t.programmeId))
+    .where(and(...conditions))
+    .orderBy(asc(t.dueDate), asc(t.id))
+    .limit(page.limit)
+    .offset(page.offset);
 }

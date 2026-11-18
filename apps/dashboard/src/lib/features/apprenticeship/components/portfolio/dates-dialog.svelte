@@ -10,8 +10,13 @@
   interface Props {
     open: boolean;
     store: PortfolioStore;
+    /** The enrolment to edit (a qualification of the pair); defaults to the carrier / only enrolment. */
+    enrolmentId?: string;
   }
-  let { open = $bindable(), store }: Props = $props();
+  let { open = $bindable(), store, enrolmentId }: Props = $props();
+
+  const target = $derived(enrolmentId ?? store.enrolmentId);
+  const targetView = $derived(store.portfolioFor(target) ?? store.data);
 
   let start = $state('');
   let end = $state('');
@@ -21,8 +26,8 @@
 
   // Load the current values each time the dialog opens.
   $effect(() => {
-    if (!open || !store.data) return;
-    const e = store.data.enrolment;
+    if (!open || !targetView) return;
+    const e = targetView.enrolment;
     start = e.startDate ?? '';
     end = e.plannedEndDate ?? '';
     hoursWeek = e.contractedHoursWeek === null ? '' : String(e.contractedHoursWeek);
@@ -34,8 +39,8 @@
   const valid = $derived(!!start && !!end && end >= start);
 
   async function save() {
-    if (!store.data || !valid) return;
-    const e = store.data.enrolment;
+    if (!targetView || !valid) return;
+    const e = targetView.enrolment;
     const body: EnrolmentUpdateBody = {};
     if (start !== (e.startDate ?? '')) body.startDate = start;
     if (end !== (e.plannedEndDate ?? '')) body.plannedEndDate = end;
@@ -48,7 +53,7 @@
       return;
     }
     error = null;
-    if (await store.patchEnrolment(body)) open = false;
+    if (await store.patchEnrolment(body, target)) open = false;
     else error = 'Could not save. Check the dates and hours and try again.';
   }
 </script>
@@ -57,7 +62,10 @@
   <Dialog.Content class="sm:max-w-md">
     <Dialog.Header>
       <Dialog.Title>Edit dates &amp; hours</Dialog.Title>
-      <Dialog.Description>Changing these updates the expected position and off-the-job target.</Dialog.Description>
+      <Dialog.Description>
+        {#if store.pair && targetView}<strong>{targetView.programme.title}</strong>.{/if}
+        Changing these updates the expected position and off-the-job target.</Dialog.Description
+      >
     </Dialog.Header>
 
     <form

@@ -20,6 +20,7 @@
   const OVERDUE_SHOWN = 10;
 
   let programmeId = $state('');
+  let typeFilter = $state<'' | 'DIPLOMA' | 'STANDARD'>('');
   let data = $state<ApprSummary | null>(null);
   let error = $state<string | null>(null);
   let loading = $state(true);
@@ -27,6 +28,17 @@
   let reqId = 0;
 
   const base = $derived(apprenticeshipsBase(appPage.url.pathname, $currentOrg.siteName));
+  // Tiles link to the learners list pre-filtered with the same type (query params learners.svelte reads).
+  function listHref(params: Record<string, string> = {}) {
+    const q = new URLSearchParams(params);
+    if (typeFilter) q.set('type', typeFilter);
+    if (programmeId) q.set('programmeId', programmeId);
+    const qs = q.toString();
+    return qs ? `${base}?${qs}` : base;
+  }
+  const programmeOptions = $derived(
+    enrolmentsApi.programmes.filter((p) => !typeFilter || (p.type ?? 'DIPLOMA') === typeFilter)
+  );
   const programmeLabel = $derived(
     programmeId ? (enrolmentsApi.programmes.find((p) => p.id === programmeId)?.title ?? 'Programme') : 'All programmes'
   );
@@ -37,9 +49,10 @@
 
   $effect(() => {
     const pid = programmeId;
+    const type = typeFilter;
     reload;
     const id = ++reqId;
-    apprSummaryApi.get(pid || undefined).then((res) => {
+    apprSummaryApi.get(pid || undefined, type || undefined).then((res) => {
       if (id !== reqId) return;
       loading = false;
       if (res.ok) {
@@ -81,7 +94,8 @@
 {#snippet statusBar(
   counts: Partial<Record<ApprProgressStatus, number>>,
   order: readonly ApprProgressStatus[],
-  label: string
+  label: string,
+  hrefFor?: (s: ApprProgressStatus) => string
 )}
   {@const total = order.reduce((n, s) => n + (counts[s] ?? 0), 0)}
   {#if total > 0}
@@ -95,10 +109,22 @@
   {/if}
   <div class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
     {#each order as s (s)}
-      <div class="rounded-md px-3 py-2 {STATUS_CLASS[s]}">
-        <p class="text-xl font-semibold">{counts[s] ?? 0}</p>
-        <p class="text-xs">{STATUS_LABEL(s)}</p>
-      </div>
+      {#if hrefFor}
+        <a
+          href={hrefFor(s)}
+          class="rounded-md px-3 py-2 focus-visible:ring-2 focus-visible:ring-(--ring) focus-visible:outline-none {STATUS_CLASS[
+            s
+          ]}"
+        >
+          <p class="text-xl font-semibold">{counts[s] ?? 0}</p>
+          <p class="text-xs">{STATUS_LABEL(s)}</p>
+        </a>
+      {:else}
+        <div class="rounded-md px-3 py-2 {STATUS_CLASS[s]}">
+          <p class="text-xl font-semibold">{counts[s] ?? 0}</p>
+          <p class="text-xs">{STATUS_LABEL(s)}</p>
+        </div>
+      {/if}
     {/each}
   </div>
 {/snippet}
@@ -157,19 +183,42 @@
 
   <Page.Body>
     {#snippet child()}
-      <div class="mb-4 flex flex-col gap-1">
-        <span class="text-xs text-(--muted-foreground)" id="sm-prog">Programme</span>
-        <Select.Root type="single" bind:value={programmeId}>
-          <Select.Trigger class="ui:w-fit min-w-[220px]" aria-labelledby="sm-prog"
-            ><p class="truncate">{programmeLabel}</p></Select.Trigger
-          >
-          <Select.Content>
-            <Select.Item value="">All programmes</Select.Item>
-            {#each enrolmentsApi.programmes as p (p.id)}
-              <Select.Item value={p.id}>{p.title}</Select.Item>
+      <div class="mb-4 flex flex-wrap items-end gap-4">
+        <div class="flex flex-col gap-1">
+          <span class="text-xs text-(--muted-foreground)">Type</span>
+          <div class="flex gap-1" role="group" aria-label="Filter by programme type">
+            {#each [['', 'All'], ['DIPLOMA', 'Diploma'], ['STANDARD', 'Standard']] as const as [value, label] (value)}
+              <button
+                type="button"
+                aria-pressed={typeFilter === value}
+                class="min-h-9 rounded-md border px-3 py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-(--ring) focus-visible:outline-none {typeFilter ===
+                value
+                  ? 'border-(--primary) bg-(--primary) text-(--primary-foreground)'
+                  : 'hover:bg-(--muted)'}"
+                onclick={() => {
+                  typeFilter = value;
+                  programmeId = '';
+                }}
+              >
+                {label}
+              </button>
             {/each}
-          </Select.Content>
-        </Select.Root>
+          </div>
+        </div>
+        <div class="flex flex-col gap-1">
+          <span class="text-xs text-(--muted-foreground)" id="sm-prog">Programme</span>
+          <Select.Root type="single" bind:value={programmeId}>
+            <Select.Trigger class="ui:w-fit min-w-[220px]" aria-labelledby="sm-prog"
+              ><p class="truncate">{programmeLabel}</p></Select.Trigger
+            >
+            <Select.Content>
+              <Select.Item value="">All programmes</Select.Item>
+              {#each programmeOptions as p (p.id)}
+                <Select.Item value={p.id}>{p.title}</Select.Item>
+              {/each}
+            </Select.Content>
+          </Select.Root>
+        </div>
       </div>
 
       {#if loading}
@@ -193,10 +242,12 @@
           <section class={cardClass} aria-labelledby="sm-learners">
             <div class="flex items-baseline justify-between">
               <h2 id="sm-learners" class="font-medium">Learners · {learnerTotal}</h2>
-              <a class={linkClass} href={base}>All learners</a>
+              <a class={linkClass} href={listHref()}>All learners</a>
             </div>
             <div class="mt-3">
-              {@render statusBar(data.learners.byStatus, APPR_PROGRESS_STATUSES, 'Learners by status')}
+              {@render statusBar(data.learners.byStatus, APPR_PROGRESS_STATUSES, 'Learners by status', (st) =>
+                listHref({ status: st })
+              )}
             </div>
           </section>
 
@@ -211,10 +262,11 @@
             <div class="mt-3">{@render statusBar(data.otj.byStatus, otjStatuses, 'Off-the-job hours by status')}</div>
           </section>
 
-          <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div class="grid grid-cols-2 gap-3 md:grid-cols-5">
+            {@render stat(data.learners.both, 'Learners on both', `${base}?type=BOTH`)}
             {@render stat(data.toMark, 'Evidence to mark', `${base}/to-mark`, data.toMark > 0 ? warnTone : '')}
             {#if $isOrgAdmin}
-              {@render stat(data.onboardingIncomplete, 'Onboarding incomplete', `${base}?onboarding=incomplete`)}
+              {@render stat(data.onboardingIncomplete, 'Onboarding incomplete', listHref({ onboarding: 'incomplete' }))}
               {@render stat(data.iqa.pending, 'IQA samples pending', `${base}/iqa`)}
             {:else}
               {@render stat(
@@ -267,7 +319,7 @@
             <div class="flex items-baseline justify-between">
               <h2 id="sm-overdue" class="font-medium">Overdue tasks · {data.tasks.overdue}</h2>
               {#if data.tasks.overdue > OVERDUE_SHOWN}
-                <a class={linkClass} href={base}>View all learners</a>
+                <a class={linkClass} href={listHref()}>View all learners</a>
               {/if}
             </div>
             {#if overdueTasks.length === 0}

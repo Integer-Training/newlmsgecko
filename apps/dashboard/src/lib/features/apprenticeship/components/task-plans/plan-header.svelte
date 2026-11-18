@@ -11,6 +11,7 @@
   import { currentOrg } from '$lib/utils/store/org';
   import { snackbar } from '$features/ui/snackbar/store';
   import { taskPlansApi, type BriefFile, type TaskPlan } from '../../api/task-plans.svelte';
+  import ProgrammeTypeChip from '../shared/programme-type-chip.svelte';
   import BriefFiles from './brief-files.svelte';
 
   // Plan details, edited in place: title / valid window / brief files save together; archive toggles status; delete
@@ -18,10 +19,11 @@
   interface Props {
     plan: TaskPlan;
     programmeTitle: string;
+    programmeType?: string;
     onsaved: (plan: TaskPlan) => void;
   }
 
-  let { plan, programmeTitle, onsaved }: Props = $props();
+  let { plan, programmeTitle, programmeType = '', onsaved }: Props = $props();
 
   let title = $state('');
   let validFrom = $state('');
@@ -134,7 +136,10 @@
     </div>
   </div>
 
-  <p class="text-sm text-(--muted-foreground)">Programme: <span class="text-(--foreground)">{programmeTitle}</span></p>
+  <p class="text-sm text-(--muted-foreground)">
+    Programme: <span class="text-(--foreground)">{programmeTitle}</span>
+    {#if programmeType}<ProgrammeTypeChip type={programmeType} size="md" />{/if}
+  </p>
 
   <div class="grid grid-cols-1 gap-3 md:grid-cols-[1fr_11rem_11rem]">
     <div class="space-y-1">

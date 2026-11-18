@@ -15,8 +15,10 @@
     mode: 'staff' | 'learner';
     qualHref: (qualEnrolmentId: string) => string;
     unitHref: (qualEnrolmentId: string, unitId: string) => string;
+    /** Admin only: open the dates dialog for one qualification. */
+    onEditDates?: (qualEnrolmentId: string) => void;
   }
-  let { store, mode, qualHref, unitHref }: Props = $props();
+  let { store, mode, qualHref, unitHref, onEditDates }: Props = $props();
 
   const o = $derived(store.overview);
 </script>
@@ -37,8 +39,15 @@
         {mode}
         href={qualHref(card.enrolmentId)}
         unitHref={(unitId) => unitHref(card.enrolmentId, unitId)}
+        onEditDates={onEditDates ? () => onEditDates(card.enrolmentId) : undefined}
       />
     {/each}
+    {#if o.cards.length === 1 && o.cards[0].type === 'DIPLOMA'}
+      <section class="rounded-lg border border-dashed p-4" aria-label="Paired standard">
+        <p class="text-sm font-medium">No standard assigned</p>
+        <p class="text-sm text-(--muted-foreground)">This diploma is tracked on its own.</p>
+      </section>
+    {/if}
     {#if o.canAddPair && mode === 'staff'}
       <AddPairCta canAddPair={o.canAddPair} learnerId={o.learner.id} />
     {/if}

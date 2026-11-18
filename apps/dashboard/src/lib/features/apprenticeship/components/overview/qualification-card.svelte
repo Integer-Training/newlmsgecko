@@ -1,6 +1,8 @@
 <script lang="ts">
   import ArrowRightIcon from '@lucide/svelte/icons/circle-arrow-right';
   import AwardIcon from '@lucide/svelte/icons/award';
+  import PencilIcon from '@lucide/svelte/icons/pencil';
+  import { Button } from '@cio/ui/base/button';
   import CalendarIcon from '@lucide/svelte/icons/calendar';
   import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
   import ListChecksIcon from '@lucide/svelte/icons/list-checks';
@@ -19,8 +21,10 @@
     href: string;
     /** Unit page for one unit of this qualification. */
     unitHref: (unitId: string) => string;
+    /** Staff (admin) only: opens the dates dialog for this qualification. */
+    onEditDates?: () => void;
   }
-  let { card, mode, href, unitHref }: Props = $props();
+  let { card, mode, href, unitHref, onEditDates }: Props = $props();
 
   let expanded = $state(false);
   const done = $derived(card.achievedAt !== null);
@@ -47,6 +51,11 @@
       <span class="font-medium">Status</span>
       <StatusChip status={done ? 'COMPLETE' : card.status} />
     </p>
+    {#if onEditDates}
+      <Button variant="outline" size="sm" onclick={onEditDates} aria-label="Edit dates: {card.title}">
+        <PencilIcon size={14} class="mr-1" /> Edit dates
+      </Button>
+    {/if}
   </div>
 
   <div class="flex flex-wrap items-center gap-4 px-4 py-4">

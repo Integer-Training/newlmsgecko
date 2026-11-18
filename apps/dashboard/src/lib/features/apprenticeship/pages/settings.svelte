@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { page } from '$app/state';
+  import { goto } from '$app/navigation';
   import * as Page from '@cio/ui/base/page';
   import { Button } from '@cio/ui/base/button';
   import { Input } from '@cio/ui/base/input';
@@ -24,6 +26,23 @@
   let busyId = $state<string | null>(null);
   // Unsaved label edits keyed by evidence type id.
   let labelDraft = $state<Record<string, string>>({});
+
+  // Sub-tab kept in ?section= so a link or reload lands on the same one.
+  const SECTIONS = [
+    { id: 'progress', label: 'Progress rules' },
+    { id: 'evidence', label: 'Evidence types' },
+    { id: 'onboarding', label: 'Onboarding documents' }
+  ];
+  const section = $derived(
+    SECTIONS.some((s) => s.id === page.url.searchParams.get('section'))
+      ? page.url.searchParams.get('section')!
+      : 'progress'
+  );
+  function setSection(id: string) {
+    const url = new URL(page.url);
+    url.searchParams.set('section', id);
+    goto(url, { replaceState: true, noScroll: true, keepFocus: true });
+  }
 
   onMount(async () => {
     await programmesApi.loadSettings();
@@ -125,122 +144,160 @@
       {:else if !programmesApi.settings}
         <div class="flex justify-center py-16"><Spinner /></div>
       {:else}
-        <div class="grid max-w-5xl grid-cols-1 gap-6 lg:grid-cols-2">
-          <!-- Thresholds -->
-          <form onsubmit={save} class="flex flex-col gap-4 rounded-xl border bg-(--card) p-4">
-            <div>
-              <h2 class="text-lg font-semibold tracking-tight">Progress rules</h2>
-              <p class="text-sm text-(--muted-foreground)">
-                How a learner is flagged compared with where they should be by now.
-              </p>
-            </div>
-
-            <div class="space-y-1">
-              <label for="s-gap" class="text-sm font-medium">Concern gap (percentage points)</label>
-              <Input id="s-gap" type="number" min={0} max={100} step={1} bind:value={concernGapPct} class="max-w-32" />
-              <p class="text-xs text-(--muted-foreground)">
-                Behind = below the expected progress by up to {Number.isFinite(concernGapPct) ? concernGapPct : '…'} points.
-                Concern = more than {Number.isFinite(concernGapPct) ? concernGapPct : '…'} points below.
-              </p>
-              {#if !gapValid}<p class="text-xs text-red-600" role="alert">Enter a whole number from 0 to 100.</p>{/if}
-            </div>
-
-            <div class="space-y-1">
-              <label for="s-otj" class="text-sm font-medium">Off-the-job factor (%)</label>
-              <Input id="s-otj" type="number" min={0} max={100} step={1} bind:value={otjPercent} class="max-w-32" />
-              <p class="text-xs text-(--muted-foreground)">
-                Share of working hours that must be off-the-job training. 20 means a learner on 30 working hours a week
-                needs 6 off-the-job hours a week.
-              </p>
-              {#if !otjValid}<p class="text-xs text-red-600" role="alert">Enter a number from 0 to 100.</p>{/if}
-            </div>
-
-            <div class="space-y-1">
-              <label for="s-cap" class="text-sm font-medium">Weekly hours cap</label>
-              <Input id="s-cap" type="number" min={1} max={60} step={0.5} bind:value={weeklyCap} class="max-w-32" />
-              <p class="text-xs text-(--muted-foreground)">
-                The most working hours counted in one week when working out the off-the-job target.
-              </p>
-              {#if !capValid}<p class="text-xs text-red-600" role="alert">Enter a number from 1 to 60.</p>{/if}
-            </div>
-
-            <div>
-              <Button type="submit" disabled={!dirty || !gapValid || !otjValid || !capValid} loading={saving}>
-                Save rules
-              </Button>
-            </div>
-          </form>
-
-          <!-- Evidence types -->
-          <div class="flex flex-col gap-4 rounded-xl border bg-(--card) p-4">
-            <div>
-              <h2 class="text-lg font-semibold tracking-tight">Evidence types</h2>
-              <p class="text-sm text-(--muted-foreground)">
-                What learners can label their evidence as. Hidden types stay on existing evidence but cannot be chosen
-                for new evidence.
-              </p>
-            </div>
-
-            <ul class="flex flex-col gap-2">
-              {#each types as t, i (t.id)}
-                <li class="flex items-center gap-2">
-                  <Input
-                    aria-label="Evidence type name"
-                    value={labelDraft[t.id] ?? t.label}
-                    maxlength={100}
-                    class={t.active ? '' : 'opacity-60'}
-                    oninput={(e) => (labelDraft[t.id] = e.currentTarget.value)}
-                    onblur={() => renameType(t)}
-                    onkeydown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
-                    disabled={busyId === t.id}
-                  />
-                  <div class="flex items-center gap-1">
-                    <Switch
-                      checked={t.active}
-                      aria-label="{t.active ? 'Hide' : 'Show'} {t.label}"
-                      disabled={busyId === t.id}
-                      onCheckedChange={(v) => toggleActive(t, v)}
-                    />
-                    <span class="w-12 text-xs text-(--muted-foreground)">{t.active ? 'Shown' : 'Hidden'}</span>
-                  </div>
-                  <Button
-                    size="icon-sm"
-                    variant="ghost"
-                    aria-label="Move {t.label} up"
-                    disabled={i === 0 || busyId === t.id}
-                    onclick={() => move(t, -1)}
-                  >
-                    <ArrowUpIcon class="size-4" />
-                  </Button>
-                  <Button
-                    size="icon-sm"
-                    variant="ghost"
-                    aria-label="Move {t.label} down"
-                    disabled={i === types.length - 1 || busyId === t.id}
-                    onclick={() => move(t, 1)}
-                  >
-                    <ArrowDownIcon class="size-4" />
-                  </Button>
-                </li>
-              {:else}
-                <li class="text-(--muted-foreground) text-sm">No evidence types yet.</li>
-              {/each}
-            </ul>
-
-            <form onsubmit={addType} class="flex items-end gap-2">
-              <div class="flex-1 space-y-1">
-                <label for="s-new-type" class="text-sm font-medium">Add an evidence type</label>
-                <Input id="s-new-type" bind:value={newLabel} maxlength={100} placeholder="e.g. Reflective account" />
+        <div role="tablist" aria-label="Settings sections" class="mb-4 flex max-w-5xl flex-wrap gap-1 border-b">
+          {#each SECTIONS as s (s.id)}
+            <button
+              type="button"
+              role="tab"
+              id="tab-{s.id}"
+              aria-selected={section === s.id}
+              aria-controls="panel-{s.id}"
+              class="-mb-px border-b-2 px-3 py-2 text-sm font-medium {section === s.id
+                ? 'border-(--primary) text-(--foreground)'
+                : 'border-transparent text-(--muted-foreground) hover:text-(--foreground)'}"
+              onclick={() => setSection(s.id)}
+            >
+              {s.label}
+            </button>
+          {/each}
+        </div>
+        <div class="max-w-3xl">
+          {#if section === 'progress'}
+            <!-- Thresholds -->
+            <form
+              id="panel-progress"
+              role="tabpanel"
+              aria-labelledby="tab-progress"
+              onsubmit={save}
+              class="flex flex-col gap-4 rounded-xl border bg-(--card) p-4"
+            >
+              <div>
+                <h2 class="text-lg font-semibold tracking-tight">Progress rules</h2>
+                <p class="text-sm text-(--muted-foreground)">
+                  How a learner is flagged compared with where they should be by now.
+                </p>
               </div>
-              <Button type="submit" disabled={!newLabel.trim()} loading={adding}>
-                <PlusIcon class="size-4" /> Add
-              </Button>
-            </form>
-          </div>
 
-          <div class="lg:col-span-2">
-            <OnboardingTypesSettings />
-          </div>
+              <div class="space-y-1">
+                <label for="s-gap" class="text-sm font-medium">Concern gap (percentage points)</label>
+                <Input
+                  id="s-gap"
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={1}
+                  bind:value={concernGapPct}
+                  class="max-w-32"
+                />
+                <p class="text-xs text-(--muted-foreground)">
+                  Behind = below the expected progress by up to {Number.isFinite(concernGapPct) ? concernGapPct : '…'} points.
+                  Concern = more than {Number.isFinite(concernGapPct) ? concernGapPct : '…'} points below.
+                </p>
+                {#if !gapValid}<p class="text-xs text-red-600" role="alert">Enter a whole number from 0 to 100.</p>{/if}
+              </div>
+
+              <div class="space-y-1">
+                <label for="s-otj" class="text-sm font-medium">Off-the-job factor (%)</label>
+                <Input id="s-otj" type="number" min={0} max={100} step={1} bind:value={otjPercent} class="max-w-32" />
+                <p class="text-xs text-(--muted-foreground)">
+                  Share of working hours that must be off-the-job training. 20 means a learner on 30 working hours a
+                  week needs 6 off-the-job hours a week.
+                </p>
+                {#if !otjValid}<p class="text-xs text-red-600" role="alert">Enter a number from 0 to 100.</p>{/if}
+              </div>
+
+              <div class="space-y-1">
+                <label for="s-cap" class="text-sm font-medium">Weekly hours cap</label>
+                <Input id="s-cap" type="number" min={1} max={60} step={0.5} bind:value={weeklyCap} class="max-w-32" />
+                <p class="text-xs text-(--muted-foreground)">
+                  The most working hours counted in one week when working out the off-the-job target.
+                </p>
+                {#if !capValid}<p class="text-xs text-red-600" role="alert">Enter a number from 1 to 60.</p>{/if}
+              </div>
+
+              <div>
+                <Button type="submit" disabled={!dirty || !gapValid || !otjValid || !capValid} loading={saving}>
+                  Save rules
+                </Button>
+              </div>
+            </form>
+          {:else if section === 'evidence'}
+            <!-- Evidence types -->
+            <div
+              id="panel-evidence"
+              role="tabpanel"
+              aria-labelledby="tab-evidence"
+              class="flex flex-col gap-4 rounded-xl border bg-(--card) p-4"
+            >
+              <div>
+                <h2 class="text-lg font-semibold tracking-tight">Evidence types</h2>
+                <p class="text-sm text-(--muted-foreground)">
+                  What learners can label their evidence as. Hidden types stay on existing evidence but cannot be chosen
+                  for new evidence.
+                </p>
+              </div>
+
+              <ul class="flex flex-col gap-2">
+                {#each types as t, i (t.id)}
+                  <li class="flex items-center gap-2">
+                    <Input
+                      aria-label="Evidence type name"
+                      value={labelDraft[t.id] ?? t.label}
+                      maxlength={100}
+                      class={t.active ? '' : 'opacity-60'}
+                      oninput={(e) => (labelDraft[t.id] = e.currentTarget.value)}
+                      onblur={() => renameType(t)}
+                      onkeydown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
+                      disabled={busyId === t.id}
+                    />
+                    <div class="flex items-center gap-1">
+                      <Switch
+                        checked={t.active}
+                        aria-label="{t.active ? 'Hide' : 'Show'} {t.label}"
+                        disabled={busyId === t.id}
+                        onCheckedChange={(v) => toggleActive(t, v)}
+                      />
+                      <span class="w-12 text-xs text-(--muted-foreground)">{t.active ? 'Shown' : 'Hidden'}</span>
+                    </div>
+                    <Button
+                      size="icon-sm"
+                      variant="ghost"
+                      aria-label="Move {t.label} up"
+                      disabled={i === 0 || busyId === t.id}
+                      onclick={() => move(t, -1)}
+                    >
+                      <ArrowUpIcon class="size-4" />
+                    </Button>
+                    <Button
+                      size="icon-sm"
+                      variant="ghost"
+                      aria-label="Move {t.label} down"
+                      disabled={i === types.length - 1 || busyId === t.id}
+                      onclick={() => move(t, 1)}
+                    >
+                      <ArrowDownIcon class="size-4" />
+                    </Button>
+                  </li>
+                {:else}
+                  <li class="text-(--muted-foreground) text-sm">No evidence types yet.</li>
+                {/each}
+              </ul>
+
+              <form onsubmit={addType} class="flex items-end gap-2">
+                <div class="flex-1 space-y-1">
+                  <label for="s-new-type" class="text-sm font-medium">Add an evidence type</label>
+                  <Input id="s-new-type" bind:value={newLabel} maxlength={100} placeholder="e.g. Reflective account" />
+                </div>
+                <Button type="submit" disabled={!newLabel.trim()} loading={adding}>
+                  <PlusIcon class="size-4" /> Add
+                </Button>
+              </form>
+            </div>
+          {:else}
+            <div id="panel-onboarding" role="tabpanel" aria-labelledby="tab-onboarding">
+              <OnboardingTypesSettings />
+            </div>
+          {/if}
         </div>
       {/if}
     {/snippet}

@@ -83,7 +83,7 @@
           <Table.Row>
             <Table.Head>Title</Table.Head>
             <Table.Head>Type</Table.Head>
-            {#if store.pair}<Table.Head>Qualification</Table.Head>{/if}
+            {#if store.pair}<Table.Head>Maps to</Table.Head>{/if}
             <Table.Head>Status</Table.Head>
             <Table.Head class="text-right">Criteria</Table.Head>
             <Table.Head class="text-right">Files</Table.Head>
@@ -116,10 +116,22 @@
               </Table.Cell>
               <Table.Cell>{e.typeLabel ?? e.typeKey}</Table.Cell>
               {#if store.pair}
-                {@const qt = store.portfolioFor(e.qualEnrolmentId)?.programme.type}
-                <Table.Cell
-                  >{#if qt}<ProgrammeTypeChip type={qt} />{:else}—{/if}</Table.Cell
-                >
+                {@const maps = (e.mappedQualifications ?? []).filter((m) => m.criterionCodes.length > 0)}
+                {@const qt = store.portfolioFor(e.homeEnrolmentId ?? e.qualEnrolmentId)?.programme.type}
+                <Table.Cell>
+                  {#if maps.length > 0}
+                    <span class="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+                      {#each maps as m (m.enrolmentId)}
+                        <span class="inline-flex items-center gap-1 whitespace-nowrap">
+                          <ProgrammeTypeChip type={m.type} />
+                          <span class="text-xs text-(--muted-foreground)">×{m.criterionCodes.length}</span>
+                        </span>
+                      {/each}
+                    </span>
+                  {:else if qt}
+                    <ProgrammeTypeChip type={qt} />
+                  {:else}—{/if}
+                </Table.Cell>
               {/if}
               <Table.Cell><EvidenceStatusChip status={e.status} /></Table.Cell>
               <Table.Cell class="text-right">{e.criteriaCount}</Table.Cell>

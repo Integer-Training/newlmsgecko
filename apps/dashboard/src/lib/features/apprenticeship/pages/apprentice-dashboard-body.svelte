@@ -7,6 +7,7 @@
   import { evidenceApi, type EvidenceNote } from '../api/evidence.svelte';
   import { tutorNames } from '../api/enrolments.svelte';
   import { apprenticeShell } from '../api/apprentice-shell.svelte';
+  import { myApprenticeshipApi } from '../api/my-apprenticeship.svelte';
   import type { OverviewPayload } from '../api/overview.types';
   import QualificationCard from '../components/overview/qualification-card.svelte';
   import StatusBreakdown from '../components/overview/status-breakdown.svelte';
@@ -79,6 +80,14 @@
   const tutor = $derived(d ? tutorNames(d.tutors) : '—');
   const hasTutor = $derived(tutor !== '—');
 
+  // Subtitle names every qualification of this apprenticeship (a diploma + standard pair reads as one).
+  const qualSubtitle = $derived(
+    myApprenticeshipApi
+      .qualificationsOf(myApprenticeshipApi.enrolments.find((e) => e.id === enrolmentId) ?? null)
+      .map((q) => q.title)
+      .join(' + ')
+  );
+
   const card = 'space-y-2 rounded-lg border bg-(--card) p-4';
   const link = 'text-sm text-(--primary) hover:underline';
 </script>
@@ -87,6 +96,7 @@
   <Page.Header>
     <Page.HeaderContent>
       <Page.Title>My apprenticeship</Page.Title>
+      {#if qualSubtitle}<Page.Subtitle>{qualSubtitle}</Page.Subtitle>{/if}
     </Page.HeaderContent>
     {#if d}
       <Page.Action><PdfDownloadButton {enrolmentId} /></Page.Action>

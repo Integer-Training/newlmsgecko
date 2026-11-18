@@ -27,7 +27,7 @@ import {
   EXPLORE_ENABLED
 } from '$lib/utils/constants/features';
 import { myApprenticeshipApi } from '$features/apprenticeship/api/my-apprenticeship.svelte';
-import { APPR_PROGRAMME_TYPE_LABELS, type ApprProgrammeType } from '@cio/utils/constants/apprenticeship';
+import { APPR_PROGRAMME_TYPE_SHORT, type ApprProgrammeType } from '@cio/utils/constants/apprenticeship';
 import { apprenticeShell } from '$features/apprenticeship/api/apprentice-shell.svelte';
 
 export interface NavItem {
@@ -147,9 +147,14 @@ const APPRENTICE_BASE = '/apprenticeship';
 // Gecko Apprenticeships — the separate shell a learner with an apprenticeship enrolment gets. Replaces the whole
 // learner sidebar (Home / Exercises are course-dashboard concepts and stay hidden). Notifications have no page of
 // their own (only the header bell), so they are not listed here.
-/** The sidebar label for one qualification (e.g. "Apprenticeship diploma"); falls back to its title. */
+/** The sidebar label for one qualification, e.g. "Diploma — <title>"; falls back to its title. */
 function qualificationLabel(q: { title: string; type: ApprProgrammeType | null }): string {
-  return q.type ? APPR_PROGRAMME_TYPE_LABELS[q.type] : q.title;
+  return q.type ? `${APPR_PROGRAMME_TYPE_SHORT[q.type]} — ${q.title}` : q.title;
+}
+
+function onboardingComplete(): boolean {
+  const o = apprenticeShell.onboarding;
+  return !!o && o.enrolmentId === myApprenticeshipApi.currentEnrolmentId && o.complete;
 }
 
 /**
@@ -163,8 +168,7 @@ export function buildApprenticeNavConfig(): NavItemConfig[] {
   const qualItems: NavItemConfig[] =
     quals.length > 1
       ? quals.map((q) => ({
-          // The nav config has no group labels, so the title itself says these are the learner's qualifications.
-          titleKey: `Qualification: ${qualificationLabel(q)}`,
+          titleKey: qualificationLabel(q),
           path: `${APPRENTICE_BASE}/q/${q.enrolmentId}`,
           icon: ContentIcon,
           matchPattern: `^/lms/apprenticeship/q/${q.enrolmentId}(/.*)?$`
@@ -179,6 +183,19 @@ export function buildApprenticeNavConfig(): NavItemConfig[] {
       matchPattern: '^/lms/apprenticeship/?$'
     },
     ...qualItems,
+    {
+      titleKey: 'Onboarding',
+      path: `${APPRENTICE_BASE}/onboarding`,
+      icon: SetupIcon,
+      matchPattern: '^/lms/apprenticeship/onboarding(/.*)?$',
+      // Prominent with its badge while incomplete; once complete it drops below Gateway (no badge).
+      show: () => !onboardingComplete(),
+      badge: () => {
+        const o = apprenticeShell.onboarding;
+        if (!o || o.enrolmentId !== myApprenticeshipApi.currentEnrolmentId || o.complete) return null;
+        return `${o.approved}/${o.required}`;
+      }
+    },
     {
       titleKey: 'Evidence',
       path: `${APPRENTICE_BASE}/evidence`,
@@ -204,21 +221,17 @@ export function buildApprenticeNavConfig(): NavItemConfig[] {
       matchPattern: '^/lms/apprenticeship/reviews(/.*)?$'
     },
     {
-      titleKey: 'Onboarding',
-      path: `${APPRENTICE_BASE}/onboarding`,
-      icon: SetupIcon,
-      matchPattern: '^/lms/apprenticeship/onboarding(/.*)?$',
-      badge: () => {
-        const o = apprenticeShell.onboarding;
-        if (!o || o.enrolmentId !== myApprenticeshipApi.currentEnrolmentId || o.complete) return null;
-        return `${o.approved}/${o.required}`;
-      }
-    },
-    {
       titleKey: 'Gateway',
       path: `${APPRENTICE_BASE}/gateway`,
       icon: GoalIcon,
       matchPattern: '^/lms/apprenticeship/gateway(/.*)?$'
+    },
+    {
+      titleKey: 'Onboarding',
+      path: `${APPRENTICE_BASE}/onboarding`,
+      icon: SetupIcon,
+      matchPattern: '^/lms/apprenticeship/onboarding(/.*)?$',
+      show: () => onboardingComplete()
     },
     {
       // Not under /lms — absolute link (see getLmsNavigationItems).

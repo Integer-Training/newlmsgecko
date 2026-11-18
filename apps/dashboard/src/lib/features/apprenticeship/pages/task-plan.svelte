@@ -18,6 +18,7 @@
   let detail = $state<TaskPlanDetail | null>(null);
   let tree = $state<PickerQualification[]>([]);
   let programmeTitle = $state('');
+  let programmeType = $state('');
   let loadError = $state<string | null>(null);
   // Monotonic id so a slow earlier response cannot overwrite a newer one.
   let req = 0;
@@ -38,6 +39,7 @@
       if (prog.ok) {
         tree = prog.data.qualifications;
         programmeTitle = (prog.data as { title?: string }).title ?? '';
+        programmeType = (prog.data as { type?: string }).type ?? '';
       }
     }
     detail = res.data;
@@ -83,7 +85,7 @@
         <div class="flex justify-center py-16"><Spinner /></div>
       {:else}
         <div class="flex flex-col gap-4">
-          <PlanHeader plan={current.plan} {programmeTitle} {onsaved} />
+          <PlanHeader plan={current.plan} {programmeTitle} {programmeType} {onsaved} />
           <PlanTasks planId={current.plan.id} items={current.items} {tree} onchanged={() => load(planId)} />
           <PlanLearners
             plan={current.plan}

@@ -231,7 +231,7 @@ export async function listEnrolments(actor: Actor, query: EnrolmentListQuery, no
   const scope: Parameters<typeof listEnrolmentRows>[0] = {
     organizationId: a.orgId,
     programmeId: query.programmeId,
-    type: query.type,
+    type: query.type === 'BOTH' ? undefined : query.type,
     tutorId: query.tutorId,
     search: query.search || undefined,
     noTutor: query.noTutor,
@@ -244,7 +244,9 @@ export async function listEnrolments(actor: Actor, query: EnrolmentListQuery, no
   // The Onboarding column counts the org's document types, so give a new org its defaults before the first list.
   if (a.role !== 'LEARNER') await ensureOnboardingTypes(a.orgId);
 
-  const [rows, settings] = await Promise.all([listEnrolmentRows(scope), getApprSettings(a.orgId)]);
+  const [allRows, settings] = await Promise.all([listEnrolmentRows(scope), getApprSettings(a.orgId)]);
+  // BOTH = linked pairs only (a pair is one carrier row), applied before counts + pagination.
+  const rows = query.type === 'BOTH' ? allRows.filter((r) => !!r.linked) : allRows;
   const today = todayIso(now);
   // A linked pair is one row (the carrier) and its gateway counts units across BOTH qualifications.
   const linkedUnits = await listLinkedUnitCounts(rows.filter((r) => r.linked).map((r) => r.id));

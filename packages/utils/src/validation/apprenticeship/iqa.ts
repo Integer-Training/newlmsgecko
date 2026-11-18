@@ -1,5 +1,5 @@
 import * as z from 'zod';
-import { APPR_IQA_FEEDBACK_MAX, APPR_IQA_SUGGEST_MAX } from '../../constants/apprenticeship';
+import { APPR_IQA_FEEDBACK_MAX, APPR_IQA_SUGGEST_MAX, APPR_PROGRAMME_TYPES } from '../../constants/apprenticeship';
 
 /** Validators for Gecko Apprenticeships IQA sampling, the summary dashboard and the PDF portfolio report. */
 
@@ -61,5 +61,8 @@ export type IqaTargetPutInput = z.infer<typeof ZIqaTargetPut>;
 // ── Summary dashboard ──
 
 /** Admin: whole org (optionally one programme). Tutor: always scoped to their own learners by the service. */
-export const ZSummaryQuery = z.object({ programmeId: z.uuid().optional() });
+export const ZSummaryQuery = z.object({
+  programmeId: z.uuid().optional(),
+  type: z.enum(APPR_PROGRAMME_TYPES).optional()
+});
 export type SummaryQueryInput = z.infer<typeof ZSummaryQuery>;

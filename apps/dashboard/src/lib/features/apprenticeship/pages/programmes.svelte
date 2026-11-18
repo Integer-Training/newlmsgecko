@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { page } from '$app/state';
   import * as Page from '@cio/ui/base/page';
   import { Badge } from '@cio/ui/base/badge';
   import { Button } from '@cio/ui/base/button';
@@ -41,6 +42,8 @@
   const STATUS_LABELS: Record<ProgrammeStatus, string> = { ACTIVE: 'Active', ARCHIVED: 'Archived' };
 
   onMount(() => {
+    // Opened from the New course dialog (?new=1).
+    if (page.url.searchParams.get('new') === '1') showCreate = true;
     programmesApi.load('ALL');
   });
 

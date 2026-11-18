@@ -65,7 +65,7 @@ export interface EnrolmentList {
 
 export interface EnrolmentFilters {
   programmeId?: string;
-  type?: ApprProgrammeType;
+  type?: ApprProgrammeType | 'BOTH';
   tutorId?: string;
   status?: ApprProgressStatus;
   search?: string;

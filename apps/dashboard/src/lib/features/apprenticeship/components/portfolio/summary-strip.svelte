@@ -1,6 +1,5 @@
 <script lang="ts">
   import { Button } from '@cio/ui/base/button';
-  import CalendarIcon from '@lucide/svelte/icons/calendar';
   import DownloadIcon from '@lucide/svelte/icons/download';
   import PlusIcon from '@lucide/svelte/icons/plus';
   import SplitIcon from '@lucide/svelte/icons/git-fork';
@@ -16,11 +15,10 @@
 
   interface Props {
     store: PortfolioStore;
-    onEditDates: () => void;
     onSpread: () => void;
     onTutors: () => void;
   }
-  let { store, onEditDates, onSpread, onTutors }: Props = $props();
+  let { store, onSpread, onTutors }: Props = $props();
 
   const d = $derived(store.data);
   let exporting = $state(false);
@@ -37,31 +35,19 @@
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div class="min-w-0">
         <div class="flex flex-wrap items-center gap-2">
-          <h2 class="text-xl font-semibold">{d.learner.name}</h2>
           <StatusChip status={d.summary.status} />
           <StageChip stage={d.summary.stage} label={d.summary.stageLabel} />
         </div>
-        <p class="flex flex-wrap items-center gap-x-2 text-sm text-(--muted-foreground)">
-          {#each store.portfolios as p (p.enrolment.id)}
-            <span class="inline-flex items-center gap-1.5">
-              {p.programme.title}
-              {#if p.programme.type}<ProgrammeTypeChip type={p.programme.type} />{/if}
-            </span>
-            <span aria-hidden="true">·</span>
-          {/each}
-          <span>Tutor: {tutorNames(d.tutors)}</span>
-        </p>
-        <p class="text-sm text-(--muted-foreground)">
-          {fmtDate(d.enrolment.startDate)} → {fmtDate(d.enrolment.plannedEndDate)}
-          {#if d.enrolment.contractedHoursWeek}· {d.enrolment.contractedHoursWeek} h/week{/if}
-        </p>
+        <p class="text-sm text-(--muted-foreground)">Tutor: {tutorNames(d.tutors)}</p>
+        {#if !store.pair}
+          <p class="text-sm text-(--muted-foreground)">
+            {fmtDate(d.enrolment.startDate)} → {fmtDate(d.enrolment.plannedEndDate)}
+            {#if d.enrolment.contractedHoursWeek}· {d.enrolment.contractedHoursWeek} h/week{/if}
+          </p>
+        {/if}
       </div>
       <div class="flex flex-wrap gap-2">
-        <!-- Programme dates / hours set the learner's targets: admin only (the API refuses a tutor too). -->
         {#if $isOrgAdmin}
-          <Button variant="outline" size="sm" onclick={onEditDates}>
-            <CalendarIcon size={14} class="mr-1" /> Edit dates &amp; hours
-          </Button>
           <Button variant="outline" size="sm" onclick={onTutors}>
             <UsersIcon size={14} class="mr-1" /> Tutors
           </Button>
@@ -83,13 +69,38 @@
     </div>
 
     <div class="grid gap-4 md:grid-cols-2">
-      <div class="space-y-1">
-        <div class="flex justify-between text-sm">
-          <span class="font-medium">{store.pair ? `${d.programme.title} progress` : 'Qualification progress'}</span>
-          <span>{fmtPct(d.summary.actualPct)} · expected {fmtPct(d.summary.expectedPct)}</span>
+      {#if store.pair}
+        <div class="space-y-2">
+          <div class="flex justify-between text-sm">
+            <span class="font-medium">Overall</span>
+            <span>{fmtPct(store.overview?.overall.actualPct)}</span>
+          </div>
+          {#each store.portfolios as p (p.enrolment.id)}
+            <div class="space-y-0.5">
+              <div class="flex justify-between gap-2 text-xs text-(--muted-foreground)">
+                <span class="flex min-w-0 items-center gap-1.5">
+                  {#if p.programme.type}<ProgrammeTypeChip type={p.programme.type} />{/if}
+                  <span class="truncate">{p.programme.title}</span>
+                </span>
+                <span class="shrink-0">{fmtPct(p.summary.actualPct)} · expected {fmtPct(p.summary.expectedPct)}</span>
+              </div>
+              <ProgressBar
+                actual={p.summary.actualPct}
+                expected={p.summary.expectedPct}
+                label="{p.programme.title} progress"
+              />
+            </div>
+          {/each}
         </div>
-        <ProgressBar actual={d.summary.actualPct} expected={d.summary.expectedPct} label="Qualification progress" />
-      </div>
+      {:else}
+        <div class="space-y-1">
+          <div class="flex justify-between text-sm">
+            <span class="font-medium">Qualification progress</span>
+            <span>{fmtPct(d.summary.actualPct)} · expected {fmtPct(d.summary.expectedPct)}</span>
+          </div>
+          <ProgressBar actual={d.summary.actualPct} expected={d.summary.expectedPct} label="Qualification progress" />
+        </div>
+      {/if}
       <div class="space-y-1">
         <div class="flex justify-between text-sm">
           <span class="font-medium">Off-the-job hours</span>

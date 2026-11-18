@@ -15,6 +15,7 @@
   import { call } from '../api/call';
   import { taskPlansApi, type TaskPlanListItem, type TaskPlanStatus } from '../api/task-plans.svelte';
   import { fmtDate } from '../components/shared/format';
+  import ProgrammeTypeChip from '../components/shared/programme-type-chip.svelte';
   import NewPlanDialog from '../components/task-plans/new-plan-dialog.svelte';
 
   // Admin task plans list: filter by programme and status, search by title. Loads every plan once (status and
@@ -23,7 +24,7 @@
   const STATUS_LABELS: Record<TaskPlanStatus, string> = { ACTIVE: 'Active', ARCHIVED: 'Archived' };
 
   let plans = $state<TaskPlanListItem[] | null>(null);
-  let programmes = $state<{ id: string; title: string }[]>([]);
+  let programmes = $state<{ id: string; title: string; type?: string }[]>([]);
   let loadError = $state<string | null>(null);
   let search = $state('');
   let statusFilter = $state<TaskPlanStatus>('ACTIVE');
@@ -39,10 +40,10 @@
 
   onMount(async () => {
     load();
-    const res = await call<{ id: string; title: string }[]>(() =>
+    const res = await call<{ id: string; title: string; type?: string }[]>(() =>
       classroomio.apprenticeship.programmes.$get({ query: { status: 'ACTIVE' } })
     );
-    if (res.ok) programmes = res.data.map((p) => ({ id: p.id, title: p.title }));
+    if (res.ok) programmes = res.data.map((p) => ({ id: p.id, title: p.title, type: p.type }));
   });
 
   const programmeLabel = $derived(
@@ -61,6 +62,7 @@
   });
 
   const base = $derived(`/org/${$currentOrg.siteName}/apprenticeships/task-plans`);
+  const typeOf = (programmeId: string) => programmes.find((x) => x.id === programmeId)?.type;
 
   function windowText(p: TaskPlanListItem) {
     if (!p.validFrom && !p.validTo) return 'Any time';
@@ -160,7 +162,10 @@
                   <Table.Cell class="min-w-56 font-medium break-words whitespace-normal!">
                     <a href="{base}/{p.id}" class="hover:underline">{p.title}</a>
                   </Table.Cell>
-                  <Table.Cell class="break-words whitespace-normal!">{p.programmeTitle}</Table.Cell>
+                  <Table.Cell class="break-words whitespace-normal!">
+                    <span class="mr-1">{p.programmeTitle}</span>
+                    {#if typeOf(p.programmeId)}<ProgrammeTypeChip type={typeOf(p.programmeId) ?? ''} />{/if}
+                  </Table.Cell>
                   <Table.Cell>{windowText(p)}</Table.Cell>
                   <Table.Cell class="text-right tabular-nums">{p.itemCount}</Table.Cell>
                   <Table.Cell class="text-right tabular-nums">{p.assignedCount}</Table.Cell>

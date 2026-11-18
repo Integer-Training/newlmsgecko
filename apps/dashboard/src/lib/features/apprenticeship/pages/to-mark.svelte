@@ -13,6 +13,7 @@
   import { enrolmentsApi } from '../api/enrolments.svelte';
   import { evidenceApi, type ToMarkPage } from '../api/evidence.svelte';
   import EvidenceSheet from '../components/evidence/evidence-sheet.svelte';
+  import ProgrammeTypeChip from '../components/shared/programme-type-chip.svelte';
   import TutorCell from '../components/shared/tutor-cell.svelte';
   import { fmtDate, fmtHoursMinutes } from '../components/shared/format';
   import { otjApi, type OtjQueueRow, type OtjRow } from '../api/otj.svelte';
@@ -24,6 +25,7 @@
   const PAGE_SIZE = 25;
 
   let programmeId = $state('');
+  let typeFilter = $state<'' | 'DIPLOMA' | 'STANDARD'>('');
   let page = $state(1);
   let data = $state<ToMarkPage | null>(null);
   let error = $state<string | null>(null);
@@ -103,6 +105,9 @@
     reviewDecision = decision;
     reviewOpen = true;
   }
+
+  const typeOf = (pid: string) => enrolmentsApi.programmes.find((p) => p.id === pid)?.type;
+  const visibleItems = $derived((data?.items ?? []).filter((r) => !typeFilter || typeOf(r.programmeId) === typeFilter));
 
   function setProgramme(v: string) {
     programmeId = v;
@@ -196,7 +201,12 @@
                         >{row.learnerName ?? '—'}</a
                       >
                     </Table.Cell>
-                    <Table.Cell>{row.programmeTitle}</Table.Cell>
+                    <Table.Cell>
+                      <div class="flex flex-wrap items-center gap-1.5">
+                        <span>{row.programmeTitle}</span>
+                        {#if typeOf(row.programmeId)}<ProgrammeTypeChip type={typeOf(row.programmeId)!} />{/if}
+                      </div>
+                    </Table.Cell>
                     <Table.Cell class="max-w-72 break-words whitespace-normal!">{row.title}</Table.Cell>
                     <Table.Cell class="whitespace-nowrap">{fmtHoursMinutes(row.minutes)}</Table.Cell>
                     <Table.Cell class="whitespace-nowrap">{fmtDate(row.logDate)}</Table.Cell>
@@ -228,19 +238,34 @@
           </div>
         {/if}
       {:else}
-        <div class="mb-4 flex flex-col gap-1">
-          <span class="text-xs text-(--muted-foreground)" id="tm-prog">Programme</span>
-          <Select.Root type="single" value={programmeId} onValueChange={setProgramme}>
-            <Select.Trigger class="ui:w-fit min-w-[220px]" aria-labelledby="tm-prog"
-              ><p class="truncate">{programmeLabel}</p></Select.Trigger
-            >
-            <Select.Content>
-              <Select.Item value="">All programmes</Select.Item>
-              {#each enrolmentsApi.programmes as p (p.id)}
-                <Select.Item value={p.id}>{p.title}</Select.Item>
+        <div class="mb-4 flex flex-wrap items-end gap-4">
+          <div class="flex flex-col gap-1">
+            <span class="text-xs text-(--muted-foreground)">Type</span>
+            <div class="flex gap-1" role="group" aria-label="Programme type">
+              {#each [['', 'All'], ['DIPLOMA', 'Diploma'], ['STANDARD', 'Standard']] as [v, l] (v)}
+                <Button
+                  size="sm"
+                  variant={typeFilter === v ? 'default' : 'outline'}
+                  aria-pressed={typeFilter === v}
+                  onclick={() => (typeFilter = v as typeof typeFilter)}>{l}</Button
+                >
               {/each}
-            </Select.Content>
-          </Select.Root>
+            </div>
+          </div>
+          <div class="flex flex-col gap-1">
+            <span class="text-xs text-(--muted-foreground)" id="tm-prog">Programme</span>
+            <Select.Root type="single" value={programmeId} onValueChange={setProgramme}>
+              <Select.Trigger class="ui:w-fit min-w-[220px]" aria-labelledby="tm-prog"
+                ><p class="truncate">{programmeLabel}</p></Select.Trigger
+              >
+              <Select.Content>
+                <Select.Item value="">All programmes</Select.Item>
+                {#each enrolmentsApi.programmes as p (p.id)}
+                  <Select.Item value={p.id}>{p.title}</Select.Item>
+                {/each}
+              </Select.Content>
+            </Select.Root>
+          </div>
         </div>
 
         {#if loading}
@@ -252,14 +277,14 @@
             <p role="alert" class="text-sm text-rose-600">{error}</p>
             <Button variant="outline" size="sm" class="mt-3" onclick={() => (reload += 1)}>Try again</Button>
           </div>
-        {:else if !data || data.items.length === 0}
+        {:else if !data || visibleItems.length === 0}
           <Empty title="All caught up" description="There is no evidence waiting to be marked." />
         {:else}
           <div class="overflow-x-auto rounded-lg border">
             <Table.Root>
               <Table.Header>
                 <Table.Row>
-                  <Table.Head>Learner</Table.Head>
+                  <Table.Head class="sticky left-0 bg-(--background)">Learner</Table.Head>
                   <Table.Head>Tutor</Table.Head>
                   <Table.Head>Programme</Table.Head>
                   <Table.Head>Evidence</Table.Head>
@@ -272,9 +297,10 @@
                 </Table.Row>
               </Table.Header>
               <Table.Body>
-                {#each data.items as row (row.id)}
+                {#each visibleItems as row (row.id)}
                   <Table.Row class="cursor-pointer" onclick={() => openRow(row)}>
-                    <Table.Cell class="font-medium">{row.learnerName ?? '—'}</Table.Cell>
+                    <Table.Cell class="sticky left-0 bg-(--background) font-medium">{row.learnerName ?? '—'}</Table.Cell
+                    >
                     <Table.Cell><TutorCell tutors={row.tutors} /></Table.Cell>
                     <Table.Cell>{row.programmeTitle}</Table.Cell>
                     <Table.Cell class="max-w-72 break-words whitespace-normal!">{row.title}</Table.Cell>

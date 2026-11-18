@@ -763,6 +763,32 @@ describe('learners list folds a pair into one row', () => {
     expect(concern.statusCounts).toEqual(all.statusCounts);
   });
 
+  it('type=BOTH returns only linked pairs, with total, pages and statusCounts over the pairs only', async () => {
+    const component = {
+      id: 'component',
+      programmeId: STD,
+      programmeTitle: 'L3 Standard',
+      programmeType: 'STANDARD',
+      startDate: '2026-01-01',
+      plannedEndDate: '2027-01-01',
+      actualPct: 5,
+      achievedAt: null
+    };
+    vi.mocked(q.listEnrolmentRows).mockResolvedValue([
+      listRow({ id: 'pair1', learnerName: 'Amy', actualPct: 60, linked: component }),
+      listRow({ id: 'pair2', learnerName: 'Cat', actualPct: 60, linked: component }),
+      listRow({ id: 'solo', learnerName: 'Bea', actualPct: 60 })
+    ] as never);
+    const res = await listEnrolments(admin, { ...query, type: 'BOTH', pageSize: 1 } as never, NOW);
+    expect(res.total).toBe(2);
+    expect(res.items.map((i) => i.id)).toEqual(['pair1']);
+    expect(res.statusCounts).toMatchObject({ CONCERN: 2, ON_TARGET: 0 });
+    const p2 = await listEnrolments(admin, { ...query, type: 'BOTH', pageSize: 1, page: 2 } as never, NOW);
+    expect(p2.items.map((i) => i.id)).toEqual(['pair2']);
+    // BOTH is not a programme type: the DB-level type filter must not receive it
+    expect(vi.mocked(q.listEnrolmentRows).mock.calls.at(-1)![0]).toMatchObject({ type: undefined });
+  });
+
   it('an unlinked row has linked null and overall equal to its own numbers', async () => {
     vi.mocked(q.listEnrolmentRows).mockResolvedValue([listRow()] as never);
     const { items } = await listEnrolments(admin, query as never, NOW);

@@ -12,7 +12,8 @@ import {
   getApprSettings,
   listEnrolmentRows,
   listLinkedUnitCounts,
-  listOverdueTasks
+  listOverdueTasks,
+  listOverdueTasksByType
 } from '@cio/db/queries/apprenticeship';
 import type { ApprProgressStatus } from '@cio/utils/constants/apprenticeship';
 import { addDays, isReviewOverdue, toDayNumber } from '@cio/utils/functions/apprenticeship-progress';
@@ -50,6 +51,7 @@ export async function getSummary(actor: Actor, query: SummaryQueryInput, now: Da
   const scope = {
     organizationId: a.orgId,
     programmeId: query.programmeId,
+    type: query.type,
     restrictToTutorId: isTutor ? a.userId : undefined
   };
   // The Onboarding count uses the org's document types, so give a new org its defaults first (as the learners list does).
@@ -60,10 +62,13 @@ export async function getSummary(actor: Actor, query: SummaryQueryInput, now: Da
     getApprSettings(a.orgId),
     countEvidenceByStatus(scope),
     countTasksByStatus(scope),
-    listOverdueTasks(scope, today, { limit: LIST_MAX, offset: 0 }),
+    query.type
+      ? listOverdueTasksByType(scope, today, { limit: LIST_MAX, offset: 0 })
+      : listOverdueTasks(scope, today, { limit: LIST_MAX, offset: 0 }),
     countIqaOpen({
       organizationId: a.orgId,
       programmeId: query.programmeId,
+      type: query.type,
       assessorId: isTutor ? a.userId : undefined
     })
   ]);
@@ -76,6 +81,7 @@ export async function getSummary(actor: Actor, query: SummaryQueryInput, now: Da
   let minutesDone = 0;
   let minutesTarget = 0;
   let onboardingIncomplete = 0;
+  let both = 0;
   const overdueReviews: ReviewItem[] = [];
   const upcomingReviews: ReviewItem[] = [];
   const upcomingEnd = addDays(today, UPCOMING_DAYS) ?? today;
@@ -85,6 +91,7 @@ export async function getSummary(actor: Actor, query: SummaryQueryInput, now: Da
     // Same rule as the list's status chips / counts: a linked pair counts once, at its rolled-up (worst-half) status.
     byStatus[overallRowStatus(r, p.status, settings, today)] += 1;
     if (p.status !== 'COMPLETE') otjByStatus[p.otjStatus as OtjStatus] += 1;
+    if (r.linked) both += 1;
     minutesDone += r.otjMinutes;
     minutesTarget += p.otjTargetMinutes ?? 0;
     if (r.onboarding && Number(r.onboarding.approved) < Number(r.onboarding.required)) onboardingIncomplete += 1;
@@ -138,7 +145,7 @@ export async function getSummary(actor: Actor, query: SummaryQueryInput, now: Da
 
   return {
     scope: isTutor ? ('TUTOR' as const) : ('ORG' as const),
-    learners: { total: rows.length, byStatus },
+    learners: { total: rows.length, byStatus, both },
     otj: { byStatus: otjByStatus, minutesDone, minutesTarget },
     // Same rule as the To mark list: evidence in SUBMITTED.
     toMark: evidence.SUBMITTED ?? 0,

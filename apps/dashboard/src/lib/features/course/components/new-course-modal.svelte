@@ -14,13 +14,8 @@
   import type { TCourseType } from '@cio/db/types';
   import { courseApi } from '../api';
   import { currentOrg } from '$lib/utils/store/org';
-  import { programmesApi } from '$features/apprenticeship/api/programmes.svelte';
-
-  // Not a course type: choosing it creates an apprenticeship programme instead of a course.
-  const APPRENTICESHIP = 'APPRENTICESHIP';
 
   let step = $state(0);
-  let creatingProgramme = $state(false);
 
   const options = [
     {
@@ -50,13 +45,6 @@
       subtitle: $t('new_course_modal.public_subtitle'),
       type: 'PUBLIC' as TCourseType,
       isDisabled: false
-    },
-    {
-      id: 'apprenticeship',
-      title: 'Apprenticeship',
-      subtitle: 'Qualification → units → criteria, evidence and off-the-job hours',
-      type: APPRENTICESHIP,
-      isDisabled: false
     }
   ];
   const courseTypeOptionsForGroup = options.map((o) => ({
@@ -82,18 +70,6 @@
   }
 
   async function createCourse() {
-    if (type === APPRENTICESHIP) {
-      creatingProgramme = true;
-      const created = await programmesApi.create({
-        title: $createCourseModal.title.trim(),
-        description: $createCourseModal.description?.trim() || null,
-        type: 'DIPLOMA'
-      });
-      creatingProgramme = false;
-      if (created) onClose(`/org/${$currentOrg.siteName}/apprenticeships/programmes/${created.id}`);
-      return;
-    }
-
     await courseApi.create({
       title: $createCourseModal.title,
       description: $createCourseModal.description,
@@ -108,6 +84,17 @@
   <Field.Description>{$t('courses.new_course_modal.type_selector_title')}</Field.Description>
 
   <RadioOptionCardGroup options={courseTypeOptionsForGroup} bind:value={type} class="grid-cols-1 md:grid-cols-2" />
+
+  <div class="mt-4 border-t pt-4">
+    <button
+      type="button"
+      class="flex w-full flex-col gap-1 rounded-md border border-dashed p-4 text-left hover:bg-(--muted)/40"
+      onclick={() => onClose(`/org/${$currentOrg.siteName}/apprenticeships/programmes?new=1`)}
+    >
+      <span class="text-sm font-medium">Apprenticeship programme</span>
+      <span class="text-xs text-(--muted-foreground)">Not a course — opens the Apprenticeships area</span>
+    </button>
+  </div>
 {/snippet}
 
 <Dialog.Root
@@ -160,11 +147,7 @@
           <Button variant="outline" onclick={() => (step = 0)}>
             {$t('courses.new_course_modal.back')}
           </Button>
-          <Button
-            type="submit"
-            disabled={courseApi.isLoading || creatingProgramme}
-            loading={courseApi.isLoading || creatingProgramme}
-          >
+          <Button type="submit" disabled={courseApi.isLoading} loading={courseApi.isLoading}>
             {$t('courses.new_course_modal.button')}
           </Button>
         </Dialog.Footer>

@@ -20,6 +20,7 @@ vi.mock('@cio/db/queries/apprenticeship', () => ({
   countEvidenceByStatus: vi.fn(async () => new Map()),
   countTasksByStatus: vi.fn(async () => new Map()),
   listOverdueTasks: vi.fn(async () => []),
+  listOverdueTasksByType: vi.fn(async () => []),
   countIqaOpen: vi.fn(async () => ({ pending: 2, awaitingAck: 1 })),
   getEnrolmentOverview: vi.fn(),
   getApprProgrammeStructure: vi.fn(),
@@ -133,6 +134,34 @@ describe('getSummary', () => {
     await expect(getSummary({ authenticated: false } as Actor, {}, NOW)).rejects.toMatchObject({ statusCode: 401 });
   });
 
+  it('scopes every count by programme type, counts pairs once, and reports learners on both', async () => {
+    vi.mocked(q.listEnrolmentRows).mockResolvedValue([
+      row({
+        id: 'pair',
+        linked: {
+          id: 'component',
+          programmeId: PROG,
+          programmeTitle: 'Standard',
+          programmeType: 'STANDARD',
+          startDate: '2026-01-01',
+          plannedEndDate: '2027-01-01',
+          actualPct: 5,
+          achievedAt: null
+        }
+      }),
+      row({ id: 'solo' })
+    ] as never);
+    const s = await getSummary(admin, { type: 'STANDARD' }, NOW);
+    expect(s.learners.total).toBe(2);
+    expect(s.learners.both).toBe(1);
+    expect(vi.mocked(q.listEnrolmentRows).mock.calls[0]![0]).toMatchObject({ type: 'STANDARD' });
+    expect(vi.mocked(q.countEvidenceByStatus).mock.calls[0]![0]).toMatchObject({ type: 'STANDARD' });
+    expect(vi.mocked(q.countTasksByStatus).mock.calls[0]![0]).toMatchObject({ type: 'STANDARD' });
+    expect(vi.mocked(q.countIqaOpen).mock.calls[0]![0]).toMatchObject({ type: 'STANDARD' });
+    expect(vi.mocked(q.listOverdueTasksByType).mock.calls[0]![0]).toMatchObject({ type: 'STANDARD' });
+    expect(vi.mocked(q.listOverdueTasks)).not.toHaveBeenCalled();
+  });
+
   it('returns the full shape, with zero-filled status maps when nothing exists', async () => {
     const s = await getSummary(admin, {}, NOW);
     expect(s).toMatchObject({
@@ -171,6 +200,7 @@ describe('getSummary', () => {
     const s = await getSummary(admin, {}, NOW);
     expect(s.learners).toEqual({
       total: 2,
+      both: 1,
       byStatus: { ON_TARGET: 1, BEHIND: 0, CONCERN: 1, NOT_SET: 0, COMPLETE: 0 }
     });
   });
@@ -225,6 +255,7 @@ describe('getSummary', () => {
     const s = await getSummary(admin, {}, NOW);
     expect(s.learners).toEqual({
       total: 4,
+      both: 0,
       byStatus: { ON_TARGET: 1, BEHIND: 0, CONCERN: 1, NOT_SET: 1, COMPLETE: 1 }
     });
     expect(s.otj.byStatus).toEqual({ ON_TARGET: 1, BEHIND: 0, CONCERN: 1, NOT_SET: 1 });

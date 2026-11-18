@@ -27,7 +27,8 @@ export const ZEnrolmentListQuery = z.object({
   programmeId: z.uuid().optional(),
   tutorId: z.uuid().optional(),
   status: z.enum(APPR_PROGRESS_STATUSES).optional(),
-  type: z.enum(APPR_PROGRAMME_TYPES).optional(),
+  // 'BOTH' → linked Diploma + Standard pairs only.
+  type: z.enum([...APPR_PROGRAMME_TYPES, 'BOTH']).optional(),
   search: z.string().trim().max(100).optional(),
   // 'true' → learners with neither a named tutor nor a programme tutor.
   noTutor: z
