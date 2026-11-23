@@ -154,22 +154,41 @@ class AppInitApi extends BaseApi {
   }
 
   private async fetchAccountData(): Promise<AccountSuccess | undefined> {
-    try {
-      const response = await classroomio.account.$get();
-      const result = (await response.json()) as AccountResponse;
+    // Only a real "not signed in" (401/403) logs the user out. A rate limit (429), server error or network blip must
+    // NOT: logging out on those caused a tight loop (account 429 → sign-out 429 → session survives → login page →
+    // account again, ~3 req/s) that kept the whole office IP rate-limited. Those wait and retry with backoff instead.
+    const BACKOFF_MS = [5_000, 10_000, 20_000];
+    for (let attempt = 0; ; attempt++) {
+      let status: number | undefined;
+      try {
+        const response = await classroomio.account.$get();
+        status = response.status;
+        if (response.status === 429 || response.status >= 500) throw Object.assign(new Error('retry'), { status });
+        const result = (await response.json()) as AccountResponse;
 
-      if (!result?.success) {
-        this.error = JSON.stringify(result);
-        logout();
-        return undefined;
+        if (!result?.success) {
+          this.error = JSON.stringify(result);
+          logout();
+          return undefined;
+        }
+
+        return result;
+      } catch (error) {
+        status = status ?? (error as { status?: number } | null)?.status;
+        // Any other 4xx keeps the old behaviour (log out); only 429, 5xx and network errors are retried.
+        const authFailure = status !== undefined && status >= 400 && status < 500 && status !== 429;
+        console.error('Error fetching account:', error);
+        if (authFailure) {
+          this.error = error instanceof Error ? error.message : 'Error fetching account';
+          logout();
+          return undefined;
+        }
+        if (attempt >= BACKOFF_MS.length) {
+          this.error = 'We could not load your account. Please refresh the page in a moment.';
+          return undefined;
+        }
+        await new Promise((r) => setTimeout(r, BACKOFF_MS[attempt]));
       }
-
-      return result;
-    } catch (error) {
-      console.error('Error fetching account:', error);
-      this.error = error instanceof Error ? error.message : 'Error fetching account';
-      logout();
-      return undefined;
     }
   }
 
