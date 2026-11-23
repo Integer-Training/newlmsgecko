@@ -14,6 +14,7 @@
   import { evidenceApi, type ToMarkPage } from '../api/evidence.svelte';
   import EvidenceSheet from '../components/evidence/evidence-sheet.svelte';
   import ProgrammeTypeChip from '../components/shared/programme-type-chip.svelte';
+  import ProgrammeName from '../components/shared/programme-name.svelte';
   import TutorCell from '../components/shared/tutor-cell.svelte';
   import { fmtDate, fmtHoursMinutes } from '../components/shared/format';
   import { otjApi, type OtjQueueRow, type OtjRow } from '../api/otj.svelte';
@@ -302,7 +303,9 @@
                     <Table.Cell class="sticky left-0 bg-(--background) font-medium">{row.learnerName ?? '—'}</Table.Cell
                     >
                     <Table.Cell><TutorCell tutors={row.tutors} /></Table.Cell>
-                    <Table.Cell>{row.programmeTitle}</Table.Cell>
+                    <Table.Cell class="max-w-64"
+                      ><ProgrammeName type={typeOf(row.programmeId)} title={row.programmeTitle} /></Table.Cell
+                    >
                     <Table.Cell class="max-w-72 break-words whitespace-normal!">{row.title}</Table.Cell>
                     <Table.Cell class="max-w-56 text-sm break-words whitespace-normal!">
                       {#if row.taskTitle}

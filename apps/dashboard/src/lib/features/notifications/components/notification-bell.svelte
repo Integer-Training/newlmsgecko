@@ -6,6 +6,7 @@
   import { Button } from '@cio/ui/base/button';
   import * as Popover from '@cio/ui/base/popover';
   import * as Empty from '@cio/ui/base/empty';
+  import { startVisiblePoll } from '$lib/utils/functions/visible-poll';
   import { notificationCentreApi } from '$features/notifications/api/notification-centre.svelte';
 
   // PearlLMS Phase 6 Step 3 — the notification bell, shared by every role's header. Unread badge + a
@@ -15,7 +16,7 @@
 
   let open = $state(false);
   const POLL_MS = 60_000;
-  let poll: ReturnType<typeof setInterval> | undefined;
+  let stopPoll: (() => void) | undefined;
 
   function timeAgo(iso: string): string {
     const secs = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
@@ -42,11 +43,10 @@
 
   onMount(() => {
     void notificationCentreApi.load();
-    poll = setInterval(() => void notificationCentreApi.load(), POLL_MS);
+    // Paused while the tab is hidden; refreshes when it becomes visible again.
+    stopPoll = startVisiblePoll(() => void notificationCentreApi.load(), POLL_MS);
   });
-  onDestroy(() => {
-    if (poll) clearInterval(poll);
-  });
+  onDestroy(() => stopPoll?.());
 </script>
 
 <Popover.Root bind:open>

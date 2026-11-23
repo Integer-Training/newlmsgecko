@@ -126,7 +126,10 @@ export async function proxyRequestToApi(request: Request): Promise<Response> {
   upstreamHeaders.set('accept-encoding', 'identity');
 
   // Forward only Caddy's trusted x-forwarded-for. cf-connecting-ip is NOT used: no Cloudflare is in front, so it is
-  // attacker-spoofable and would bypass the per-IP sign-in rate limit.
+  // attacker-spoofable and would bypass the per-IP sign-in rate limit. The API's IP extractor checks
+  // cf-connecting-ip and x-real-ip BEFORE x-forwarded-for, so strip any the browser sent (headers were copied above).
+  upstreamHeaders.delete('cf-connecting-ip');
+  upstreamHeaders.delete('x-real-ip');
   const forwardedFor = request.headers.get('x-forwarded-for');
   if (forwardedFor) {
     upstreamHeaders.set('x-forwarded-for', forwardedFor);

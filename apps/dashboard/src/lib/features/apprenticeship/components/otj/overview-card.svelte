@@ -12,12 +12,13 @@
     isAdmin: boolean;
     onEditHours: () => void;
   }
-  let { summary, isAdmin, onEditHours }: Props = $props();
+  let { summary, isAdmin, isStaff = false, programmes = [], calculatedMinutes = null, onEditHours }: Props = $props();
 
   const pct = $derived(summary.completionPct ?? 0);
   const source = $derived(
     summary.source === 'OVERRIDE'
-      ? 'Manual override'
+      ? 'Set manually by your provider' +
+          (isStaff && calculatedMinutes !== null ? ' · calculated: ' + fmtHoursMinutes(calculatedMinutes) : '')
       : summary.source === 'CALCULATED'
         ? `Calculated from ${summary.contractedHoursWeek ?? '—'} contracted hours a week`
         : 'Not set. Add contracted hours or an override.'
@@ -72,4 +73,15 @@
     </div>
   </div>
   <p class="text-xs text-(--muted-foreground)">{source}</p>
+  {#if programmes.length > 0}
+    <p class="text-xs text-(--muted-foreground)">
+      Counts towards:
+      {#each programmes as p, i (i)}
+        {#if i > 0}<span> + </span>{/if}
+        {#if p.type}<span class="mr-1 rounded-full bg-(--muted) px-1.5 py-0.5 text-[10px] font-medium uppercase"
+            >{p.type === 'STANDARD' ? 'Standard' : 'Diploma'}</span
+          >{/if}<span class="font-medium text-(--foreground)">{p.title}</span>
+      {/each}
+    </p>
+  {/if}
 </section>

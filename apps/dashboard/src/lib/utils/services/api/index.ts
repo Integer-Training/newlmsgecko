@@ -3,6 +3,7 @@ import { type ApiClientConfig, ApiError, type RequestConfig } from './types';
 import { dev } from '$app/environment';
 import { DEFAULT_CONFIG } from './constants';
 import { delay } from './utils';
+import { RATE_LIMIT_MESSAGE, sendWith429Retry } from './rate-limit';
 import { hcWithType } from '@cio/api/rpc-types';
 import { get } from 'svelte/store';
 import { currentOrg } from '$lib/utils/store/org';
@@ -172,7 +173,10 @@ class ApiClient {
     // Retry logic with exponential backoff
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
-        const response = await this.config.customFetch(fullUrl, requestInit);
+        const response = await sendWith429Retry(
+          () => this.config.customFetch(fullUrl, requestInit),
+          requestInit.method ?? (typeof input === 'object' && 'method' in input ? input.method : 'GET')
+        );
 
         clearTimeout(timeoutId);
 
@@ -185,6 +189,10 @@ class ApiClient {
         if (response.status === 401) {
           await this.config.onAuthError();
           throw new ApiError('Authentication failed', response.status, response.statusText, response);
+        }
+
+        if (response.status === 429) {
+          throw new ApiError(RATE_LIMIT_MESSAGE, 429, response.statusText, response);
         }
 
         if (response.status >= 400 && response.status < 500) {

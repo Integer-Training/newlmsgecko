@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
+  import { RATE_LIMIT_MESSAGE } from '$lib/utils/services/api/rate-limit';
   import { Button } from '@cio/ui/base/button';
   import { Checkbox } from '@cio/ui/base/checkbox';
   import { Skeleton } from '@cio/ui/base/skeleton';
@@ -50,13 +51,41 @@
       loadError = null;
     } else {
       loadError = res.error;
+      if (res.error === RATE_LIMIT_MESSAGE && !autoRetried) startCountdown();
     }
     loading = false;
+  }
+
+  // Rate limited: show a short countdown, then retry once automatically (the Try again button still works).
+  let countdown = $state(0);
+  let autoRetried = false;
+  let countdownTimer: ReturnType<typeof setInterval> | undefined;
+  function stopCountdown() {
+    if (countdownTimer) clearInterval(countdownTimer);
+    countdownTimer = undefined;
+    countdown = 0;
+  }
+  function startCountdown() {
+    stopCountdown();
+    autoRetried = true;
+    countdown = 5;
+    countdownTimer = setInterval(() => {
+      countdown -= 1;
+      if (countdown <= 0) {
+        stopCountdown();
+        void load();
+      }
+    }, 1000);
+  }
+  function retryNow() {
+    stopCountdown();
+    void load();
   }
 
   onMount(() => {
     load();
   });
+  onDestroy(stopCountdown);
 
   const STATUS_CLASS = {
     NONE: 'bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300',
@@ -172,7 +201,10 @@
 {:else if loadError && !view}
   <div class="rounded-lg border border-rose-200 p-6 text-center">
     <p role="alert" class="text-sm text-rose-600">{loadError}</p>
-    <Button variant="outline" size="sm" class="mt-3" onclick={() => load()}>Try again</Button>
+    {#if countdown > 0}
+      <p class="mt-1 text-xs text-(--muted-foreground)" aria-live="polite">Trying again in {countdown}s…</p>
+    {/if}
+    <Button variant="outline" size="sm" class="mt-3" onclick={retryNow}>Try again</Button>
   </div>
 {:else if view}
   {@const v = view}

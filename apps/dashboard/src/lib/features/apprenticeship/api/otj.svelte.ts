@@ -15,6 +15,8 @@ export interface OtjSummary {
   source: 'OVERRIDE' | 'CALCULATED' | 'NOT_SET';
   contractedHoursWeek: number | null;
   pendingMinutes: number;
+  /** Normal calculation (contracted hours × org OTJ settings), ignoring any override. Null when it can't be worked out. */
+  calculatedMinutes?: number | null;
 }
 
 export interface OtjRow {

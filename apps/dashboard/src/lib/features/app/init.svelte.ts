@@ -23,6 +23,8 @@ import { identifyUserJotUser } from '$lib/utils/services/userjot';
 import { isOrgStudent, globalStore } from '$lib/utils/store/app';
 import { isPublicRoute } from '$lib/utils/functions/routes/isPublicRoute';
 import { homeForRole } from '$lib/utils/functions/routes/homeForRole';
+import { needsPasswordChange, changePasswordUrl } from '$lib/utils/functions/routes/needsPasswordChange';
+import { readImpersonatingName } from '$lib/utils/functions/impersonation';
 import { licenseApi } from '$features/license/api/license.svelte';
 import { logout } from '$lib/utils/functions/logout';
 import { page } from '$app/state';
@@ -375,6 +377,13 @@ class AppInitApi extends BaseApi {
       return;
     }
 
+    // Force a password change on first login for admin-provisioned accounts (settings.mustChangePassword, cleared by
+    // /change-password). Checked BEFORE the ?redirect= branch so a redirect can't bypass it; the redirect is carried on.
+    const currentPath = window.location.pathname;
+    if (!readImpersonatingName() && needsPasswordChange(get(profile), currentPath)) {
+      return goto(changePasswordUrl(page.url.searchParams.get('redirect') ?? currentPath + window.location.search));
+    }
+
     const redirect = page.url.searchParams.get('redirect');
     if (redirect) {
       console.log('redirecting to', redirect);
@@ -385,13 +394,6 @@ class AppInitApi extends BaseApi {
 
     // This allows you to be on the landing page of an organization site and not be redirected
     const path = window.location.pathname;
-
-    // Force a password change on first login for admin-provisioned accounts. settings.mustChangePassword
-    // is set at creation / password-reset and cleared by /change-password on success.
-    const mustChangePassword = !!(get(profile)?.settings as Record<string, unknown> | undefined)?.mustChangePassword;
-    if (mustChangePassword && path !== '/change-password') {
-      return goto(resolve('/change-password', {}));
-    }
 
     // PearlLMS self-hosted (closed system): this domain is the whole app for EVERY role — there is no
     // public catalog. After auth, on a landing/login path, route EVERY role to their own home

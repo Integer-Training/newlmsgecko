@@ -7,7 +7,8 @@
   import { evidenceApi } from '../../api/evidence.svelte';
   import type { PortfolioStore } from '../../stores/portfolio.svelte';
   import AlsoCounts from '../evidence/also-counts.svelte';
-  import ProgrammeTypeChip from '../shared/programme-type-chip.svelte';
+  import ProgrammeName from '../shared/programme-name.svelte';
+  import { mapsToEntries } from '../../utils/maps-to';
   import EvidenceStatusChip from '../shared/evidence-status-chip.svelte';
   import { fmtDate, fmtMinutes } from '../shared/format';
 
@@ -83,7 +84,7 @@
           <Table.Row>
             <Table.Head>Title</Table.Head>
             <Table.Head>Type</Table.Head>
-            {#if store.pair}<Table.Head>Maps to</Table.Head>{/if}
+            <Table.Head>Maps to</Table.Head>
             <Table.Head>Status</Table.Head>
             <Table.Head class="text-right">Criteria</Table.Head>
             <Table.Head class="text-right">Files</Table.Head>
@@ -115,24 +116,26 @@
                 />
               </Table.Cell>
               <Table.Cell>{e.typeLabel ?? e.typeKey}</Table.Cell>
-              {#if store.pair}
-                {@const maps = (e.mappedQualifications ?? []).filter((m) => m.criterionCodes.length > 0)}
-                {@const qt = store.portfolioFor(e.homeEnrolmentId ?? e.qualEnrolmentId)?.programme.type}
-                <Table.Cell>
-                  {#if maps.length > 0}
-                    <span class="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
-                      {#each maps as m (m.enrolmentId)}
-                        <span class="inline-flex items-center gap-1 whitespace-nowrap">
-                          <ProgrammeTypeChip type={m.type} />
-                          <span class="text-xs text-(--muted-foreground)">×{m.criterionCodes.length}</span>
-                        </span>
-                      {/each}
-                    </span>
-                  {:else if qt}
-                    <ProgrammeTypeChip type={qt} />
-                  {:else}—{/if}
-                </Table.Cell>
-              {/if}
+
+              {@const homeP = store.portfolioFor(e.homeEnrolmentId ?? e.qualEnrolmentId) ?? store.activePortfolio}
+              {@const maps = mapsToEntries(
+                e.mappedQualifications,
+                {
+                  enrolmentId: homeP?.enrolment.id ?? '',
+                  type: homeP?.programme.type,
+                  title: homeP?.programme.title
+                },
+                e.criteriaCount
+              )}
+              <Table.Cell class="max-w-64">
+                {#if maps.length > 0}
+                  <span class="flex flex-col gap-1">
+                    {#each maps as m (m.enrolmentId)}
+                      <ProgrammeName type={m.type} title={m.title} count={m.count} />
+                    {/each}
+                  </span>
+                {:else}—{/if}
+              </Table.Cell>
               <Table.Cell><EvidenceStatusChip status={e.status} /></Table.Cell>
               <Table.Cell class="text-right">{e.criteriaCount}</Table.Cell>
               <Table.Cell class="text-right">{e.fileCount}</Table.Cell>

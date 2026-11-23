@@ -1,5 +1,8 @@
 import {
   DEFAULT_RATE_LIMITER_OPTIONS,
+  RATE_LIMIT_AUTH_PER_MIN,
+  RATE_LIMIT_READ_PER_MIN,
+  RATE_LIMIT_WRITE_PER_MIN,
   ERROR_MESSAGES,
   HTTP_STATUS,
   RATE_LIMIT_HEADERS
@@ -7,7 +10,7 @@ import {
 
 import type { Context, MiddlewareHandler } from 'hono';
 import { RedisRateLimiter } from '@api/utils/redis/limiter';
-import { userKeyGenerator } from '../utils/redis/key-generators';
+import { ipKeyGenerator, userKeyGenerator } from '../utils/redis/key-generators';
 import { env } from '@cio/core/config/env';
 import { logRedisUnavailableOnce, redis } from '@cio/core/utils/redis/redis';
 import { withTimeout } from '@api/utils/with-timeout';
@@ -77,7 +80,7 @@ export const createRateLimiter = (options: RateLimiterOptions = {}): MiddlewareH
       }
 
       if (!result.allowed) {
-        const retryAfter = Math.ceil((result.resetTime - Date.now()) / 1000);
+        const retryAfter = Math.max(1, Math.ceil((result.resetTime - Date.now()) / 1000));
 
         if (opts.standardHeaders) {
           c.header(RATE_LIMIT_HEADERS.RETRY_AFTER, retryAfter.toString());
@@ -101,11 +104,39 @@ export const createRateLimiter = (options: RateLimiterOptions = {}): MiddlewareH
   };
 };
 
-function defaultMaxRequests(c: Context): number {
-  // Org lookup runs on every SSR layout load; keep it out of the tight global bucket.
-  if (c.req.method === 'GET' && c.req.path === '/organization') return 500;
+const AUTH_ABUSE_PATH_PREFIXES = [
+  '/api/auth/sign-in',
+  '/api/auth/sign-up',
+  '/api/auth/forget-password',
+  '/api/auth/reset-password'
+];
 
-  return DEFAULT_RATE_LIMITER_OPTIONS.maxRequests;
+function isAuthAbuseRequest(c: Context): boolean {
+  if (c.req.method !== 'POST') return false;
+
+  return AUTH_ABUSE_PATH_PREFIXES.some((prefix) => c.req.path.startsWith(prefix));
+}
+
+/** Picks the bucket (key + per-minute budget) for a request. */
+export function resolveRateLimitBucket(c: Context): { key: string; max: number } {
+  if (isAuthAbuseRequest(c)) {
+    return { key: `ip:auth:${ipKeyGenerator(c).slice(3)}`, max: RATE_LIMIT_AUTH_PER_MIN };
+  }
+
+  const user = c.get('user');
+
+  if (user?.id) {
+    const isRead = c.req.method === 'GET' || c.req.method === 'HEAD';
+
+    return isRead
+      ? { key: `user:${user.id}:read`, max: RATE_LIMIT_READ_PER_MIN }
+      : { key: `user:${user.id}:write`, max: RATE_LIMIT_WRITE_PER_MIN };
+  }
+
+  // Org lookup runs on every SSR layout load; keep it out of the tight anonymous bucket.
+  const max = c.req.method === 'GET' && c.req.path === '/organization' ? 500 : DEFAULT_RATE_LIMITER_OPTIONS.maxRequests;
+
+  return { key: userKeyGenerator(c), max };
 }
 
 function shouldSkipRateLimit(c: Context): boolean {
@@ -116,6 +147,7 @@ function shouldSkipRateLimit(c: Context): boolean {
 
 // Default rate limiter middleware with standard configuration
 export default createRateLimiter({
-  maxRequests: defaultMaxRequests,
+  maxRequests: (c) => resolveRateLimitBucket(c).max,
+  keyGenerator: (c) => resolveRateLimitBucket(c).key,
   skip: shouldSkipRateLimit
 });

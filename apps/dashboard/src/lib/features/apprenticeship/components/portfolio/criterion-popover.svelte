@@ -10,6 +10,7 @@
   import ProgrammeTypeChip from '../shared/programme-type-chip.svelte';
   import EvidenceStatusChip from '../shared/evidence-status-chip.svelte';
   import TaskStatusChip from '../shared/task-status-chip.svelte';
+  import ProgrammeName from '../shared/programme-name.svelte';
   import { fmtDate } from '../shared/format';
 
   // "List evidence" for one criterion, as a dialog: the criterion code and text, two tiles (Evidence, Tasks) and two
@@ -105,30 +106,30 @@
 </button>
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="sm:max-w-2xl">
+  <Dialog.Content class="max-h-[90dvh] w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-2xl">
     <Dialog.Header>
       <Dialog.Title>{code ?? label}</Dialog.Title>
       <Dialog.Description>{text ?? ''}</Dialog.Description>
     </Dialog.Header>
 
-    <dl class="grid grid-cols-2 gap-3">
-      <div class="rounded-lg border p-3">
+    <dl class="grid min-w-0 grid-cols-2 gap-3">
+      <div class="min-w-0 rounded-lg border p-3">
         <dt class="text-xs text-(--muted-foreground)">Evidence</dt>
         <dd class="text-xl font-semibold">{items.length}</dd>
       </div>
-      <div class="rounded-lg border p-3">
+      <div class="min-w-0 rounded-lg border p-3">
         <dt class="text-xs text-(--muted-foreground)">Tasks</dt>
         <dd class="text-xl font-semibold">{taskTotal}</dd>
       </div>
     </dl>
 
-    <Tabs.Root bind:value={tab}>
+    <Tabs.Root bind:value={tab} class="min-w-0">
       <Tabs.List>
         <Tabs.Trigger value="evidence">Evidence</Tabs.Trigger>
         <Tabs.Trigger value="tasks">Tasks ({taskTotal})</Tabs.Trigger>
       </Tabs.List>
 
-      <Tabs.Content value="evidence" class="mt-3 space-y-2">
+      <Tabs.Content value="evidence" class="mt-3 min-w-0 space-y-2">
         {#if loading}
           <div class="flex justify-center py-6" role="status" aria-label="Loading evidence"><Spinner /></div>
         {:else if error}
@@ -143,41 +144,59 @@
             bind:value={search}
             oninput={() => (pageNo = 1)}
           />
-          <div class="overflow-x-auto rounded-lg border">
-            <table class="w-full text-sm">
-              <thead class="bg-(--muted)/50 text-left text-xs text-(--muted-foreground)">
+          <div class="min-w-0 rounded-lg border">
+            <table class="w-full table-fixed text-sm max-sm:block">
+              <thead class="bg-(--muted)/50 text-left text-xs text-(--muted-foreground) max-sm:hidden">
                 <tr>
-                  <th class="px-3 py-2 font-medium">Title</th>
-                  <th class="px-3 py-2 font-medium">Details</th>
-                  <th class="px-3 py-2 font-medium">Status</th>
-                  <th class="px-3 py-2 font-medium">Files</th>
-                  <th class="px-3 py-2"><span class="sr-only">Actions</span></th>
+                  <th class="w-[30%] px-3 py-2 font-medium">Title</th>
+                  <th class="w-[28%] px-3 py-2 font-medium">Details</th>
+                  <th class="w-[18%] px-3 py-2 font-medium">Status</th>
+                  <th class="w-[9%] px-3 py-2 font-medium">Files</th>
+                  <th class="w-[15%] px-3 py-2"><span class="sr-only">Actions</span></th>
                 </tr>
               </thead>
-              <tbody class="divide-y">
+              <tbody class="divide-y max-sm:block">
                 {#each visible as item (item.id)}
-                  <tr>
-                    <td class="px-3 py-2 font-medium">
+                  {@const ft = fromType(item)}
+                  {@const hp = store.portfolioFor(item.homeEnrolmentId ?? viewing)}
+                  <tr class="max-sm:block max-sm:space-y-1 max-sm:px-3 max-sm:py-2">
+                    <td
+                      class="min-w-0 px-3 py-2 align-top font-medium [overflow-wrap:anywhere] break-words max-sm:block max-sm:p-0"
+                    >
                       {item.title}
-                      {#if fromType(item)}
-                        {@const ft = fromType(item)}
+                      {#if ft}
                         <span class="ml-1 inline-flex items-center gap-1 text-xs font-normal text-(--muted-foreground)"
-                          >From <ProgrammeTypeChip type={ft!} /></span
+                          >From <ProgrammeTypeChip type={ft} /></span
                         >
+                      {/if}
+                      {#if hp?.programme.title}
+                        <span class="mt-0.5 block text-xs font-normal">
+                          <ProgrammeName type={hp.programme.type} title={hp.programme.title} />
+                        </span>
                       {/if}
                       <span class="block text-xs font-normal text-(--muted-foreground)">{fmtDate(item.createdAt)}</span>
                     </td>
-                    <td class="max-w-56 px-3 py-2 text-(--muted-foreground)">
-                      <span class="line-clamp-2">{item.snippet || 'No details'}</span>
+                    <td class="min-w-0 px-3 py-2 align-top text-(--muted-foreground) max-sm:block max-sm:p-0">
+                      <span class="line-clamp-2 [overflow-wrap:anywhere] break-words"
+                        >{item.snippet || 'No details'}</span
+                      >
                     </td>
-                    <td class="px-3 py-2"><EvidenceStatusChip status={item.status} /></td>
-                    <td class="px-3 py-2">{item.fileCount}</td>
-                    <td class="px-3 py-2 text-right">
+                    <td class="px-3 py-2 align-top max-sm:inline-block max-sm:p-0 max-sm:pr-3"
+                      ><EvidenceStatusChip status={item.status} /></td
+                    >
+                    <td class="px-3 py-2 align-top max-sm:inline-block max-sm:p-0 max-sm:pr-3">
+                      <span class="text-xs text-(--muted-foreground) sm:hidden">Files: </span>{item.fileCount}
+                    </td>
+                    <td class="px-3 py-2 text-right align-top max-sm:block max-sm:p-0 max-sm:text-left">
                       <Button variant="outline" size="sm" onclick={() => pick(item.id)}>View</Button>
                     </td>
                   </tr>
                 {:else}
-                  <tr><td colspan="5" class="px-3 py-4 text-center text-(--muted-foreground)">No matches.</td></tr>
+                  <tr class="max-sm:block"
+                    ><td colspan="5" class="px-3 py-4 text-center text-(--muted-foreground) max-sm:block"
+                      >No matches.</td
+                    ></tr
+                  >
                 {/each}
               </tbody>
             </table>
@@ -198,7 +217,7 @@
         {/if}
       </Tabs.Content>
 
-      <Tabs.Content value="tasks" class="mt-3">
+      <Tabs.Content value="tasks" class="mt-3 min-w-0">
         {#if tasks.length === 0}
           <p class="py-4 text-sm text-(--muted-foreground)">No tasks target this criterion.</p>
         {:else}

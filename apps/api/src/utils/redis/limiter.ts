@@ -7,6 +7,32 @@ import {
 
 import { redis, type RedisClient } from '@cio/core/utils/redis/redis';
 
+/**
+ * Sliding-window log, atomic: trim expired, count, and add the request ONLY when allowed.
+ * Blocked requests are never recorded (so hammering a blocked key doesn't extend the lockout).
+ * Returns { allowed(1/0), count after decision, oldest score in window (or 0) }.
+ */
+const SLIDING_WINDOW_SCRIPT = `
+local key = KEYS[1]
+local now = tonumber(ARGV[1])
+local windowMs = tonumber(ARGV[2])
+local maxRequests = tonumber(ARGV[3])
+local member = ARGV[4]
+redis.call('ZREMRANGEBYSCORE', key, '-inf', now - windowMs)
+local count = redis.call('ZCARD', key)
+local allowed = 0
+if count < maxRequests then
+  redis.call('ZADD', key, now, member)
+  count = count + 1
+  allowed = 1
+end
+redis.call('PEXPIRE', key, windowMs)
+local oldest = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
+local oldestScore = now
+if oldest[2] then oldestScore = tonumber(oldest[2]) end
+return { allowed, count, oldestScore }
+`;
+
 export class RedisRateLimiter {
   private redis: RedisClient;
   private windowMs: number;
@@ -20,40 +46,24 @@ export class RedisRateLimiter {
 
   async isAllowed(key: string): Promise<{ allowed: boolean; remaining: number; resetTime: number }> {
     const now = Date.now();
-    const windowStart = now - this.windowMs;
     const keyWithPrefix = `${RATE_LIMIT_KEY_PREFIX}${key}`;
 
-    // Use Redis multi (transaction) for atomic operations
-    const multi = this.redis.multi();
+    const result = (await this.redis.eval(SLIDING_WINDOW_SCRIPT, {
+      keys: [keyWithPrefix],
+      arguments: [String(now), String(this.windowMs), String(this.maxRequests), `${now}-${Math.random()}`]
+    })) as [number, number, number] | null;
 
-    // Remove expired entries
-    multi.zRemRangeByScore(keyWithPrefix, '-inf', windowStart);
-
-    // Count current requests in window
-    multi.zCard(keyWithPrefix);
-
-    // Add current request
-    multi.zAdd(keyWithPrefix, { score: now, value: `${now}-${Math.random()}` });
-
-    // Set expiration for the key
-    multi.expire(keyWithPrefix, Math.ceil(this.windowMs / 1000));
-
-    const results = await multi.exec();
-
-    if (!results || results.some((result) => result === null)) {
+    if (!Array.isArray(result) || result.length < 3) {
       throw new Error(ERROR_MESSAGES.REDIS_PIPELINE_FAILED);
     }
 
-    // results[0] is zRemRangeByScore result (number of removed elements)
-    // results[1] is zCard result (current count before adding new request)
-    const currentCount = results[1] as number;
-    const remaining = Math.max(0, this.maxRequests - currentCount - 1);
-    const resetTime = now + this.windowMs;
+    const [allowedFlag, count, oldest] = result.map(Number);
 
     return {
-      allowed: currentCount < this.maxRequests,
-      remaining,
-      resetTime
+      allowed: allowedFlag === 1,
+      remaining: Math.max(0, this.maxRequests - count),
+      // Capacity frees when the oldest entry leaves the window.
+      resetTime: oldest + this.windowMs
     };
   }
 

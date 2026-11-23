@@ -2,6 +2,8 @@
 // { success, data } envelope and turns any failure (API error, zod validation error, network) into a message the
 // UI can show as-is. Never throws.
 
+import { RATE_LIMIT_MESSAGE } from '$lib/utils/services/api/rate-limit';
+
 export type CallResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
 // Some failures arrive with the whole JSON body as the message ('{"success":false,"error":"…"}'): show only the text.
@@ -41,6 +43,7 @@ export async function call<T>(fn: () => Promise<Response>, fallback = 'Something
     if (body?.success === true) return { ok: true, data: body.data as T };
     return { ok: false, error: errorText(body, fallback) };
   } catch (error) {
+    if ((error as { status?: number } | null)?.status === 429) return { ok: false, error: RATE_LIMIT_MESSAGE };
     return { ok: false, error: error instanceof Error && error.message ? unwrapJson(error.message) : fallback };
   }
 }

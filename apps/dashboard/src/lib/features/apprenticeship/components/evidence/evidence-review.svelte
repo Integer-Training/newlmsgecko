@@ -13,7 +13,7 @@
     type PickerQualification
   } from '../../api/evidence.svelte';
   import { APPR_PROGRAMME_TYPE_LABELS } from '@cio/utils/constants/apprenticeship';
-  import AlsoCounts from './also-counts.svelte';
+  import ProgrammeName from '../shared/programme-name.svelte';
   import CriteriaPicker from './criteria-picker.svelte';
   import EvidenceNotes from './evidence-notes.svelte';
   import EvidenceStatusChip from '../shared/evidence-status-chip.svelte';
@@ -112,7 +112,13 @@
       {#if mappedBoth}
         <Table.Row>
           <Table.Head class="w-36">Counts towards</Table.Head>
-          <Table.Cell><AlsoCounts home={homeEnrolmentId} {mapped} /></Table.Cell>
+          <Table.Cell>
+            <span class="flex flex-col gap-1">
+              {#each mapped.filter((m) => m.criterionCodes.length > 0) as m (m.enrolmentId)}
+                <ProgrammeName type={m.type} title={m.title} count={m.criterionCodes.length} />
+              {/each}
+            </span>
+          </Table.Cell>
         </Table.Row>
       {/if}
       <Table.Row>

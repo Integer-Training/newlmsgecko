@@ -1,6 +1,8 @@
 <script lang="ts">
   import { get } from 'svelte/store';
   import { goto } from '$app/navigation';
+  import { page } from '$app/state';
+  import { safeRedirect } from '$lib/utils/functions/routes/needsPasswordChange';
   import * as Card from '@cio/ui/base/card';
   import { Button } from '@cio/ui/base/button';
   import { Input } from '@cio/ui/base/input';
@@ -44,7 +46,9 @@
       // Clear the flag locally so the gate won't loop, then go home.
       profile.update((p) => ({ ...p, settings: { ...((p.settings as object) ?? {}), mustChangePassword: false } }));
       const org = get(currentOrg);
-      goto(homeForRole(org.roleId, org.siteName));
+      goto(safeRedirect(page.url.searchParams.get('redirect')) ?? homeForRole(org.roleId, org.siteName), {
+        replaceState: true
+      });
     } catch {
       error = 'Something went wrong. Please try again.';
     } finally {

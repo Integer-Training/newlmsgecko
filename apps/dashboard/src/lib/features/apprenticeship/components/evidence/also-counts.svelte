@@ -2,6 +2,7 @@
   import type { ApprProgrammeType } from '@cio/utils/constants/apprenticeship';
   import { alsoCountsTowards, type MappedQualification } from '../../api/evidence.svelte';
   import ProgrammeTypeChip from '../shared/programme-type-chip.svelte';
+  import ProgrammeName from '../shared/programme-name.svelte';
 
   // Cross-mapped evidence markers (Deploy 3). "Also counts towards: <other qualification> · <codes>" on the side the
   // evidence lives on, and "From <Diploma|Standard>" on the other qualification's views.
@@ -27,10 +28,10 @@
     From <ProgrammeTypeChip type={fromType} />
   </span>
 {:else if others.length > 0}
-  <span class="block text-xs font-normal text-(--muted-foreground)">
-    Also counts towards:
-    {#each others as m, i (m.enrolmentId)}
-      {i > 0 ? '; ' : ''}<span class="font-medium text-(--foreground)">{m.title}</span> · {m.criterionCodes.join(', ')}
+  <span class="mt-0.5 flex flex-col gap-1 text-xs font-normal text-(--muted-foreground)">
+    <span>Also counts towards:</span>
+    {#each others as m (m.enrolmentId)}
+      <ProgrammeName type={m.type} title={m.title} count={m.criterionCodes.length} />
     {/each}
   </span>
 {/if}

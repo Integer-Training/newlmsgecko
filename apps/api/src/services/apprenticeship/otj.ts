@@ -221,7 +221,14 @@ export async function getOtj(actor: Actor, enrolmentId: string, query: OtjListQu
       status: progressStatus(donePct, expectedPct, settings),
       source,
       contractedHoursWeek: carrier.contractedHoursWeek,
-      pendingMinutes
+      pendingMinutes,
+      // What the normal calculation (contracted hours × org OTJ settings) would give, shown to staff beside an override.
+      calculatedMinutes: otjTargetMinutes({
+        start: carrier.startDate,
+        end: carrier.plannedEndDate,
+        contractedHoursWeek: carrier.contractedHoursWeek,
+        settings
+      })
     },
     rows: query.status ? rows.filter((r) => r.status === query.status) : rows
   };

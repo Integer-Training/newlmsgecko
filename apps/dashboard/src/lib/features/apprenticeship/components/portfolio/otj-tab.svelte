@@ -22,6 +22,15 @@
   const isStaff = $derived($isOrgTeamMember === true);
   const isAdmin = $derived($isOrgAdmin === true);
 
+  // Programme names the OTJ hours count towards (Diploma first, then Standard); one name for an unlinked learner.
+  const programmes = $derived(store.portfolios.map((p) => ({ type: p.programme.type, title: p.programme.title })));
+  const programmeByEnrolment = $derived(
+    Object.fromEntries(store.portfolios.map((p) => [p.enrolment.id, p.programme.title]))
+  );
+  // What the normal calculation from contracted hours would give (staff only) — worked out by the API with the
+  // organisation's own OTJ settings.
+  const calculatedMinutes = $derived(view?.summary.calculatedMinutes ?? null);
+
   let view = $state<OtjView | null>(null);
   let error = $state<string | null>(null);
   let loading = $state(true);
@@ -87,7 +96,14 @@
       <Button variant="outline" size="sm" class="mt-3" onclick={load}>Try again</Button>
     </div>
   {:else if view}
-    <OverviewCard summary={view.summary} {isAdmin} onEditHours={() => (datesOpen = true)} />
+    <OverviewCard
+      summary={view.summary}
+      {isAdmin}
+      {isStaff}
+      {programmes}
+      {calculatedMinutes}
+      onEditHours={() => (datesOpen = true)}
+    />
     <LogTable
       rows={view.rows}
       pendingMinutes={view.summary.pendingMinutes}

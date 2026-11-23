@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { page } from '$app/state';
   import { Badge } from '@cio/ui/base/badge';
+  import { startVisiblePoll } from '$lib/utils/functions/visible-poll';
   import { orgSummaryApi } from './org-summary.svelte';
 
   // Per-view header context bar. Shows a live, contextual summary for the current admin section (learners →
@@ -9,15 +10,14 @@
   // the lightweight summary endpoint so counts + presence stay fresh.
 
   const POLL_MS = 45_000;
-  let poll: ReturnType<typeof setInterval> | undefined;
+  let stopPoll: (() => void) | undefined;
 
   onMount(() => {
     orgSummaryApi.load();
-    poll = setInterval(() => orgSummaryApi.load(), POLL_MS);
+    // Paused while the tab is hidden; refreshes when it becomes visible again.
+    stopPoll = startVisiblePoll(() => orgSummaryApi.load(), POLL_MS);
   });
-  onDestroy(() => {
-    if (poll) clearInterval(poll);
-  });
+  onDestroy(() => stopPoll?.());
 
   const s = $derived(orgSummaryApi.data);
 

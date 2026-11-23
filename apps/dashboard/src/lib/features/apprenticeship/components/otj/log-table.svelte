@@ -27,7 +27,17 @@
     onViewEvidence: (id: string) => void;
     onChanged: () => void;
   }
-  let { rows, pendingMinutes, onAdd, onEdit, onReview, onViewEvidence, onChanged, readOnly = false }: Props = $props();
+  let {
+    rows,
+    programmeByEnrolment = {},
+    pendingMinutes,
+    onAdd,
+    onEdit,
+    onReview,
+    onViewEvidence,
+    onChanged,
+    readOnly = false
+  }: Props = $props();
 
   const isStaff = $derived($isOrgTeamMember === true);
   const isAdmin = $derived($isOrgAdmin === true);
@@ -150,6 +160,11 @@
                   <span
                     class="ml-1 inline-flex rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800 dark:bg-sky-500/20 dark:text-sky-300"
                     >Evidence</span
+                  >
+                {/if}
+                {#if r.kind === 'EVIDENCE' && r.homeEnrolmentId && programmeByEnrolment[r.homeEnrolmentId]}
+                  <span class="ml-1 text-xs font-normal text-(--muted-foreground)"
+                    >From {programmeByEnrolment[r.homeEnrolmentId]}</span
                   >
                 {/if}
                 {#if r.outsideWindow}

@@ -3,6 +3,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { profile } from '$lib/utils/store/user';
+  import { needsPasswordChange } from '$lib/utils/functions/routes/needsPasswordChange';
   import * as Sidebar from '@cio/ui/base/sidebar';
   import LmsHeader from '$features/ui/navigation/lms-header.svelte';
   import { LMSSidebar } from '$features/ui/sidebar/lms-sidebar';
@@ -51,6 +52,8 @@
   // Apprentices land on their dashboard instead of the course dashboard (client-side, once the check has loaded).
   $effect(() => {
     if (!myApprenticeshipApi.loaded || !myApprenticeshipApi.hasAny) return;
+    // Never race the first-login password change (the app layout guard sends the user there instead).
+    if (needsPasswordChange($profile, page.url.pathname)) return;
     if (page.url.pathname.replace(/\/$/, '') === '/lms') {
       goto('/lms/apprenticeship', { replaceState: true });
     }

@@ -2,6 +2,7 @@ import axios from 'axios';
 import { classroomio } from '$lib/utils/services/api';
 import { snackbar } from '$features/ui/snackbar/store';
 import { call, type CallResult } from './call';
+import { createDedupedLoader } from './dedupe';
 
 // Gecko Apprenticeships — client for onboarding documents (photo ID, NI proof…). Shapes mirror
 // apps/api/src/services/apprenticeship/onboarding.ts. Files go presign → PUT straight to storage → save on the slot.
@@ -80,15 +81,23 @@ class OnboardingChanged {
   count = $state(0);
   bump() {
     this.count += 1;
+    onboardingGetLoader.clear();
   }
 }
 export const onboardingChanged = new OnboardingChanged();
 
+// One shared request per enrolment (sidebar badge + tab), cached ~3s and cleared on every onboardingChanged bump.
+const onboardingGetLoader = createDedupedLoader<CallResult<OnboardingView>>(
+  (enrolmentId) =>
+    call<OnboardingView>(() =>
+      classroomio.apprenticeship.enrolments[':id'].onboarding.$get({ param: { id: enrolmentId } })
+    ),
+  { ttlMs: 3000, cacheable: (r) => r.ok }
+);
+
 class ApprOnboardingApi {
   get(enrolmentId: string) {
-    return call<OnboardingView>(() =>
-      classroomio.apprenticeship.enrolments[':id'].onboarding.$get({ param: { id: enrolmentId } })
-    );
+    return onboardingGetLoader.get(enrolmentId);
   }
 
   /** Presign → PUT each file → returns the file metadata to pass to save(). */
