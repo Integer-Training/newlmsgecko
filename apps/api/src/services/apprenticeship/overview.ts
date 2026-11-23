@@ -46,7 +46,9 @@ function cardOf(p: Portfolio, role: ApprEnrolmentRole, type: ApprProgrammeType, 
       id: u.id,
       title: u.title,
       actualPct: u.actualPct,
-      status: u.status as ApprProgressStatus
+      status: u.status as ApprProgressStatus,
+      // When a COMPLETE unit was completed (its last criterion met); null otherwise.
+      achievedAt: (u.achievedAt ?? null) as string | null
     }))
   };
 }

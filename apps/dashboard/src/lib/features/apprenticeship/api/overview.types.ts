@@ -19,6 +19,8 @@ export interface OverviewUnit {
   title: string;
   actualPct: number | null;
   status: ApprProgressStatus;
+  /** When a COMPLETE unit was completed (last criterion met); null otherwise. */
+  achievedAt?: string | null;
 }
 
 /** One qualification (enrolment) of the apprenticeship. */

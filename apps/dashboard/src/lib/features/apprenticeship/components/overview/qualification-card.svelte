@@ -140,7 +140,14 @@
               class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 px-4 py-2 text-sm hover:bg-(--muted) md:grid-cols-[minmax(0,1fr)_8rem_6.5rem]"
             >
               <span class="min-w-0 break-words">{u.title}</span>
-              <span class="justify-self-end"><StatusChip status={u.status} /></span>
+              <span class="flex flex-col items-end gap-0.5 justify-self-end">
+                <StatusChip status={u.status} />
+                {#if u.status === 'COMPLETE' && u.achievedAt}
+                  <span class="text-xs whitespace-nowrap text-(--muted-foreground)">
+                    Completed {fmtDate(u.achievedAt)}
+                  </span>
+                {/if}
+              </span>
               <span class="col-span-2 md:col-span-1">
                 <ProgressBar actual={u.actualPct} label="{u.title} progress" />
                 <span class="text-xs text-(--muted-foreground)">{fmtPct(u.actualPct)}</span>
