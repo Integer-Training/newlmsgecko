@@ -10,6 +10,7 @@ import {
   ExploreIcon,
   GoalIcon,
   HomeIcon,
+  LessonIcon,
   NewsFeedIcon,
   ReviewIcon,
   SettingsIcon,
@@ -201,6 +202,12 @@ export function buildApprenticeNavConfig(): NavItemConfig[] {
       path: `${APPRENTICE_BASE}/evidence`,
       icon: AttachmentIcon,
       matchPattern: '^/lms/apprenticeship/evidence(/.*)?$'
+    },
+    {
+      titleKey: 'Resources',
+      path: `${APPRENTICE_BASE}/resources`,
+      icon: LessonIcon,
+      matchPattern: '^/lms/apprenticeship/resources(/.*)?$'
     },
     {
       titleKey: 'Tasks',

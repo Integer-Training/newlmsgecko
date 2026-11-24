@@ -289,3 +289,50 @@ export const APPR_OTJ_LOG_TITLE_MAX = 120;
 /** Role of an enrolment in an apprenticeship: CARRIER (primary of a linked pair), COMPONENT (linked to a carrier) or STANDALONE. */
 export const APPR_ENROLMENT_ROLES = ['CARRIER', 'COMPONENT', 'STANDALONE'] as const;
 export type ApprEnrolmentRole = (typeof APPR_ENROLMENT_ROLES)[number];
+
+// ── Resources (learning resources + workbooks) ──
+/** LEARNING = view-only for learners (server refuses learner downloads); WORKBOOK = downloadable, completed copy is uploaded as evidence. */
+export const APPR_RESOURCE_KINDS = ['LEARNING', 'WORKBOOK'] as const;
+export type ApprResourceKind = (typeof APPR_RESOURCE_KINDS)[number];
+export const APPR_RESOURCE_KIND_LABELS: Record<ApprResourceKind, string> = {
+  LEARNING: 'Learning resource',
+  WORKBOOK: 'Workbook'
+};
+export const APPR_RESOURCE_STATUSES = ['ACTIVE', 'ARCHIVED'] as const;
+export type ApprResourceStatus = (typeof APPR_RESOURCE_STATUSES)[number];
+export const APPR_RESOURCE_TITLE_MAX = 256;
+export const APPR_RESOURCE_DESCRIPTION_MAX = 2000;
+
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+/** Allowed file types per kind: extension -> MIME. LEARNING = pdf + docx; WORKBOOK = pdf, doc, docx, xlsx, pptx. */
+export const APPR_RESOURCE_ALLOWED_TYPES: Record<ApprResourceKind, Record<string, string>> = {
+  LEARNING: { pdf: 'application/pdf', docx: DOCX_MIME },
+  WORKBOOK: {
+    pdf: 'application/pdf',
+    doc: 'application/msword',
+    docx: DOCX_MIME,
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+  }
+};
+
+/** True when the file name's extension is allowed for the kind (the MIME is derived from the extension, not trusted from the client). */
+export function isAllowedApprResourceFile(kind: ApprResourceKind, fileName: string): boolean {
+  return apprResourceMimeForFile(kind, fileName) !== null;
+}
+
+/** The canonical MIME for a file name under a kind, or null when the extension is not allowed. */
+export function apprResourceMimeForFile(kind: ApprResourceKind, fileName: string): string | null {
+  const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
+  return APPR_RESOURCE_ALLOWED_TYPES[kind][ext] ?? null;
+}
+
+/** Derived learner-facing status of a workbook. */
+export const APPR_RESOURCE_LEARNER_STATUSES = [
+  'NOT_STARTED',
+  'DOWNLOADED',
+  'SUBMITTED',
+  'REFERRED',
+  'ACCEPTED'
+] as const;
+export type ApprResourceLearnerStatus = (typeof APPR_RESOURCE_LEARNER_STATUSES)[number];

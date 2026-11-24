@@ -179,3 +179,17 @@ export async function notifySafely(label: string, fn: () => Promise<void>): Prom
     console.error(`[apprenticeship] ${label} notification failed (non-fatal):`, error);
   }
 }
+
+export const RESOURCE_ENTITY = 'appr_resource';
+
+/** New/updated resources saved in one batch -> ONE in-app notification per active apprentice (entity = the first resource). */
+export async function notifyResourcesAdded(ctx: { resourceId: string; learnerIds: string[] }): Promise<void> {
+  const recipients = [...new Set(ctx.learnerIds)].map((userId) => ({ userId }));
+  if (recipients.length === 0) return;
+  await emitNotification({
+    type: 'appr.resource.added',
+    recipients,
+    entityType: RESOURCE_ENTITY,
+    entityId: ctx.resourceId
+  });
+}

@@ -185,3 +185,20 @@ export function generateApprenticeshipOnboardingFileKey(
 ): string {
   return `${apprenticeshipOnboardingKeyPrefix(programmeId, learnerId, enrolmentId, docTypeId)}${generateFileKey(fileName)}`;
 }
+
+/**
+ * Key prefix for the files of one apprenticeship resource: `apprenticeship/resources/{programmeId}/{resourceId}/`.
+ * Resource files are staff-uploaded; learner access is re-guarded through the resource access rules, never by the path.
+ * A replaced file gets a new key under the same prefix (the old one is cleaned up by the uploads job).
+ */
+export function apprenticeshipResourceKeyPrefix(programmeId: string, resourceId: string): string {
+  return `apprenticeship/resources/${programmeId}/${resourceId}/`;
+}
+
+export function generateApprenticeshipResourceFileKey(
+  programmeId: string,
+  resourceId: string,
+  fileName: string
+): string {
+  return `${apprenticeshipResourceKeyPrefix(programmeId, resourceId)}${generateFileKey(fileName)}`;
+}

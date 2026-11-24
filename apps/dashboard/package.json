@@ -55,6 +55,7 @@
     "d3-cloud": "^1.2.7",
     "d3-sankey": "^0.12.3",
     "dayjs": "^1.11.10",
+    "docx-preview": "^0.4.1",
     "encoding": "^0.1.13",
     "hls.js": "^1.6.16",
     "hotkeys-js": "^3.11.2",

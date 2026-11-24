@@ -206,6 +206,8 @@ function enrich(
           : `${label} approved`;
       return { ...base, subject, link: portfolioTabLink(doc?.enrolmentId, 'onboarding', isStaff) };
     }
+    case 'appr.resource.added':
+      return { ...base, subject: 'New learning resources available', link: '/lms/apprenticeship/resources' };
     case 'appr.onboarding.complete': {
       const who = row.entityId ? appr.enrolments?.get(row.entityId)?.learnerName : null;
       return {

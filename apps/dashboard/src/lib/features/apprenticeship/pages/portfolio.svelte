@@ -22,6 +22,7 @@
   import GatewayTab from '../components/portfolio/gateway-tab.svelte';
   import AchievedTab from '../components/portfolio/achieved-tab.svelte';
   import TasksTab from '../components/portfolio/tasks-tab.svelte';
+  import ResourcesTab from '../components/portfolio/resources-tab.svelte';
   import ReviewsTab from '../components/portfolio/reviews-tab.svelte';
   import OnboardingTab from '../components/onboarding/onboarding-tab.svelte';
   import OverviewTab from '../components/overview/overview-tab.svelte';
@@ -89,7 +90,7 @@
     { value: 'achieved', label: 'Achieved' },
     { value: 'map', label: 'Criteria map' }
   ];
-  const TABS = ['overview', 'units', 'evidence', 'tasks', 'otj', ...MORE_TABS.map((t) => t.value)];
+  const TABS = ['overview', 'units', 'evidence', 'tasks', 'resources', 'otj', ...MORE_TABS.map((t) => t.value)];
   let openedTab = false;
   $effect(() => {
     if (openedTab || !store.data) return;
@@ -227,6 +228,7 @@
                     >
                   {/if}
                 </Tabs.Trigger>
+                {#if isStaffViewer}<Tabs.Trigger value="resources">Resources</Tabs.Trigger>{/if}
                 <Tabs.Trigger value="otj">OTJ progress</Tabs.Trigger>
                 <DropdownMenu.Root>
                   <DropdownMenu.Trigger
@@ -268,6 +270,9 @@
               <Tabs.Content value="units"><UnitsTab {store} unitHref={toUnit} /></Tabs.Content>
               <Tabs.Content value="evidence"><EvidenceTab {store} /></Tabs.Content>
               <Tabs.Content value="tasks"><TasksTab {store} /></Tabs.Content>
+              <Tabs.Content value="resources">
+                {#if isStaffViewer}<ResourcesTab {store} />{/if}
+              </Tabs.Content>
               <Tabs.Content value="otj"><OtjTab {store} /></Tabs.Content>
               <Tabs.Content value="reviews"><ReviewsTab {store} /></Tabs.Content>
               <Tabs.Content value="gateway"><GatewayTab {store} /></Tabs.Content>

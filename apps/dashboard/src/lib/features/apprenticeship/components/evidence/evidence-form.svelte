@@ -16,7 +16,9 @@
     APPR_NOTE_MAX
   } from '@cio/utils/constants/apprenticeship';
   import { snackbar } from '$features/ui/snackbar/store';
+  import BookOpenIcon from '@lucide/svelte/icons/book-open';
   import type { TaskItem } from '../../api/tasks.svelte';
+  import type { SheetResource } from '../../stores/portfolio.svelte';
   import {
     evidenceApi,
     type EvidenceDetail,
@@ -40,6 +42,8 @@
     /** This learner's tasks, so a new piece of evidence can answer one; `preTaskId` opens it pre-filled from that task. */
     tasks?: TaskItem[];
     preTaskId?: string | null;
+    /** A workbook being completed: prefills title and type and links the evidence to it (resourceId). */
+    preResource?: SheetResource | null;
     onSaved: () => void;
     onCancel: () => void;
   }
@@ -51,6 +55,7 @@
     preCriteria = [],
     tasks = [],
     preTaskId = null,
+    preResource = null,
     onSaved,
     onCancel
   }: Props = $props();
@@ -59,12 +64,22 @@
   // svelte-ignore state_referenced_locally
   const preTask = !initial && preTaskId ? (tasks.find((t) => t.id === preTaskId) ?? null) : null;
   let taskId = $state<string>(preTask?.id ?? '');
-  let title = $state(ev?.title ?? preTask?.title ?? '');
+  // The workbook this evidence completes (from the workbook being uploaded, or kept as-is when editing).
+  // svelte-ignore state_referenced_locally
+  const resourceId = ev?.resourceId ?? (!initial ? (preResource?.id ?? null) : null);
+  // svelte-ignore state_referenced_locally
+  const resourceTitle = ev?.resourceTitle ?? preResource?.title ?? null;
+  let title = $state(
+    ev?.title ??
+      (!initial && preResource ? preResource.title.trim().slice(0, APPR_EVIDENCE_TITLE_MAX) : null) ??
+      preTask?.title ??
+      ''
+  );
   let details = $state(ev?.details ?? '');
   let hours = $state(ev ? String(Math.floor(ev.minutes / 60)) : '0');
   let mins = $state(ev ? String(ev.minutes % 60) : '0');
   let includeOtj = $state(ev?.includeOtj ?? false);
-  let typeKey = $state(ev?.typeKey ?? preTask?.typeKey ?? '');
+  let typeKey = $state(ev?.typeKey ?? preResource?.typeKey ?? preTask?.typeKey ?? '');
   let criterionIds = $state<string[]>(
     initial ? initial.criteria.flatMap((q) => q.units.flatMap((u) => u.criteria.map((c) => c.id))) : [...preCriteria]
   );
@@ -141,7 +156,8 @@
       minutes,
       includeOtj,
       criterionIds,
-      files: fileBody
+      files: fileBody,
+      ...(resourceId ? { resourceId } : {})
     };
     const res =
       initial && ev
@@ -176,6 +192,22 @@
     save();
   }}
 >
+  {#if resourceId}
+    <div
+      class="flex items-start gap-2 rounded-md bg-sky-50 px-3 py-2 text-sm text-sky-900 dark:bg-sky-500/10 dark:text-sky-200"
+      role="note"
+    >
+      <BookOpenIcon size={16} class="mt-0.5 shrink-0" aria-hidden="true" />
+      <p>
+        {#if initial}
+          Workbook: <strong>{resourceTitle ?? 'a workbook'}</strong>
+        {:else}
+          Completed workbook: <strong>{resourceTitle ?? 'a workbook'}</strong> — suggested criteria are pre-ticked, change
+          as needed. Attach your completed file under Files.
+        {/if}
+      </p>
+    </div>
+  {/if}
   {#if initial && linkedTaskTitle}
     <p class="text-sm text-(--muted-foreground)">
       Answers task: <strong class="text-(--foreground)">{linkedTaskTitle}</strong>

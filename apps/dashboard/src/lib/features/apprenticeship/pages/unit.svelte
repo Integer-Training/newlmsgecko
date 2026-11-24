@@ -19,6 +19,7 @@
   import { PortfolioStore } from '../stores/portfolio.svelte';
   import CriterionPopover from '../components/portfolio/criterion-popover.svelte';
   import EvidenceSheet from '../components/evidence/evidence-sheet.svelte';
+  import UnitResourcesCard from '../components/resources/learner/unit-resources-card.svelte';
   import ProgressBar from '../components/shared/progress-bar.svelte';
   import StatusChip from '../components/shared/status-chip.svelte';
   import { fmtDate, fmtPct } from '../components/shared/format';
@@ -210,6 +211,8 @@
             </div>
           </section>
 
+          <UnitResourcesCard {mode} enrolmentId={qualEnrolmentId || enrolmentId} {unitId} {store} />
+
           <section class="rounded-lg border bg-(--card)" aria-label="Criteria breakdown">
             <div class="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
               <h2 class="text-base font-semibold">Criteria breakdown</h2>
@@ -364,6 +367,7 @@
           tasks={store.tasks}
           editBlocked={store.evidenceBlocked}
           preTaskId={store.sheet.taskId}
+          preResource={store.sheet.resource}
           learnerName={store.data?.learner.name ?? null}
           onChanged={() => store.refresh()}
         />

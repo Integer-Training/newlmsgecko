@@ -16,6 +16,7 @@
   import { programmesApi, type Criterion, type Unit } from '$features/apprenticeship/api/programmes.svelte';
   import { APPR_STANDARD_GROUPS } from '@cio/utils/constants/apprenticeship';
   import ConfirmDeleteDialog from './confirm-delete-dialog.svelte';
+  import ResourcesSection from '../resources/staff/resources-section.svelte';
 
   // One unit: collapsible row (code, title, criteria count) with unit edit/delete/move, and inside it a compact
   // criteria table with inline add / edit / delete / move up-down.
@@ -406,6 +407,7 @@
         </div>
       {/if}
     </form>
+    <ResourcesSection unitId={unit.id} variant="unit" />
   {/if}
 </div>
 

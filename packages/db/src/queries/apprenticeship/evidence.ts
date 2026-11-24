@@ -53,6 +53,8 @@ export async function listEvidenceForLearner(
         string | null
       >`(select coalesce(nullif(ru.name, ''), rp.fullname) from profile rp left join "user" ru on ru.id = rp.id where rp.id = ${ev.reviewedBy})`,
       reviewedAt: ev.reviewedAt,
+      resourceId: ev.resourceId,
+      resourceTitle: sql<string | null>`(select r.title from appr_resource r where r.id = ${ev.resourceId})`,
       criteriaCount: criteriaCountOf,
       fileCount: fileCountOf
     })
@@ -135,6 +137,7 @@ export async function updateApprEvidence(
       | 'reviewedBy'
       | 'reviewedAt'
       | 'taskId'
+      | 'resourceId'
     >
   >,
   expectedStatus?: string
@@ -327,6 +330,8 @@ export async function listToMark(
       learnerName: profileDisplayName,
       programmeId: ev.programmeId,
       programmeTitle: schema.apprProgramme.title,
+      resourceId: ev.resourceId,
+      resourceTitle: sql<string | null>`(select r.title from appr_resource r where r.id = ${ev.resourceId})`,
       criteriaCount: criteriaCountOf,
       submittedAt: ev.updatedAt,
       taskId: ev.taskId,

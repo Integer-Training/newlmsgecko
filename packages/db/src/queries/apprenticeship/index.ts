@@ -17,3 +17,4 @@ export * from './report';
 export * from './overview';
 export * from './otj';
 export * from './withdrawn';
+export * from './resources';

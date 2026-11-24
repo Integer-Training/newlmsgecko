@@ -213,3 +213,51 @@ export async function generateDocumentUploadPresignedUrl(fileKey: string, conten
   const config = getStorageConfig();
   return generateUploadPresignedUrl(fileKey, config.bucketDocuments, contentType);
 }
+
+/**
+ * Presigned GET that forces a download (Content-Disposition: attachment with an RFC 5987 filename). Short-lived
+ * (~5 min) and NOT cached, so each call is tied to an audited request. Returns null when signing fails.
+ */
+export async function generateAttachmentPresignedUrl(
+  key: string,
+  bucketName: string,
+  fileName: string,
+  expiresInSeconds = 300
+): Promise<string | null> {
+  try {
+    const safeAscii = fileName.replace(/[^\x20-\x7e]/g, '_').replace(/["\;]/g, '_') || 'download';
+    const command = new GetObjectCommand({
+      Bucket: bucketName,
+      Key: key,
+      ResponseContentDisposition: `attachment; filename="${safeAscii}"; filename*=UTF-8''${encodeURIComponent(fileName).replace(/['()*]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase())}`
+    }) as GetSignedUrlParameters[1];
+    return await getSignedUrl(getPresignS3Client() as GetSignedUrlParameters[0], command, {
+      expiresIn: expiresInSeconds
+    });
+  } catch (error) {
+    console.error(`Failed to generate attachment URL for key "${key}" in bucket "${bucketName}":`, error);
+    return null;
+  }
+}
+
+/**
+ * Opens an object as a stream (for the API to proxy inline so no S3 URL reaches the browser). Returns null when
+ * the object is missing or S3 fails. `body` is a Node Readable in the node runtime.
+ */
+export async function getS3ObjectStream(
+  key: string,
+  bucketName: string
+): Promise<{ body: NodeJS.ReadableStream; contentType: string | undefined; contentLength: number | undefined } | null> {
+  try {
+    const res = await getS3Client().send(new GetObjectCommand({ Bucket: bucketName, Key: key }));
+    if (!res.Body) return null;
+    return {
+      body: res.Body as unknown as NodeJS.ReadableStream,
+      contentType: res.ContentType,
+      contentLength: res.ContentLength
+    };
+  } catch (error) {
+    console.error(`Failed to open S3 object "${key}" in bucket "${bucketName}":`, error);
+    return null;
+  }
+}

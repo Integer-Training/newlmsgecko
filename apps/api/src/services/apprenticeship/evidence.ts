@@ -36,6 +36,7 @@ import {
   getApprEnrolment,
   getApprEnrolmentByProgrammeLearner,
   getApprEvidence,
+  getResource,
   insertApprEvidence,
   insertApprUploads,
   insertEvidenceNote,
@@ -326,6 +327,9 @@ export async function getEvidenceDetail(actor: Actor, evidenceId: string) {
   return {
     evidence: {
       ...evidence,
+      resourceTitle: evidence.resourceId
+        ? ((await getResource(evidence.resourceId, evidence.organizationId))?.title ?? null)
+        : null,
       status: asStatus(evidence.status),
       statusLabel: APPR_EVIDENCE_STATUS_LABELS[asStatus(evidence.status)] ?? evidence.status,
       typeLabel: types.find((t) => t.key === evidence.typeKey)?.label ?? evidence.typeKey
@@ -479,6 +483,15 @@ export async function createEvidence(actor: Actor, enrolmentId: string, input: E
   );
 
   if (input.taskId) await assertTaskForEvidence(input.taskId, enrolment);
+  if (input.resourceId) {
+    await assertResourceForEvidence({
+      organizationId: enrolment.organizationId,
+      resourceId: input.resourceId,
+      programmeIds: pair.programmeIds,
+      allowArchived: false,
+      blockedProgrammeIds: staff ? [] : withdrawnProgrammeIds(enrolment, pair.linked)
+    });
+  }
 
   const reviewedNow = status === 'ACCEPTED';
   let result: { evidence: ApprEvidenceRow; detail: Awaited<ReturnType<typeof recomputeEnrolment>> };
@@ -497,6 +510,7 @@ export async function createEvidence(actor: Actor, enrolmentId: string, input: E
         includeOtj: input.includeOtj,
         status,
         taskId: input.taskId ?? null,
+        resourceId: input.resourceId ?? null,
         files: toStoredFiles(input.files, [], a.userId),
         createdBy: a.userId,
         reviewedBy: reviewedNow ? a.userId : null,
@@ -595,6 +609,15 @@ export async function updateEvidence(actor: Actor, evidenceId: string, input: Ev
   await assertLearnerMayAddEvidence(actor, enrolment);
   // Linking to a (different) task: it must belong to this learner + programme. The old task is re-synced too.
   if (input.taskId) await assertTaskForEvidence(input.taskId, evidence);
+  if (input.resourceId && input.resourceId !== evidence.resourceId) {
+    await assertResourceForEvidence({
+      organizationId: evidence.organizationId,
+      resourceId: input.resourceId,
+      programmeIds: pair?.programmeIds ?? [evidence.programmeId],
+      allowArchived: true,
+      blockedProgrammeIds: staff || !enrolment ? [] : withdrawnProgrammeIds(enrolment, pair?.linked ?? null)
+    });
+  }
   const keptKeys = files?.map((f) => f.key) ?? [];
   const droppedKeys = files ? evidence.files.map((f) => f.key).filter((k) => !keptKeys.includes(k)) : [];
   const result = await runInTransaction(async (tx) => {
@@ -748,4 +771,40 @@ export async function addEvidenceNote(actor: Actor, evidenceId: string, input: E
   );
   await audit(actor, 'appr.evidence.note_added', evidenceId, { kind: note.kind });
   return note;
+}
+
+// ── Workbook link ──
+
+function withdrawnProgrammeIds(
+  enrolment: { programmeId: string; withdrawnAt?: string | null },
+  linked: { programmeId: string; withdrawnAt?: string | null } | null
+): string[] {
+  const out: string[] = [];
+  if (enrolment.withdrawnAt) out.push(enrolment.programmeId);
+  if (linked?.withdrawnAt) out.push(linked.programmeId);
+  return out;
+}
+
+/**
+ * Evidence may complete a workbook: it must be a WORKBOOK of one of the pair's programmes (ACTIVE on create; an archived one
+ * stays valid on edit), and for a learner not of a withdrawn half (no access there).
+ */
+async function assertResourceForEvidence(opts: {
+  organizationId: string;
+  resourceId: string;
+  programmeIds: string[];
+  allowArchived: boolean;
+  blockedProgrammeIds: string[];
+}) {
+  const resource = await getResource(opts.resourceId, opts.organizationId);
+  if (
+    !resource ||
+    !opts.programmeIds.includes(resource.programmeId) ||
+    opts.blockedProgrammeIds.includes(resource.programmeId)
+  ) {
+    throw badRequest('Workbook not found for this apprenticeship', 'resourceId');
+  }
+  if (resource.kind !== 'WORKBOOK') throw badRequest('Only a workbook can be linked to evidence', 'resourceId');
+  if (!opts.allowArchived && resource.status !== 'ACTIVE')
+    throw badRequest('This workbook is no longer available', 'resourceId');
 }

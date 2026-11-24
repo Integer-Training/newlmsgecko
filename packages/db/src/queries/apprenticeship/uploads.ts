@@ -111,5 +111,10 @@ export async function listReferencedUploadKeys(keys: string[], client: DbOrTxCli
     )) as unknown as { key: string }[];
     for (const r of rows) out.add(r.key);
   }
+  // Resource files are a single jsonb object (file.key), not a files array.
+  const resourceRows = (await client.execute(
+    sql`select distinct file->>'key' as key from appr_resource where file->>'key' in (${list})`
+  )) as unknown as { key: string }[];
+  for (const r of resourceRows) out.add(r.key);
   return out;
 }

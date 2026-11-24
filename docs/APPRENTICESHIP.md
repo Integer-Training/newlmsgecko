@@ -395,3 +395,26 @@ run `recomputeProgramme` for affected programmes before rolling back and again a
 - A failed new-learner enrolment can leave an orphan account (user created before the enrolment transaction).
 - Existing cross-mappings stay editable after a qualification is withdrawn (only new picks are hidden).
 - The To-mark type filter is client-side on the loaded page, so it does not search beyond that page.
+
+## Resources — learning resources + workbooks (2026-11-24, migration 0039)
+
+Both Diploma and Standard programmes can hold **resources**, per unit or programme-wide ("General").
+
+- **LEARNING** (PDF or .docx) — view only. Learners open them in an on-page viewer (pdf.js canvas / docx-preview,
+  watermark, no context menu/copy/print). Enforced server-side: `POST /apprenticeship/resources/:id/download` answers 403
+  for a learner on LEARNING; `GET /:id/content` streams inline from the API (no storage URL reaches the browser,
+  `Cache-Control: private, no-store`, `nosniff`, `CSP: sandbox`). Not DRM — screenshots remain possible.
+- **WORKBOOK** (pdf/doc/docx/xlsx/pptx) — downloadable (5-min attachment presign). "Upload completed workbook" opens the
+  normal evidence form prefilled (title, type, non-binding suggested criteria across units and both halves of the pair)
+  and stores `appr_evidence.resource_id`. Marking is unchanged (To mark). Learner status per workbook:
+  Not started / Viewed / Downloaded / Submitted / Referred / Accepted (derived from activity + latest evidence).
+- Tables: `appr_resource`, `appr_resource_criterion` (suggested criteria, cascade), `appr_resource_activity`
+  (view/download; only downloads set `last_version`). Replacing a file bumps `version`; learners who downloaded an older
+  version see "Updated". Old key → `appr_upload.removed_at` → cleanup job. `listReferencedUploadKeys` includes resources.
+- Access: admin writes; tutors read (content needs programme-tutor or learner reach); learners see ACTIVE resources of
+  their pair; **withdrawn half = no access**; other org 404. Archived = hidden from learners, evidence still works.
+  Delete only when no evidence references it (else archive). WORKBOOK→LEARNING blocked while used as evidence.
+- Notifications: `appr.resource.added`, one per save batch, deduped per resource for 24h (Redis `appr:resnotify:{id}`).
+- UI: programme setup → Resources (General card + per-unit block, add/bulk add/replace/move/reorder/archive, preview as
+  learner); learner sidebar **Resources** (`/lms/apprenticeship/resources`) + unit page Resources card; staff portfolio
+  **Resources** tab. API: `apps/api/src/routes/apprenticeship/resources.ts`, service `services/apprenticeship/resources.ts`.

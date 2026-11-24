@@ -4,6 +4,7 @@
   import { Spinner } from '@cio/ui/base/spinner';
   import { Button } from '@cio/ui/base/button';
   import type { TaskItem } from '../../api/tasks.svelte';
+  import type { SheetResource } from '../../stores/portfolio.svelte';
   import { evidenceApi, type EvidenceDetail, type PickerQualification } from '../../api/evidence.svelte';
   import { enrolmentsApi, type Portfolio } from '../../api/enrolments.svelte';
   import type { PortfolioLinked } from '../../api/overview.types';
@@ -30,6 +31,8 @@
     /** Hides editing (apprentice at end-point assessment). */
     editBlocked?: boolean;
     preTaskId?: string | null;
+    /** A workbook being completed (adds a banner and resourceId to the new evidence). */
+    preResource?: SheetResource | null;
     learnerName?: string | null;
     /** Called after any save / review so the parent can refresh its counts and lists. */
     onChanged: (opts: { reviewed: boolean }) => void;
@@ -47,6 +50,7 @@
     tasks = [],
     editBlocked = false,
     preTaskId = null,
+    preResource = null,
     learnerName = null,
     onChanged,
     closeOnReview = false
@@ -185,6 +189,7 @@
             {preCriteria}
             {tasks}
             {preTaskId}
+            {preResource}
             onSaved={saved}
             onCancel={() => (open = false)}
           />
@@ -209,6 +214,12 @@
               onCancel={() => (editing = false)}
             />
           {:else}
+            {#if detail.evidence.resourceId}
+              <p class="px-4 pb-2 text-sm text-(--muted-foreground)">
+                Workbook:
+                <strong class="text-(--foreground)">{detail.evidence.resourceTitle ?? 'a workbook'}</strong>
+              </p>
+            {/if}
             {#if detail.evidence.taskId}
               <p class="px-4 pb-2 text-sm text-(--muted-foreground)">
                 Answers task:

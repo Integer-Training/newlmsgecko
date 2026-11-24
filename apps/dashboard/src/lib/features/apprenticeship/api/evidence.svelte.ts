@@ -113,6 +113,9 @@ export interface EvidenceDetail {
     files: EvidenceFile[];
     /** The task this answers, if any. */
     taskId?: string | null;
+    /** The workbook this is a completed copy of, if any. */
+    resourceId?: string | null;
+    resourceTitle?: string | null;
     createdAt: string;
     createdBy: string | null;
   };
@@ -178,6 +181,8 @@ export interface EvidenceCreateBody {
   status?: 'SUBMITTED' | 'ACCEPTED';
   evidenceId?: string;
   taskId?: string;
+  /** The workbook (resource) this evidence completes. */
+  resourceId?: string;
   note?: { body: string; kind: 'AUDIT' | 'GENERAL' };
 }
 

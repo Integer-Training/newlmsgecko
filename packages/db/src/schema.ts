@@ -1,4 +1,5 @@
 import {
+  type AnyPgColumn,
   bigint,
   boolean,
   date,
@@ -4760,7 +4761,10 @@ export const apprEvidence = pgTable(
     reviewedAt: timestamp('reviewed_at', { withTimezone: true, mode: 'string' }),
     // The task this evidence answers (appr_task.id), if any. No FK (appr_task is declared later); the task service
     // nulls it when a task is deleted and validates it belongs to the same learner + programme on write.
-    taskId: uuid('task_id')
+    taskId: uuid('task_id'),
+    // The workbook (appr_resource.id) this evidence completes, if any. FK set null; the API validates it belongs to
+    // the learner's programme(s) and is a WORKBOOK.
+    resourceId: uuid('resource_id').references((): AnyPgColumn => apprResource.id, { onDelete: 'set null' })
   },
   (table) => [
     foreignKey({
@@ -4790,6 +4794,7 @@ export const apprEvidence = pgTable(
     }).onDelete('set null'),
     index('idx_appr_evidence_learner_programme_status').on(table.learnerId, table.programmeId, table.status),
     index('idx_appr_evidence_task').on(table.taskId),
+    index('idx_appr_evidence_resource').on(table.resourceId),
     index('idx_appr_evidence_org_status_created').on(table.organizationId, table.status, table.createdAt)
   ]
 );
@@ -5403,5 +5408,116 @@ export const apprOtjLog = pgTable(
     }).onDelete('set null'),
     index('idx_appr_otj_log_enrolment_status').on(table.enrolmentId, table.status),
     index('idx_appr_otj_log_org_status').on(table.organizationId, table.status, table.createdAt)
+  ]
+);
+
+// ── Apprenticeship Standard: resources (learning resources + workbooks) ──
+// Staff-uploaded files attached to a programme (unit_id null = programme-wide "General") or one unit.
+// kind LEARNING (view-only for learners; pdf/docx) | WORKBOOK (downloadable; completed copy is uploaded as evidence).
+// file = { key, name, size, type } in the private documents bucket under apprenticeship/resources/{programmeId}/{resourceId}/…
+// status ACTIVE | ARCHIVED (archived is hidden from learners, existing evidence links keep working).
+// version is bumped when the file is replaced (learners see an "Updated" badge).
+export const apprResource = pgTable(
+  'appr_resource',
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    organizationId: uuid('organization_id').notNull(),
+    programmeId: uuid('programme_id').notNull(),
+    unitId: uuid('unit_id'),
+    kind: varchar().notNull(),
+    title: varchar({ length: 256 }).notNull(),
+    description: text().default('').notNull(),
+    file: jsonb().$type<{ key: string; name: string; size: number; type: string }>().notNull(),
+    version: integer().default(1).notNull(),
+    sort: integer().default(0).notNull(),
+    status: varchar().default('ACTIVE').notNull(),
+    evidenceTypeKey: varchar('evidence_type_key'),
+    createdBy: uuid('created_by'),
+    createdAt: timestamp('created_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.organizationId],
+      foreignColumns: [organization.id],
+      name: 'appr_resource_organization_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.programmeId],
+      foreignColumns: [apprProgramme.id],
+      name: 'appr_resource_programme_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.unitId],
+      foreignColumns: [apprUnit.id],
+      name: 'appr_resource_unit_id_fkey'
+    }).onDelete('set null'),
+    foreignKey({
+      columns: [table.createdBy],
+      foreignColumns: [profile.id],
+      name: 'appr_resource_created_by_fkey'
+    }).onDelete('set null'),
+    index('idx_appr_resource_programme_status').on(table.programmeId, table.status),
+    index('idx_appr_resource_unit').on(table.unitId),
+    index('idx_appr_resource_org').on(table.organizationId)
+  ]
+);
+
+// Suggested (non-binding) criteria for a resource; pre-ticked on the evidence form, editable by the learner.
+export const apprResourceCriterion = pgTable(
+  'appr_resource_criterion',
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    resourceId: uuid('resource_id').notNull(),
+    criterionId: uuid('criterion_id').notNull()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.resourceId],
+      foreignColumns: [apprResource.id],
+      name: 'appr_resource_criterion_resource_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.criterionId],
+      foreignColumns: [apprCriterion.id],
+      name: 'appr_resource_criterion_criterion_id_fkey'
+    }).onDelete('cascade'),
+    unique('appr_resource_criterion_unique').on(table.resourceId, table.criterionId),
+    index('idx_appr_resource_criterion_criterion').on(table.criterionId)
+  ]
+);
+
+// Per learner enrolment activity on a resource (first view, downloads, last version seen).
+export const apprResourceActivity = pgTable(
+  'appr_resource_activity',
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    resourceId: uuid('resource_id').notNull(),
+    enrolmentId: uuid('enrolment_id').notNull(),
+    learnerId: uuid('learner_id').notNull(),
+    firstViewedAt: timestamp('first_viewed_at', { withTimezone: true, mode: 'string' }),
+    firstDownloadedAt: timestamp('first_downloaded_at', { withTimezone: true, mode: 'string' }),
+    lastDownloadedAt: timestamp('last_downloaded_at', { withTimezone: true, mode: 'string' }),
+    downloadCount: integer('download_count').default(0).notNull(),
+    lastVersion: integer('last_version').default(1).notNull()
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.resourceId],
+      foreignColumns: [apprResource.id],
+      name: 'appr_resource_activity_resource_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.enrolmentId],
+      foreignColumns: [apprEnrolment.id],
+      name: 'appr_resource_activity_enrolment_id_fkey'
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [table.learnerId],
+      foreignColumns: [profile.id],
+      name: 'appr_resource_activity_learner_id_fkey'
+    }).onDelete('cascade'),
+    unique('appr_resource_activity_unique').on(table.resourceId, table.enrolmentId),
+    index('idx_appr_resource_activity_learner').on(table.learnerId)
   ]
 );

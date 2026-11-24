@@ -14,3 +14,4 @@ export * from './tutors';
 export * from './onboarding';
 export * from './iqa';
 export * from './otj';
+export * from './resources';

@@ -14,6 +14,13 @@ import { evidenceApi, type EvidenceListItem, type PickerQualification } from '..
 /** The portfolio payload plus the Deploy 2 additions (`programme.type`, `linked`); both absent on an older API. */
 export type PortfolioView = Portfolio & { programme: { type?: ApprProgrammeType }; linked?: PortfolioLinked | null };
 
+/** A workbook being answered: its id (sent as resourceId), title (banner + prefill) and evidence type key. */
+export interface SheetResource {
+  id: string;
+  title: string;
+  typeKey: string | null;
+}
+
 export interface PortfolioStoreOptions {
   /**
    * true = load exactly this one enrolment (qualification and unit pages). false (default) = the learner portfolio:
@@ -74,13 +81,16 @@ export class PortfolioStore {
     taskId: string | null;
     /** Which enrolment of the pair a NEW piece is added to (its programme owns the criteria being ticked). */
     qualEnrolmentId: string | null;
+    /** Set when uploading a completed workbook: the form opens pre-filled from it and sends its id. */
+    resource: SheetResource | null;
   }>({
     open: false,
     mode: 'view',
     evidenceId: null,
     criterionIds: [],
     taskId: null,
-    qualEnrolmentId: null
+    qualEnrolmentId: null,
+    resource: null
   });
   /** The portfolio tab to show (a notification deep-links with ?tab=tasks|reviews; the header chips jump too). */
   tab = $state('overview');
@@ -323,10 +333,23 @@ export class PortfolioStore {
 
   // ── Evidence sheet ──
   openEvidence(evidenceId: string) {
-    this.sheet = { open: true, mode: 'view', evidenceId, criterionIds: [], taskId: null, qualEnrolmentId: null };
+    this.sheet = {
+      open: true,
+      mode: 'view',
+      evidenceId,
+      criterionIds: [],
+      taskId: null,
+      qualEnrolmentId: null,
+      resource: null
+    };
   }
 
-  openNewEvidence(criterionIds: string[] = [], taskId: string | null = null, qualEnrolmentId: string | null = null) {
+  openNewEvidence(
+    criterionIds: string[] = [],
+    taskId: string | null = null,
+    qualEnrolmentId: string | null = null,
+    resource: SheetResource | null = null
+  ) {
     if (this.evidenceBlocked) {
       snackbar.error(this.blockedMessage);
       return;
@@ -337,7 +360,8 @@ export class PortfolioStore {
       evidenceId: null,
       criterionIds,
       taskId,
-      qualEnrolmentId: qualEnrolmentId ?? this.activePortfolio?.enrolment.id ?? null
+      qualEnrolmentId: qualEnrolmentId ?? this.activePortfolio?.enrolment.id ?? null,
+      resource
     };
   }
 

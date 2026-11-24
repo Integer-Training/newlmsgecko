@@ -13,6 +13,8 @@
   import ImportDialog from '$features/apprenticeship/components/programme/import-dialog.svelte';
   import PairingCard from '$features/apprenticeship/components/programme/pairing-card.svelte';
   import ProgrammeTypeChip from '$features/apprenticeship/components/shared/programme-type-chip.svelte';
+  import ResourcesSection from '$features/apprenticeship/components/resources/staff/resources-section.svelte';
+  import ResourcesHost from '$features/apprenticeship/components/resources/staff/resources-host.svelte';
   import GatewayChecklist from '$features/apprenticeship/components/programme/gateway-checklist.svelte';
 
   // Programme setup: details + units -> criteria editor + CSV import. One programme = one course (qualification);
@@ -78,6 +80,7 @@
             <PairingCard programme={tree} />
           {/key}
           <GatewayChecklist programmeId={tree.id} />
+          <ResourcesSection unitId={null} variant="general" />
 
           {#each tree.qualifications as qualification, i (qualification.id)}
             <QualificationSection
@@ -95,5 +98,6 @@
 </Page.Root>
 
 {#if tree}
+  <ResourcesHost programmeId={tree.id} />
   <ImportDialog bind:open={showImport} programmeId={tree.id} type={tree.type} />
 {/if}

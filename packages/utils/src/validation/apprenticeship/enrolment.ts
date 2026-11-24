@@ -181,6 +181,8 @@ export const ZEvidenceCreate = z.object({
   evidenceId: z.uuid().optional(),
   /** The task this evidence answers (same learner + programme; checked server-side). */
   taskId: z.uuid().optional(),
+  /** The workbook (appr_resource) this evidence completes; must be a WORKBOOK in the learner's programme(s). */
+  resourceId: z.uuid().nullable().optional(),
   note: ZEvidenceNoteInput.optional()
 });
 export type EvidenceCreateInput = z.infer<typeof ZEvidenceCreate>;
@@ -196,6 +198,8 @@ export const ZEvidenceUpdate = z
     files: evidenceFields.files,
     /** Link to / unlink from a task. */
     taskId: z.uuid().nullable(),
+    /** Link to / unlink from a workbook resource. */
+    resourceId: z.uuid().nullable(),
     note: ZEvidenceNoteInput
   })
   .partial()
